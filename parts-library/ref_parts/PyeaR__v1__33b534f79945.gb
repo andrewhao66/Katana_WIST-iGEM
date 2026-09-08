@@ -1,0 +1,16 @@
+LOCUS       PyeaR           162 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part PyeaR (class=reference).
+ACCESSION   PyeaR
+VERSION     PyeaR.1
+SOURCE      NCBI NC_000913.3:1879946-1880107(-)
+FEATURES             Location/Qualifiers
+     source          1..162
+                     /note="NCBI NC_000913.3:1879946-1880107(-)"
+     misc_feature    1..162
+                     /label="PyeaR"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 cgttgtcgcg ggcttcccat ctataatcct ccctgattct tcgctgatat ggtgctaaaa
+       61 agtaaccaat aaatggtatt taaaatgcaa attatcaggc gtaccctgaa acggctggaa
+      121 taaaccgttt tcagcgcatt caccgaagga gggaaaagga tg
+//

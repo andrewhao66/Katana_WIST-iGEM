@@ -1,0 +1,14 @@
+# Katana engine — pinned dependencies.
+#
+# The engine core is deliberately near-stdlib: the only hard requirement is a YAML
+# parser for Design Specs. Everything else is optional and gated, and the engine
+# reports loudly (never silently) when an optional gate could not run.
+
+PyYAML==6.0.2            # required: parse .spec.yaml Design Specs
+
+# Optional — Stage-4b dry-lab gate. Without these the gate WARNS and is not enforced.
+python-codon-tables==0.1.12   # optional: real E. coli CAI for designed CDSs
+
+# Optional — SBOL 3 interchange (`--sbol out.ttl`). Without it the engine still builds;
+# it just cannot emit SBOL, and says so rather than failing quietly.
+sbol3==1.2.0                  # optional: validated SBOL 3 export

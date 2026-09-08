@@ -1,0 +1,29 @@
+LOCUS       HrpS.Ec-opt     909 bp    DNA     linear   SYN 2026-07-06
+DEFINITION  Katana sealed part HrpS.Ec-opt (class=designed).
+ACCESSION   HrpS.Ec-opt
+VERSION     HrpS.Ec-opt.3
+SOURCE      designed codon-opt v3; tool=optimize-codons(DNAChisel: CodonOptimize e_coli + EnforceTranslation + AvoidMatches(HrpR,15) + AvoidPattern(forbidden RE) + AvoidChanges 5'0:45 + GC0.30-0.70); parent=NCBI protein YET37121; host=E_coli; protein-IDENTICAL to v1/v2 (303 aa, hard-enforced); real E.coli CAI 0.963 (v1 0.821, v2 0.766, heuristic 0.841); max HrpR shared DNA 14bp (v1 42, hard-broken <15); RE-CLEAN (removed pre-existing internal PstI@633); 5' preserved (RBS_hrpS v2 TIR 13441); supersedes v2 cc3f6c1ec6ef
+FEATURES             Location/Qualifiers
+     source          1..909
+                     /note="designed codon-opt v3; tool=optimize-codons(DNAChisel: CodonOptimize e_coli + EnforceTranslation + AvoidMatches(HrpR,15) + AvoidPattern(forbidden RE) + AvoidChanges 5'0:45 + GC0.30-0.70); parent=NCBI protein YET37121; host=E_coli; protein-IDENTICAL to v1/v2 (303 aa, hard-enforced); real E.coli CAI 0.963 (v1 0.821, v2 0.766, heuristic 0.841); max HrpR shared DNA 14bp (v1 42, hard-broken <15); RE-CLEAN (removed pre-existing internal PstI@633); 5' preserved (RBS_hrpS v2 TIR 13441); supersedes v2 cc3f6c1ec6ef"
+     CDS             1..909
+                     /label="HrpS.Ec-opt"
+                     /note="class=designed; v3 rank-constrained recode; sealed 2026-07-06; supersedes v2"
+ORIGIN
+        1 atgaatttag atgatgaatt tgatgatcat ttagatgctg aacgtgtgcc gaacctgggc
+       61 attgtggcgg aaagcattag ccagctgggc attgatgtgc tgctgagcgg cgaaaccggc
+      121 accggcaaag ataccattgc gcgccgcatt cataacatga gcggccgcca gggccgcttt
+      181 gtgccgatga actgcgcggc gattccagaa agcctggcgg aaagcgaact gtttggcgtg
+      241 gtgagcggcg cgtataccgg cgcggatcgc agccgcatgg gttatattga agcggcgcag
+      301 ggcggcaccc tgtatctgga tgaaattgat agcatgccgc tggcgttaca ggcgaaactg
+      361 ttacgcgtgc tggaaacccg cgcgctggag cgcctgggca gtaccagcac cattaacctg
+      421 gatatttgcg tgattgcgag cgcgcaggcg tgcctggatg atgcggtgga agaaggcaaa
+      481 tttcgccgcg atctgtattt tcgcctgaac gtgttaaccc tgaaactgcc gccgctgcgc
+      541 gatcagccgg aacgcattct gccgctgttt acccgctttg tggcggcgag cgcgaaagaa
+      601 ctgagcgtgc cgattccgga tgtgtgcccg ctgctgcaac aggtgctgac cggccatcat
+      661 tggccgggca acattcgcga actgaaagcg gcggcgaaac gccatgtgct gggctttccg
+      721 ctgctgggtg cggatagcca gaccgaagaa catctggcgt gcggcctgaa atttcagctg
+      781 cgcgcgattg aaaaagcgct gattcagcag gcgctgaaac gccatcgcaa ctgcattgat
+      841 gcggcgagcc tggaactgga tattccgcgc cgcaccctgt atcgccgcat taaagaactg
+      901 agcatttaa
+//

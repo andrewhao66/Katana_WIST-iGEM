@@ -1,0 +1,26 @@
+LOCUS       lldR            777 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part lldR (class=reference).
+ACCESSION   lldR
+VERSION     lldR.1
+SOURCE      NCBI NC_000913.3:3779054..3779830(+) lldR (b3604, DNA-binding transcriptional dual regulator LldR; located in fetched primary window 3779030-3779850)
+FEATURES             Location/Qualifiers
+     source          1..777
+                     /note="NCBI NC_000913.3:3779054..3779830(+) lldR (b3604, DNA-binding transcriptional dual regulator LldR; located in fetched primary window 3779030-3779850)"
+     CDS             1..777
+                     /label="lldR"
+                     /note="class=reference; sealed 2026-07-04; 258 aa LldR"
+ORIGIN
+        1 atgattgttt tacccagacg cctgtcagac gaggttgccg atcgtgtgcg ggcgctgatt
+       61 gatgaaaaaa acctggaagc gggcatgaag ttgcccgctg agcgccaact ggcgatgcaa
+      121 ctcggcgtat cacgtaattc actgcgcgag gcgctggcaa aactggtgag tgaaggcgtg
+      181 ctgctcagtc gacgcggcgg cgggacgttt attcgctggc gtcatgacac atggtcggag
+      241 caaaacatcg tccagccgct aaaaacactg atggccgatg atccggatta cagtttcgat
+      301 attctggaag cccgctacgc cattgaagcc agcaccgcat ggcatgcggc aatgcgcgcc
+      361 acacctggcg acaaagaaaa gattcagctt tgctttgaag caacgctaag tgaagacccg
+      421 gatatcgcct cacaagcgga cgttcgtttt catctggcga ttgccgaagc ctcacataac
+      481 atcgtgctgc tgcaaaccat gcgcggtttc ttcgatgtcc tgcaatcctc agtgaagcat
+      541 agccgtcagc ggatgtatct ggtgccaccg gttttttcac aactgaccga acaacatcag
+      601 gctgtcattg acgccatttt tgccggtgat gctgacgggg cgcgtaaagc aatgatggcg
+      661 caccttagtt ttgttcacac caccatgaaa cgattcgatg aagatcaggc tcgccacgca
+      721 cggattaccc gcctgcccgg tgagcataat gagcattcga gggagaaaaa cgcatga
+//

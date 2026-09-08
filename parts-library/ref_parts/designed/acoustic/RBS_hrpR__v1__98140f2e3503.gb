@@ -1,0 +1,14 @@
+LOCUS       RBS_hrpR        36 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part RBS_hrpR (class=designed/synthesised).
+ACCESSION   RBS_hrpR
+VERSION     RBS_hrpR.1
+SOURCE      designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR(RNA-2.7.2 module); verified_TIR=11942; design_record_target=11942 [EXACT-reproduces-record]; host=E_coli; parent=none
+FEATURES             Location/Qualifiers
+     source          1..36
+                     /note="designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR(RNA-2.7.2 module); verified_TIR=11942; design_record_target=11942 [EXACT-reproduces-record]; host=E_coli; parent=none"
+     RBS             1..36
+                     /label="RBS_hrpR"
+                     /note="class=designed(synthesised); sealed 2026-07-04; verified_TIR=11942 vs record 11942"
+ORIGIN
+        1 aataattttg tttaacttta agaagaggag gaacat
+//

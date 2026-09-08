@@ -1,0 +1,24 @@
+LOCUS       cat             660 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part cat (class=reference).
+ACCESSION   cat
+VERSION     cat.1
+SOURCE      NCBI V00622:244..903 (Tn9 cat CDS)
+FEATURES             Location/Qualifiers
+     source          1..660
+                     /note="NCBI V00622:244..903 (Tn9 cat CDS)"
+     misc_feature    1..660
+                     /label="cat"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 atggagaaaa aaatcactgg atataccacc gttgatatat cccaatggca tcgtaaagaa
+       61 cattttgagg catttcagtc agttgctcaa tgtacctata accagaccgt tcagctggat
+      121 attacggcct ttttaaagac cgtaaagaaa aataagcaca agttttatcc ggcctttatt
+      181 cacattcttg cccgcctgat gaatgctcat ccggaattcc gtatggcaat gaaagacggt
+      241 gagctggtga tatgggatag tgttcaccct tgttacaccg ttttccatga gcaaactgaa
+      301 acgttttcat cgctctggag tgaataccac gacgatttcc ggcagtttct acacatatat
+      361 tcgcaagatg tggcgtgtta cggtgaaaac ctggcctatt tccctaaagg gtttattgag
+      421 aatatgtttt tcgtctcagc caatccctgg gtgagtttca ccagttttga tttaaacgtg
+      481 gccaatatgg acaacttctt cgcccccgtt ttcaccatgg gcaaatatta tacgcaaggc
+      541 gacaaggtgc tgatgccgct ggcgattcag gttcatcatg ccgtctgtga tggcttccat
+      601 gtcggcagaa tgcttaatga attacaacag tactgcgatg agtggcaggg cggggcgtaa
+//

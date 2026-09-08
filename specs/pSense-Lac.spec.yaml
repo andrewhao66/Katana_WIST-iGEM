@@ -1,0 +1,86 @@
+id:            pSense-Lac
+version:       2                        # v2 2026-07-05: sfGFP RBS = RBS_sfGFP_med (S4, 448 a.u. ALPaGA context), replaces bare B0032 (9.8 non-functional). lldR stays weak B0032 (172 a.u.). Insert 2173 bp.
+track:         acoustic
+purpose:       "lactate dose-response: J23116→lldR (LldR repressor); ALPaGA(lactate, LldR-repressed)→sfGFP. Characterisation sensor = 'pSense-Lac-GFP' (lactate GFP arm)."
+host:          E_coli_MG1655            # BCRC Taiwan chassis for Acoustic lab work
+backbone:      { vector: pTwist_Chlor_MediumCopy, ori: p15A, marker: CmR }
+assembly:      { method: null, decide_with: assembly-strategy-advisor }
+vendor:        Twist
+constraints:
+  fragment_bp_max: 5000                 # Twist ≤5 kb/fragment
+  forbid_sites:    [EcoRI, XbaI, SpeI, PstI, NdeI, BsaI, BbsI]
+  host_context:    E_coli_MG1655        # off-target scanned against this genome
+  output_gate:     acoustic-only
+
+parts:                                  # DISTINCT parts; architecture.order gives the left→right sequence (with reuse)
+  - id: J23116
+    role: promoter
+    class: reference
+    variant: constitutive-weak
+    source: { registry: iGEM, part: BBa_J23116 }
+    seal:   { status: SEALED, lib: "J23116__v1__d2a88442f986.gb", seq_sha256_12: d2a88442f986, length: 35 }
+  - id: B0032
+    role: rbs
+    class: reference
+    variant: weak
+    source: { registry: iGEM, part: BBa_B0032, motif: TCACACAGGAAAG }
+    seal:   { status: SEALED, lib: "B0032__v1__7480912e8220.gb", seq_sha256_12: 7480912e8220, length: 13, note: "lldR slot ONLY (weak constitutive repressor, OSTIR 172 a.u.). sfGFP slot now RBS_sfGFP_med (2026-07-05)." }
+  - id: RBS_sfGFP_med
+    role: rbs
+    class: designed
+    variant: medium
+    source: { note: "MEDIUM-TIR RBS for sfGFP (OSTIR rung S4 = ACAAAGGACAAATACTAG). In ALPaGA context OSTIR = 448.5 a.u.; replaces bare B0032 (9.8 no-spacer = non-functional). Same part as Lac-dual/Nit-dual sfGFP slots → GFP-channel comparability." }
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_sfGFP_med__v1__4fb6162d1eb2.gb", seq_sha256_12: 4fb6162d1eb2, length: 18 }
+  - id: lldR
+    role: cds
+    class: reference
+    variant: lactate-repressor
+    source: { db: NCBI, accession: NC_000913.3, coords: "3779054-3779830", strand: "+" }
+    seal:   { status: SEALED, lib: "lldR__v1__8b1b37ebeb6c.gb", seq_sha256_12: 8b1b37ebeb6c, length: 777 }
+  - id: ALPaGA
+    role: promoter
+    class: reference
+    variant: lactate-inducible
+    source: { db: Addgene, plasmid: 175272 }
+    seal:   { status: SEALED, lib: "ALPaGA__v1__9301944089c6.gb", seq_sha256_12: 9301944089c6, length: 352 }
+  - id: sfGFP
+    role: reporter
+    class: reference
+    variant: superfolder
+    source: { registry: iGEM, part: BBa_I746916 }
+    seal:   { status: SEALED, lib: "sfGFP__v1__08a1e654bd76.gb", seq_sha256_12: 08a1e654bd76, length: 720 }
+  - id: B0015
+    role: terminator
+    class: reference
+    variant: double
+    source: { registry: iGEM, part: BBa_B0015 }
+    seal:   { status: SEALED, lib: "B0015__v1__696c73e5a7a8.gb", seq_sha256_12: 696c73e5a7a8, length: 129 }
+  - id: p15A
+    role: ori
+    class: reference
+    source: { db: NCBI, accession: X06403, coords: "581-1493", strand: "+" }
+    seal:   { status: SEALED, lib: "p15A__v1__252795606a1d.gb", seq_sha256_12: 252795606a1d, length: 913 }
+  - id: cat
+    role: marker
+    class: reference
+    variant: CmR
+    source: { db: NCBI, accession: V00622, coords: "244-903", strand: "+" }
+    seal:   { status: SEALED, lib: "cat__v1__3416e882d5b8.gb", seq_sha256_12: 3416e882d5b8, length: 660 }
+
+architecture:
+  order:          [J23116, B0032, lldR, B0015, ALPaGA, RBS_sfGFP_med, sfGFP, B0015]   # insert scope only; p15A+cat = Twist vendor vector (backbone). sfGFP RBS: B0032→RBS_sfGFP_med (2026-07-05, OSTIR: B0032=9.8 non-functional → S4=448); B0032 remains at lldR only.
+  topology:       linear-insert
+  trims: {}                              # no trims required (no P_yeaR SD+ATG hazard in Lac constructs)
+  junction_rules:
+    - "RBS→ATG spacing 5-9 nt"
+    - "no spurious internal ATG/stop across junctions"
+    - "no forbidden RE site across any junction"
+
+# The pipeline-owned `records:` block was removed for publication. It held
+# build provenance (resolved part pins, the seal certificate, order packaging)
+# specific to our own run and our own supplier accounts.
+#
+# Everything above this line is the whole of the design intent, and it is what
+# the format is for: an ordered list of part IDs, a host, a backbone, an assembly
+# method, constraints. Note what is absent throughout — there is nowhere in this
+# file to write a sequence. That is the point of it.

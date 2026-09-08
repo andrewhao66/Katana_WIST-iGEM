@@ -1,0 +1,27 @@
+LOCUS       KanR            795 bp    DNA     linear   SYN 2026-07-06
+DEFINITION  Katana sealed part KanR (class=reference).
+ACCESSION   KanR
+VERSION     KanR.1
+SOURCE      NCBI AY048743.1 (pKD4) 459..1253(+); aminoglycoside 3'-phosphotransferase / kanamycin-resistance (aph/nptII) CDS; on-disk verbatim primary AY048743.1_pKD4.fa; selection marker for pAP-Output pSC101/KanR backbone
+FEATURES             Location/Qualifiers
+     source          1..795
+                     /note="NCBI AY048743.1 (pKD4) 459..1253(+); aminoglycoside 3'-phosphotransferase / kanamycin-resistance (aph/nptII) CDS; on-disk verbatim primary AY048743.1_pKD4.fa; selection marker for pAP-Output pSC101/KanR backbone"
+     CDS             1..795
+                     /label="KanR"
+                     /note="class=reference; sealed 2026-07-06"
+ORIGIN
+        1 atgattgaac aagatggatt gcacgcaggt tctccggccg cttgggtgga gaggctattc
+       61 ggctatgact gggcacaaca gacaatcggc tgctctgatg ccgccgtgtt ccggctgtca
+      121 gcgcaggggc gcccggttct ttttgtcaag accgacctgt ccggtgccct gaatgaactg
+      181 caggacgagg cagcgcggct atcgtggctg gccacgacgg gcgttccttg cgcagctgtg
+      241 ctcgacgttg tcactgaagc gggaagggac tggctgctat tgggcgaagt gccggggcag
+      301 gatctcctgt catctcacct tgctcctgcc gagaaagtat ccatcatggc tgatgcaatg
+      361 cggcggctgc atacgcttga tccggctacc tgcccattcg accaccaagc gaaacatcgc
+      421 atcgagcgag cacgtactcg gatggaagcc ggtcttgtcg atcaggatga tctggacgaa
+      481 gagcatcagg ggctcgcgcc agccgaactg ttcgccaggc tcaaggcgcg catgcccgac
+      541 ggcgaggatc tcgtcgtgac ccatggcgat gcctgcttgc cgaatatcat ggtggaaaat
+      601 ggccgctttt ctggattcat cgactgtggc cggctgggtg tggcggaccg ctatcaggac
+      661 atagcgttgg ctacccgtga tattgctgaa gagcttggcg gcgaatgggc tgaccgcttc
+      721 ctcgtgcttt acggtatcgc cgctcccgat tcgcagcgca tcgccttcta tcgccttctt
+      781 gacgagttct tctga
+//

@@ -1,0 +1,14 @@
+LOCUS       J23116          35 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part J23116 (class=reference).
+ACCESSION   J23116
+VERSION     J23116.1
+SOURCE      iGEM Registry BBa_J23116 (constitutive promoter family, Anderson; uuid ca16d3eb-c75c-4b92-a0a3-55fae09ad41c)
+FEATURES             Location/Qualifiers
+     source          1..35
+                     /note="iGEM Registry BBa_J23116 (constitutive promoter family, Anderson; uuid ca16d3eb-c75c-4b92-a0a3-55fae09ad41c)"
+     promoter        1..35
+                     /label="J23116"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 ttgacagcta gctcagtcct agggactatg ctagc
+//

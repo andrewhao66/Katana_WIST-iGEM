@@ -1,0 +1,14 @@
+LOCUS       B0032           13 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part B0032 (class=reference).
+ACCESSION   B0032
+VERSION     B0032.1
+SOURCE      iGEM Registry BBa_B0032 (RBS.3 weak; uuid dd29b240-f03a-42ce-8612-6d562f74308e)
+FEATURES             Location/Qualifiers
+     source          1..13
+                     /note="iGEM Registry BBa_B0032 (RBS.3 weak; uuid dd29b240-f03a-42ce-8612-6d562f74308e)"
+     misc_feature    1..13
+                     /label="B0032"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 tcacacagga aag
+//

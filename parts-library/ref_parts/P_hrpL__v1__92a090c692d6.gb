@@ -1,0 +1,17 @@
+LOCUS       P_hrpL          208 bp    DNA     linear   SYN 2026-07-06
+DEFINITION  Katana sealed part P_hrpL (class=reference).
+ACCESSION   P_hrpL
+VERSION     P_hrpL.1
+SOURCE      iGEM Registry BBa_K4907019 (pHrpL); sigma54 HrpR+HrpS-activated AND-gate output promoter; 208 bp; EXACT-match to pAP-Report-dual DRAFT 2497..2704; shared output promoter with pAP-Output (seal-once, reuse byte-identical); no forbidden RE; verified 2026-07-06
+FEATURES             Location/Qualifiers
+     source          1..208
+                     /note="iGEM Registry BBa_K4907019 (pHrpL); sigma54 HrpR+HrpS-activated AND-gate output promoter; 208 bp; EXACT-match to pAP-Report-dual DRAFT 2497..2704; shared output promoter with pAP-Output (seal-once, reuse byte-identical); no forbidden RE; verified 2026-07-06"
+     promoter        1..208
+                     /label="P_hrpL"
+                     /note="class=reference; iGEM BBa_K4907019 pHrpL; sigma54 AND-gate output; sealed 2026-07-06"
+ORIGIN
+        1 gccggattat gtccgctgag tgggtcacgg tcccggatca gttcccttgc gaagctgacc
+       61 gatgtttttg tgccaaaagc tgttgtggca aaaaacggtt tgcgcaaagt tttgtattac
+      121 aaagaatttc acattttaaa atatctttat aaatcaatca gttatttcta tttttaagct
+      181 ggcatggtta tcgctatagg gcttgtac
+//

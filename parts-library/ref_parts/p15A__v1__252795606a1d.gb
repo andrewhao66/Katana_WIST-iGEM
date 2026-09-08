@@ -1,0 +1,29 @@
+LOCUS       p15A            913 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part p15A (class=reference).
+ACCESSION   p15A
+VERSION     p15A.1
+SOURCE      NCBI X06403:581..1493 (pACYC184 p15A rep_origin)
+FEATURES             Location/Qualifiers
+     source          1..913
+                     /note="NCBI X06403:581..1493 (pACYC184 p15A rep_origin)"
+     misc_feature    1..913
+                     /label="p15A"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 gcgctagcgg agtgtatact ggcttactat gttggcactg atgagggtgt cagtgaagtg
+       61 cttcatgtgg caggagaaaa aaggctgcac cggtgcgtca gcagaatatg tgatacagga
+      121 tatattccgc ttcctcgctc actgactcgc tacgctcggt cgttcgactg cggcgagcgg
+      181 aaatggctta cgaacggggc ggagatttcc tggaagatgc caggaagata cttaacaggg
+      241 aagtgagagg gccgcggcaa agccgttttt ccataggctc cgcccccctg acaagcatca
+      301 cgaaatctga cgctcaaatc agtggtggcg aaacccgaca ggactataaa gataccaggc
+      361 gtttccccct ggcggctccc tcgtgcgctc tcctgttcct gcctttcggt ttaccggtgt
+      421 cattccgctg ttatggccgc gtttgtctca ttccacgcct gacactcagt tccgggtagg
+      481 cagttcgctc caagctggac tgtatgcacg aaccccccgt tcagtccgac cgctgcgcct
+      541 tatccggtaa ctatcgtctt gagtccaacc cggaaagaca tgcaaaagca ccactggcag
+      601 cagccactgg taattgattt agaggagtta gtcttgaagt catgcgccgg ttaaggctaa
+      661 actgaaagga caagttttgg tgactgcgct cctccaagcc agttacctcg gttcaaagag
+      721 ttggtagctc agagaacctt cgaaaaaccg ccctgcaagg cggttttttc gttttcagag
+      781 caagagatta cgcgcagacc aaaacgatct caagaagatc atcttattaa tcagataaaa
+      841 tatttctaga tttcagtgca atttatctct tcaaatgtag cacctgaagt cagccccata
+      901 cgatataagt tgt
+//

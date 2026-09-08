@@ -1,0 +1,71 @@
+id:            pSense-Nit
+version:       2                        # v2 2026-07-05: sfGFP RBS = RBS_sfGFP_med (S4), replaces bare B0032 (OSTIR: B0032 core no-spacer = 5.8 a.u. non-functional in PyeaR context; S4 = 725 a.u. medium). lldR n/a (single GFP arm). Insert 1013 bp.
+track:         acoustic
+purpose:       "nitrate dose-response: PyeaR drives sfGFP; characterisation sensor (NarL chromosomal)"
+host:          E_coli_MG1655            # BCRC Taiwan chassis for Acoustic lab work
+backbone:      { vector: pTwist_Chlor_MediumCopy, ori: p15A, marker: CmR }
+assembly:      { method: null, decide_with: assembly-strategy-advisor }
+vendor:        Twist
+constraints:
+  fragment_bp_max: 5000                 # Twist ≤5 kb/fragment
+  forbid_sites:    [EcoRI, XbaI, SpeI, PstI, NdeI, BsaI, BbsI]
+  host_context:    E_coli_MG1655        # off-target scanned against this genome
+  output_gate:     acoustic-only
+
+parts:                                  # ORDERED left→right
+  - id: PyeaR
+    role: promoter
+    class: reference
+    variant: nitrate-inducible
+    source: { db: NCBI, accession: NC_000913.3, coords: "1879946-1880107", strand: "-" }
+    seal:   { status: SEALED, lib: "PyeaR__v1__33b534f79945.gb", seq_sha256_12: 33b534f79945, length: 162 }
+  - id: RBS_sfGFP_med
+    role: rbs
+    class: designed
+    variant: medium
+    source: { note: "MEDIUM-TIR RBS for sfGFP (OSTIR rung S4 = ACAAAGGACAAATACTAG). Swapped in 2026-07-05 for bare B0032: OSTIR shows B0032 core (13 nt, no spacer) gives TIR 5.8 a.u. in PyeaR context = non-functional; S4 gives 725 a.u. (medium, wide linear range). Same part as Nit-dual sfGFP slot → direct GFP-channel comparability." }
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_sfGFP_med__v1__4fb6162d1eb2.gb", seq_sha256_12: 4fb6162d1eb2, length: 18 }
+  - id: sfGFP
+    role: reporter
+    class: reference
+    variant: superfolder
+    source: { registry: iGEM, part: BBa_I746916 }
+    seal:   { status: SEALED, lib: "sfGFP__v1__08a1e654bd76.gb", seq_sha256_12: 08a1e654bd76, length: 720 }
+  - id: B0015
+    role: terminator
+    class: reference
+    variant: double
+    source: { registry: iGEM, part: BBa_B0015 }
+    seal:   { status: SEALED, lib: "B0015__v1__696c73e5a7a8.gb", seq_sha256_12: 696c73e5a7a8, length: 129 }
+  - id: p15A
+    role: ori
+    class: reference
+    source: { db: NCBI, accession: X06403, coords: "581-1493", strand: "+" }
+    seal:   { status: SEALED, lib: "p15A__v1__252795606a1d.gb", seq_sha256_12: 252795606a1d, length: 913 }
+  - id: cat
+    role: marker
+    class: reference
+    variant: CmR
+    source: { db: NCBI, accession: V00622, coords: "244-903", strand: "+" }
+    seal:   { status: SEALED, lib: "cat__v1__3416e882d5b8.gb", seq_sha256_12: 3416e882d5b8, length: 660 }
+
+architecture:
+  order:          [PyeaR, RBS_sfGFP_med, sfGFP, B0015]   # insert scope only; p15A+cat = Twist vendor vector (backbone). RBS_sfGFP_med (S4) replaces bare B0032 (2026-07-05, OSTIR: B0032=5.8 non-functional → S4=725)
+  topology:       linear-insert
+  trims:                                 # machine-readable trims consumed by katana_build.py
+    PyeaR:
+      3prime: AGGAGGGAAAAGGATG          # 16 nt native SD+ATG — trim for clean junction (same rationale as Nit-dual: uORF hazard). DECISION: applied by symmetry with Nit-dual; OSTIR re-confirm on Casper's box.
+  junction_rules:
+    - "RBS→ATG spacing 5-9 nt"
+    - "no spurious internal ATG/stop across junctions"
+    - "PyeaR→RBS_sfGFP_med junction: TRIM PyeaR native SD+ATG (3' 16 nt AGGAGGGAAAAGGATG) so the ONLY RBS driving sfGFP is RBS_sfGFP_med — same uORF hazard as Nit-dual. OSTIR-confirmed 2026-07-05 (S4 = 725 a.u. in trimmed PyeaR context)."
+    - "no forbidden RE site across any junction"
+
+# The pipeline-owned `records:` block was removed for publication. It held
+# build provenance (resolved part pins, the seal certificate, order packaging)
+# specific to our own run and our own supplier accounts.
+#
+# Everything above this line is the whole of the design intent, and it is what
+# the format is for: an ordered list of part IDs, a host, a backbone, an assembly
+# method, constraints. Note what is absent throughout — there is nowhere in this
+# file to write a sequence. That is the point of it.

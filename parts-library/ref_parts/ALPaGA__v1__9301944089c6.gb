@@ -1,0 +1,19 @@
+LOCUS       ALPaGA          352 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part ALPaGA (class=reference).
+ACCESSION   ALPaGA
+VERSION     ALPaGA.1
+SOURCE      Addgene #175272 :844..1195(+) ALPaGA LldR/lactate-responsive promoter (5' boundary from construct ALPaGA exact-match into the independent deposit; 3' boundary = deposit-annotated RBS start 1196)
+FEATURES             Location/Qualifiers
+     source          1..352
+                     /note="Addgene #175272 :844..1195(+) ALPaGA LldR/lactate-responsive promoter (5' boundary from construct ALPaGA exact-match into the independent deposit; 3' boundary = deposit-annotated RBS start 1196)"
+     promoter        1..352
+                     /label="ALPaGA"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 tccacacatt atacgagccg atgattaaga ggcaaagatt actactgata accactgttg
+       61 attgggatac ccgtaagaga atataaaaag ccagattatt aatccggctt ttttattatt
+      121 tctttaccag acatctcccc ccacaagaat tggccctacc aattcttcgc ttaaaaggtc
+      181 ccgtctgaac ttacgtcgct tttaactatt cttaaacttg acaattaatc atccggctct
+      241 tagtgtttgt ggagtcatta tccctacaca acacaattgg cagtgccact tttacacaac
+      301 gtgtgacaag gagatgagca acagactcat tacacgatgt gcgtggactc ca
+//

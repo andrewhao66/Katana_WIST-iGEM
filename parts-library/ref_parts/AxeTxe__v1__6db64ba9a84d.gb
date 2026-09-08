@@ -1,0 +1,27 @@
+LOCUS       AxeTxe          840 bp    DNA     linear   SYN 2026-07-06
+DEFINITION  Katana sealed part AxeTxe (class=reference).
+ACCESSION   AxeTxe
+VERSION     AxeTxe.1
+SOURCE      Addgene #192473 (verbatim primary deposit sequence-376957.gbk) complement(22294..23133); Axe-Txe toxin-antitoxin plasmid-stability cassette (Paxe-axe-txe); cf NCBI AF507977.1; located+revcomp-verified in deposit
+FEATURES             Location/Qualifiers
+     source          1..840
+                     /note="Addgene #192473 (verbatim primary deposit sequence-376957.gbk) complement(22294..23133); Axe-Txe toxin-antitoxin plasmid-stability cassette (Paxe-axe-txe); cf NCBI AF507977.1; located+revcomp-verified in deposit"
+     misc_feature    1..840
+                     /label="AxeTxe"
+                     /note="class=reference; sealed 2026-07-06"
+ORIGIN
+        1 caataggaaa taaacggtta cccgttacgt tggatgaaaa gagacaaaaa gaattgcagc
+       61 aactaaagca gaagtacggc aaaagtgaat ccaggattat gtgtattgcg ttagatttat
+      121 tgattgccca agaaaaagca ggatttgagg taccagcact caaaaagtga cgtcactttt
+      181 tatcctaaaa actaaaagtg atagcacttt taattataag aagttagaat attaatcatt
+      241 tgcttaattg tacaatataa tgtacaattg ttttatagaa ataaataagg ggtgaaagga
+      301 atggaagcag tagcttattc aaatttccgc caaaatttac gtagttatat gaaacaagtt
+      361 aatgaggatg ctgaaacact tattgtaaca agtaaagatg tagaagatac agttgttgta
+      421 ttatcaaaaa gagattatga ttctatgcaa gaaacgttga gaacactttc taataattac
+      481 gtcatggaaa aaattcgtcg aggagatgaa caattctcca aaggtgcatt taaaacacat
+      541 gacttaatcg aggttgaatc tgatgattaa ggcttggtct gatgatgctt gggatgatta
+      601 tctttattgg catgagcaag gaaacaaaag caatataaaa aagattaaca agttaataaa
+      661 agatatcgat cgttccccct ttgctggatt aggaaaacct gagccattaa agcatgattt
+      721 atctggaaaa tggtccagaa gaattacaga tgaacataga ctgatatata gagttgaaaa
+      781 tgaaacgata tttatttatt ctgcaaaaga tcactattaa ccaatcggaa gtaaggaaag
+//

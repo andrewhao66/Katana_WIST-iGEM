@@ -1,0 +1,42 @@
+LOCUS       pSC101_ori      1701 bp    DNA     linear   SYN 2026-07-06
+DEFINITION  Katana sealed part pSC101_ori (class=reference).
+ACCESSION   pSC101_ori
+VERSION     pSC101_ori.1
+SOURCE      NCBI NC_002056.1 (E. coli plasmid pSC101, complete sequence) 4523..6223(+); pSC101 low-copy replicon (ori+repA); fetched NCBI efetch 2026-07-06 (staged _incoming/NC_002056.1_pSC101.fasta); verified exact match to pre-Katana FINAL pSC101 region
+FEATURES             Location/Qualifiers
+     source          1..1701
+                     /note="NCBI NC_002056.1 (E. coli plasmid pSC101, complete sequence) 4523..6223(+); pSC101 low-copy replicon (ori+repA); fetched NCBI efetch 2026-07-06 (staged _incoming/NC_002056.1_pSC101.fasta); verified exact match to pre-Katana FINAL pSC101 region"
+     rep_origin      1..1701
+                     /label="pSC101_ori"
+                     /note="class=reference; sealed 2026-07-06"
+ORIGIN
+        1 tgacagtaag acgggtaagc ctgttgatga taccgctgcc ttactgggtg cattagccag
+       61 tctgaatgac ctgtcacggg ataatccgaa gtggtcagac tggaaaatca gagggcagga
+      121 actgctgaac agcaaaaagt cagatagcac cacatagcag acccgccata aaacgccctg
+      181 agaagcccgt gacgggcttt tcttgtatta tgggtagttt ccttgcatga atccataaaa
+      241 ggcgcctgta gtgccattta cccccattca ctgccagagc cgtgagcgca gcgaactgaa
+      301 tgtcacgaaa aagacagcga ctcaggtgcc tgatggtcgg agacaaaagg aatattcagc
+      361 gatttgcccg agcttgcgag ggtgctactt aagcctttag ggttttaagg tctgttttgt
+      421 agaggagcaa acagcgtttg cgacatcctt ttgtaatact gcggaactga ctaaagtagt
+      481 gagttataca cagggctggg atctattctt tttatctttt tttattcttt ctttattcta
+      541 taaattataa ccacttgaat ataaacaaaa aaaacacaca aaggtctagc ggaatttaca
+      601 gagggtctag cagaatttac aagttttcca gcaaaggtct agcagaattt acagataccc
+      661 acaactcaaa ggaaaaggac tagtaattat cattgactag cccatctcaa ttggtatagt
+      721 gattaaaatc acctagacca attgagatgt atgtctgaat tagttgtttt caaagcaaat
+      781 gaactagcga ttagtcgcta tgacttaacg gagcatgaaa ccaagctaat tttatgctgt
+      841 gtggcactac tcaaccccac gattgaaaac cctacaagga aagaacggac ggtatcgttc
+      901 acttataacc aatacgctca gatgatgaac atcagtaggg aaaatgctta tggtgtatta
+      961 gctaaagcaa ccagagagct gatgacgaga actgtggaaa tcaggaatcc tttggttaaa
+     1021 ggctttgaga ttttccagtg gacaaactat gccaagttct caagcgaaaa attagaatta
+     1081 gtttttagtg aagagatatt gccttatctt ttccagttaa aaaaattcat aaaatataat
+     1141 ctggaacatg ttaagtcttt tgaaaacaaa tactctatga ggatttatga gtggttatta
+     1201 aaagaactaa cacaaaagaa aactcacaag gcaaatatag agattagcct tgatgaattt
+     1261 aagttcatgt taatgcttga aaataactac catgagttta aaaggcttaa ccaatgggtt
+     1321 ttgaaaccaa taagtaaaga tttaaacact tacagcaata tgaaattggt ggttgataag
+     1381 cgaggccgcc cgactgatac gttgattttc caagttgaac tagatagaca aatggatctc
+     1441 gtaaccgaac ttgagaacaa ccagataaaa atgaatggtg acaaaatacc aacaaccatt
+     1501 acatcagatt cctacctacg taacggacta agaaaaacac tacacgatgc tttaactgca
+     1561 aaaattcagc tcaccagttt tgaggcaaaa tttttgagtg acatgcaaag taagcatgat
+     1621 ctcaatggtt cgttctcatg gctcacgcaa aaacaacgaa ccacactaga gaacatactg
+     1681 gctaaatacg gaaggatctg a
+//

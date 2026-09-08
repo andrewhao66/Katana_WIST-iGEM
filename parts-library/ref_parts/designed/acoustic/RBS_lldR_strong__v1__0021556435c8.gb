@@ -1,0 +1,14 @@
+LOCUS       RBS_lldR_strong 38 bp    DNA     linear   SYN 2026-08-27
+DEFINITION  Katana sealed part RBS_lldR_strong (class=designed/synthesised).
+ACCESSION   RBS_lldR_strong
+VERSION     RBS_lldR_strong.1
+SOURCE      designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2, sandbox); verified_TIR=13272; design_record_target=activator-tier ~13k (matched RBS_hrpR 12936 / RBS_hrpS 13441); WIST-JL1 leader + SD AGGAGGT + spacer AACAAA(sp6); clean-OFF fix for leaky lldR (B0032@~172 -> 13272); NdeI/forbidden-clean at lldR junction; host=E_coli; parent=none
+FEATURES             Location/Qualifiers
+     source          1..38
+                     /note="designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2, sandbox); verified_TIR=13272; design_record_target=activator-tier ~13k (matched RBS_hrpR 12936 / RBS_hrpS 13441); WIST-JL1 leader + SD AGGAGGT + spacer AACAAA(sp6); clean-OFF fix for leaky lldR (B0032@~172 -> 13272); NdeI/forbidden-clean at lldR junction; host=E_coli; parent=none"
+     RBS             1..38
+                     /label="RBS_lldR_strong"
+                     /note="class=designed(synthesised); sealed 2026-08-27; verified_TIR=13272 (matched activator tier); replaces B0032 on lldR for clean OFF"
+ORIGIN
+        1 aataattttg tttaacttta agaagaggag gtaacaaa
+//

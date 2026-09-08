@@ -1,0 +1,14 @@
+LOCUS       L3S2P55         57 bp    DNA     linear   SYN 2026-07-06
+DEFINITION  Katana sealed part L3S2P55 (class=reference; terminator).
+ACCESSION   L3S2P55
+VERSION     L3S2P55.1
+SOURCE      terminator; canonical from Cello Eco1C1G1T1 UCF (CIDARLAB/Cello-UCF, Voigt lab); Chen et al 2013 (582-terminator characterisation); fetched local 2026-07-06; role=orthogonal terminator for pAP-Logic B0015-diversification; synthetic Voigt terminator (1 internal KpnI, non-blocking)
+FEATURES             Location/Qualifiers
+     source          1..57
+                     /note="terminator; canonical from Cello Eco1C1G1T1 UCF (CIDARLAB/Cello-UCF, Voigt lab); Chen et al 2013 (582-terminator characterisation); fetched local 2026-07-06; role=orthogonal terminator for pAP-Logic B0015-diversification; synthetic Voigt terminator (1 internal KpnI, non-blocking)"
+     terminator      1..57
+                     /label="L3S2P55"
+                     /note="class=reference; sealed 2026-07-06"
+ORIGIN
+        1 ctcggtacca aagacgaaca ataagacgct gaaaagcgtc ttttttcgtt ttggtcc
+//

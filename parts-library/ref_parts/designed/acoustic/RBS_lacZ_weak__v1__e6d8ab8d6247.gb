@@ -1,0 +1,14 @@
+LOCUS       RBS_lacZ_weak   18 bp    DNA     linear   SYN 2026-07-05
+DEFINITION  Katana sealed part RBS_lacZ_weak (class=designed).
+ACCESSION   RBS_lacZ_weak
+VERSION     RBS_lacZ_weak.1
+SOURCE      designed RBS element; parent=B0032 (iGEM BBa_B0032 weak core, seq_sha256_12 7480912e8220); design=core(13nt TCACACAGGAAAG)+spacer(5nt TACTA)=18nt functional unit; role=lacZ weak/catalytic RBS; host=E_coli; frame=[sfGFP stop -> RBS -> lacZ CDS]; TIR=weak (lacZ-context OSTIR ~1085 a.u., 2026-07-05 scan; catalytic channel, exact TIR not load-bearing; bench-validate); REQUIRES no change - functional unit sealed as one part (granularity convention 2026-07-05)
+FEATURES             Location/Qualifiers
+     source          1..18
+                     /note="designed RBS element; parent=B0032 (BBa_B0032 weak core, TCACACAGGAAAG, seq_sha256_12 7480912e8220) + 5nt spacer TACTA; reproduces from parent+record; role=lacZ weak/catalytic RBS; host=E_coli; TIR weak (lacZ-context OSTIR ~1085 a.u. 2026-07-05; bench-validate)"
+     RBS             1..18
+                     /label="RBS_lacZ_weak"
+                     /note="class=designed; sealed 2026-07-05; SD-core from B0032 (weak); the former TACTA 'BioBrick scar' is now an intentional, sealed spacer inside the functional unit (part-granularity convention). Used 1x = lacZ cistron only."
+ORIGIN
+        1 tcacacagga aagtacta
+//

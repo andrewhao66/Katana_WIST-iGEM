@@ -1,0 +1,14 @@
+LOCUS       RBS_hrpS        39 bp    DNA     linear   SYN 2026-07-05
+DEFINITION  Katana sealed part RBS_hrpS (class=designed/synthesised).
+ACCESSION   RBS_hrpS
+VERSION     RBS_hrpS.2
+SOURCE      designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2 CLI, local); verified_TIR=13441; design_record_target=13485 [RESOLVED: supersedes RBS_hrpS v1 (21793, DIVERGES); fold_vs_hrpR=1.13; NdeI-clean junction]; host=E_coli; parent=none
+FEATURES             Location/Qualifiers
+     source          1..39
+                     /note="designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2 CLI, local); verified_TIR=13441; design_record_target=13485 [RESOLVED: supersedes RBS_hrpS v1 (21793, DIVERGES); fold_vs_hrpR=1.13; NdeI-clean junction]; host=E_coli; parent=none"
+     RBS             1..39
+                     /label="RBS_hrpS"
+                     /note="class=designed(synthesised); sealed 2026-07-05; verified_TIR=13441 vs record 13485 (RESOLVED); supersedes RBS_hrpS.1 (21793 DIVERGES)"
+ORIGIN
+        1 aataattttg tttaacttta agaagaggag gtaacataa
+//

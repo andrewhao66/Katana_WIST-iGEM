@@ -1,0 +1,29 @@
+LOCUS       HrpS.Ec-opt     909 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part HrpS.Ec-opt (class=designed).
+ACCESSION   HrpS.Ec-opt
+VERSION     HrpS.Ec-opt.1
+SOURCE      designed codon-opt; parent=NCBI protein YET37121; host=E_coli; tool=optimize-codons
+FEATURES             Location/Qualifiers
+     source          1..909
+                     /note="designed codon-opt; parent=NCBI protein YET37121; host=E_coli; tool=optimize-codons"
+     misc_feature    1..909
+                     /label="HrpS.Ec-opt"
+                     /note="class=designed; sealed 2026-07-04"
+ORIGIN
+        1 atgaatttag atgatgaatt tgatgatcat ttagatgctg aacgtgttcc aaatttaggt
+       61 attgttgctg aatctatttc tcaattaggt attgatgttt tattatctgg tgaaactggt
+      121 actggtaaag atactattgc tcgtcgtatt cataatatgt ctggtcgtca aggtcgtttt
+      181 gttccaatga attgtgctgc tattccagaa tctttagctg aatctgaatt atttggtgtt
+      241 gtttctggtg cttatactgg tgctgatcgt tctcgtatgg gttatattga agctgctcaa
+      301 ggtggtactt tatatttaga tgaaattgat tctatgccat tagctttaca ggcgaaactg
+      361 ctgcgtgtgc tggaaacccg tgcgctggaa cgtctgggca gcaccagcac catcaacctg
+      421 gacatctgcg tgatcgcgag cgcgcaggcg tgcctggacg acgcggtgga agaaggcaaa
+      481 ttccgtcgtg acctgtactt ccgtctgaac gtgctgaccc tgaaactgcc gccgctgcgt
+      541 gaccagccgg aacgtatcct gccgctgttc acccgtttcg tggcggcgag cgcgaaagaa
+      601 ctgagcgtgc cgatcccgga cgtgtgcccg ctgctgcagc aggtgctgac cggccaccac
+      661 tggccgggca acatccgtga actgaaagcg gcggcgaaac gtcacgtgct gggcttcccg
+      721 ctgctgggcg cggacagcca gaccgaagaa cacctggcgt gcggcctgaa attccagctg
+      781 cgtgcgatcg aaaaagcgct gatccagcag gcgctgaaac gtcaccgtaa ctgcatcgac
+      841 gcggcgagcc tggaactgga catcccgcgt cgtaccctgt accgtcgtat caaagaactg
+      901 agcatctaa
+//

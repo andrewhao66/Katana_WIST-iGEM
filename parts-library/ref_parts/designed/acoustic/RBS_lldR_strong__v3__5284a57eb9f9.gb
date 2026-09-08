@@ -1,0 +1,14 @@
+LOCUS       RBS_lldR_strong 39 bp    DNA     linear   SYN 2026-08-27
+DEFINITION  Katana sealed part RBS_lldR_strong (class=designed/synthesised).
+ACCESSION   RBS_lldR_strong
+VERSION     RBS_lldR_strong.3
+SOURCE      designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2, sandbox); verified_TIR=19023 in lldR context; design_record_target=clean-OFF ~19k (Casper); WIST-JL1 leader + SD GAGGAGGT + spacer TACAAA(sp6); supersedes v2 (d0e539d22e8f) which was byte-identical to RBS_hrpS v2 and created a 43bp direct repeat >40bp recA threshold; v3 keeps ~19k but max overlap vs RBS_hrpR/hrpS = 25bp (WIST leader baseline only). NdeI-clean at lldR junction; host=E_coli; parent=none
+FEATURES             Location/Qualifiers
+     source          1..39
+                     /note="designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2, sandbox); verified_TIR=19023 in lldR context; design_record_target=clean-OFF ~19k (Casper); WIST-JL1 leader + SD GAGGAGGT + spacer TACAAA(sp6); supersedes v2 (d0e539d22e8f) which was byte-identical to RBS_hrpS v2 and created a 43bp direct repeat >40bp recA threshold; v3 keeps ~19k but max overlap vs RBS_hrpR/hrpS = 25bp (WIST leader baseline only). NdeI-clean at lldR junction; host=E_coli; parent=none"
+     RBS             1..39
+                     /label="RBS_lldR_strong"
+                     /note="class=designed(synthesised); sealed 2026-08-27; verified_TIR=19023 (lldR ctx); v3 repeat-broken (SD GAGGAGGT+TACAAA, max overlap vs hrpR/hrpS = 25bp WIST baseline); supersedes v2 (43bp repeat)"
+ORIGIN
+        1 aataattttg tttaacttta agaaggagga ggttacaaa
+//

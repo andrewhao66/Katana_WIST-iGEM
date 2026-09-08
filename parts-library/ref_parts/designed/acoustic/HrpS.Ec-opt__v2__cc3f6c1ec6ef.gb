@@ -1,0 +1,29 @@
+LOCUS       HrpS.Ec-opt     909 bp    DNA     linear   SYN 2026-07-06
+DEFINITION  Katana sealed part HrpS.Ec-opt (class=designed).
+ACCESSION   HrpS.Ec-opt
+VERSION     HrpS.Ec-opt.2
+SOURCE      designed codon-opt v2; parent=NCBI protein YET37121; host=E_coli; tool=optimize-codons; [RESOLVED: synonymous recode of HrpS.Ec-opt v1 (protein-IDENTICAL, 122 codons); breaks HrpR.Ec-opt shared DNA 42->15 bp to clear Twist repeat/Complexity; PstI/CTGCAG@633 pre-existing+internal (same as v1), no new forbidden sites]
+FEATURES             Location/Qualifiers
+     source          1..909
+                     /note="designed codon-opt v2; parent=NCBI protein YET37121; host=E_coli; tool=optimize-codons; [RESOLVED: synonymous recode of HrpS.Ec-opt v1 (protein-IDENTICAL, 122 codons); breaks HrpR.Ec-opt shared DNA 42->15 bp to clear Twist repeat/Complexity; PstI/CTGCAG@633 pre-existing+internal (same as v1), no new forbidden sites]"
+     CDS             1..909
+                     /label="HrpS.Ec-opt"
+                     /note="class=designed; sealed 2026-07-06; v2 synonymous recode of v1 (protein-identical); HrpR homology 42->15 bp; supersedes HrpS.Ec-opt.1"
+ORIGIN
+        1 atgaatttag atgatgaatt tgatgatcat ttagatgctg aacgtgttcc aaatttaggt
+       61 attgttgctg aatctatttc tcaattaggt attgatgttt tattaagcgg cgagacgggc
+      121 accggcaagg acaccattgc tcgtcgtatt cataatatgt ctggtcgtca aggtcgtttt
+      181 gttccaatga actgcgcggc gatcccggag agcctggcgg agtccgagct gttcggcgtg
+      241 gtatctggtg cttatactgg tgctgatcgt tctcgtatgg gttatattga agctgctcaa
+      301 ggcggcaccc tgtatctgga cgagatcgac agcatgccgc tggctttaca agccaagtta
+      361 ttacgcgttt tagaaactcg tgcgttagag cgcttaggtt ccactagcac catcaacctg
+      421 gacatctgcg ttattgcctc tgcccaagcg tgcctggacg acgcggtgga agaaggcaaa
+      481 tttcgccgcg atttatattt tcgcttaaat gttttaactt taaaactgcc gccgctgcgt
+      541 gaccagccgg aacgtatcct gccgctgttc acccgtttcg tggcggcgag cgcgaaagaa
+      601 ctgagcgtgc cgatcccgga cgtgtgcccg ctgctgcagc aggtgctgac cggccaccac
+      661 tggccgggca acatccgtga actgaaagcg gcggcgaaac gtcacgtgct gggcttccca
+      721 ttattaggtg ccgatagcca gaccgaagaa cacctggcgt gcggcctgaa attccagctg
+      781 cgtgcgatcg aaaaagcgct gatccagcag gccttaaagc ggcatcgcaa ctgcatcgac
+      841 gcggcgagcc tggaactgga catcccacgc cggactttat atcgccgtat caaagaactg
+      901 agcatctaa
+//

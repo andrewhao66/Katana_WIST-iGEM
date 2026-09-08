@@ -1,0 +1,129 @@
+id:            pAP-Logic
+version:       8                        # v8 2026-08-27: REPEAT FIX (order-readiness). v7's RBS_lldR_strong v2 (WIST+AGGAGGT+AACATAA) was byte-identical to RBS_hrpS v2 -> a 43bp exact direct repeat in the insert (>40bp recA-substrate threshold; Twist repeat-flag risk). v8 -> RBS_lldR_strong v3 (WIST+GAGGAGGT+TACAAA, OSTIR TIR 19023 in lldR ctx, SAME ~19k clean-OFF strength) whose only overlap with hrpR/hrpS is the 25bp shared WIST leader -> longest insert repeat drops 43->~32bp (baseline). Single-part swap vs v7 (39->39 bp, seq differs). Supersedes v7.
+                                        # v7 2026-08-27: 19k clean-OFF (RBS_lldR_strong v2, 19266) - SUPERSEDED by v8 (v2 collided with RBS_hrpS -> 43bp repeat).
+                                        # v6 2026-08-27: CLEAN-OFF fix. B0032 (weak ~172) -> RBS_lldR_strong v1 (13272, matched activator tier). Insert 3491->3516. Fixed the P2 lactate leak (under-expressed LldR). Supersedes v5.
+                                        # v5 2026-07-06: HrpS.Ec-opt v2->v3 (DNAChisel CONSTRAINED optimum; real E.coli CAI 0.766->0.963, HrpR homology 15->14bp, RE-CLEAN, protein-identical). 909bp, insert 3491bp.
+track:         acoustic
+purpose:       "lactate AND nitrate sigma54 AND-gate LOGIC layer: J23116->lldR (LldR repressor); ALPaGA(lactate, LldR-repressed)->HrpR; PyeaR(nitrate)->HrpS. Both sigma54 activators (HrpR+HrpS) required to fire P_hrpL on the paired pAP-Report-dual / pAP-Output construct. Reporter-free by design (2-plasmid AND-gate)."
+host:          E_coli_MG1655            # BCRC Taiwan chassis for Acoustic lab work
+backbone:      { vector: pTwist_Chlor_MediumCopy, ori: p15A, marker: CmR }
+assembly:      { method: single_fragment, decided: "2026-07-06", note: "insert 3491 bp < 5 kb Twist cap -> one clonal gene into pTwist_Chlor_MediumCopy; no Gibson/split. Internal RE sites (incl. L3S2P55 KpnI) irrelevant to de-novo synthesis (only junction-crossing forbidden sites gate)." }
+vendor:        Twist
+constraints:
+  fragment_bp_max: 5000                 # Twist <=5 kb/fragment; insert 3491 bp < cap -> single piece
+  forbid_sites:    [EcoRI, XbaI, SpeI, PstI, NdeI, BsaI, BbsI]
+  host_context:    E_coli_MG1655        # off-target scanned against this genome; Stage-4 blastn RE-SCAN must include the 2 new terminators
+  output_gate:     acoustic-only
+
+parts:                                  # DISTINCT parts; architecture.order gives the left->right sequence (with reuse)
+  - id: J23116
+    role: promoter
+    class: reference
+    variant: constitutive-weak
+    source: { registry: iGEM, part: BBa_J23116 }
+    seal:   { status: SEALED, lib: "J23116__v1__d2a88442f986.gb", seq_sha256_12: d2a88442f986, length: 35 }
+  - id: RBS_lldR_strong
+    role: rbs
+    class: designed
+    variant: strong
+    parent: null
+    design_record: { tool: design-rbs, engine: OSTIR, target_TIR: 19023, host: E_coli, version: 3 }
+    pin:    "RBS_lldR_strong@v3@5284a57eb9f9"
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_lldR_strong__v3__5284a57eb9f9.gb", seq_sha256_12: 5284a57eb9f9, length: 39, note: "lldR slot -- STRONG, REPEAT-BROKEN (v3, WIST+GAGGAGGT+TACAAA sp6, OSTIR TIR 19023 in lldR context = same ~19k clean-OFF strength as v2). Supersedes v2 (WIST+AGGAGGT+AACATAA, TIR 19266) which was byte-identical to RBS_hrpS v2 -> 43bp direct repeat >40bp recA threshold. v3 max overlap vs hrpR/hrpS = 25bp (WIST leader baseline) -> longest insert repeat ~32bp. NdeI/forbidden-clean at the lldR ATG junction (spacer ends AA, not CAT)." }
+  - id: lldR
+    role: cds
+    class: reference
+    variant: lactate-repressor
+    source: { db: NCBI, accession: NC_000913.3, coords: "3779054-3779830", strand: "+" }
+    seal:   { status: SEALED, lib: "lldR__v1__8b1b37ebeb6c.gb", seq_sha256_12: 8b1b37ebeb6c, length: 777 }
+  - id: ALPaGA
+    role: promoter
+    class: reference
+    variant: lactate-inducible
+    source: { db: Addgene, plasmid: 175272 }
+    seal:   { status: SEALED, lib: "ALPaGA__v1__9301944089c6.gb", seq_sha256_12: 9301944089c6, length: 352 }
+  - id: RBS_hrpR
+    role: rbs
+    class: designed
+    parent: null
+    design_record: { tool: design-rbs, engine: OSTIR, target_TIR: 11942, host: E_coli, version: 2 }
+    pin:    "RBS_hrpR@v2@427a93b42603"
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_hrpR__v2__427a93b42603.gb", seq_sha256_12: 427a93b42603, length: 36, note: "v2: AACAT->AACAA breaks CATATG/NdeI at the RBS_hrpR->HrpR.Ec-opt junction. OSTIR TIR 12936, fold_vs_hrpS_v2=1.04. NdeI-clean." }
+  - id: HrpR.Ec-opt
+    role: cds
+    class: designed
+    parent: HrpR_parent
+    design_record: { tool: optimize-codons, host: E_coli, table: Ec-highExpr, version: 2 }
+    seal:   { status: SEALED, lib: "designed/acoustic/HrpR.Ec-opt__v1__d85d0a2589d4.gb", seq_sha256_12: d85d0a2589d4, length: 945 }
+  - id: PyeaR
+    role: promoter
+    class: reference
+    variant: nitrate-inducible
+    source: { db: NCBI, accession: NC_000913.3, coords: "1879946-1880107", strand: "-" }
+    seal:   { status: SEALED, lib: "PyeaR__v1__33b534f79945.gb", seq_sha256_12: 33b534f79945, length: 162 }
+  - id: RBS_hrpS
+    role: rbs
+    class: designed
+    parent: null
+    design_record: { tool: design-rbs, engine: OSTIR, target_TIR: 13485, host: E_coli, version: 2 }
+    pin:    "RBS_hrpS@v2@d0e539d22e8f"
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_hrpS__v2__d0e539d22e8f.gb", seq_sha256_12: d0e539d22e8f, length: 39, note: "v2: NdeI-clean spacer AACATAA, TIR 13441, fold_vs_hrpR=1.13." }
+  - id: HrpS.Ec-opt
+    role: cds
+    class: designed
+    parent: HrpS_parent
+    design_record: { tool: optimize-codons, engine: DNAChisel, host: E_coli, version: 3 }
+    pin:    "HrpS.Ec-opt@v3@5093ea792057"
+    seal:   { status: SEALED, lib: "designed/acoustic/HrpS.Ec-opt__v3__5093ea792057.gb", seq_sha256_12: 5093ea792057, length: 909, note: "v3 = DNAChisel CONSTRAINED optimum (supersedes v2 cc3f6c1ec6ef): CodonOptimize(e_coli) s.t. AvoidMatches(HrpR,15) + EnforceTranslation + AvoidPattern(forbidden RE) + 5' pinned. protein-IDENTICAL (303 aa, hard-enforced); real E.coli CAI 0.963 (v1 0.821, v2 0.766); max HrpR shared 14bp (hard-broken); RE-CLEAN incl. removed pre-existing internal PstI@633; 5' preserved (RBS_hrpS v2 TIR 13441)." }
+  - id: ECK120033736
+    role: terminator
+    class: reference
+    variant: orthogonal
+    source: { db: Cello_UCF, ucf: "Eco1C1G1T1", ref: "Chen 2013 (Voigt) terminator set", note: "orthogonal strong terminator; module-1 (lldR) terminator, diversifies away from B0015 to break the 3x-B0015 direct repeat + its RecA recombination liability." }
+    seal:   { status: SEALED, lib: "ECK120033736__v1__26dc56560cae.gb", seq_sha256_12: 26dc56560cae, length: 53 }
+  - id: L3S2P55
+    role: terminator
+    class: reference
+    variant: orthogonal
+    source: { db: Cello_UCF, ucf: "Eco1C1G1T1", ref: "Chen 2013 (Voigt) terminator set", note: "orthogonal synthetic terminator; module-2 (HrpR) terminator. Internal KpnI (GGTACC) NON-blocking: not in forbid_sites, internal to the part, irrelevant to single-fragment synthesis." }
+    seal:   { status: SEALED, lib: "L3S2P55__v1__5b17b6ada447.gb", seq_sha256_12: 5b17b6ada447, length: 57 }
+  - id: B0015
+    role: terminator
+    class: reference
+    variant: double
+    source: { registry: iGEM, part: BBa_B0015 }
+    seal:   { status: SEALED, lib: "B0015__v1__696c73e5a7a8.gb", seq_sha256_12: 696c73e5a7a8, length: 129, note: "rrnB T1 + T7 TE double terminator; now used 1x (terminal, module-3 after HrpS). The other 2 module terminators diversified to ECK120033736 / L3S2P55." }
+  - id: p15A
+    role: ori
+    class: reference
+    source: { db: NCBI, accession: X06403, coords: "581-1493", strand: "+" }
+    seal:   { status: SEALED, lib: "p15A__v1__252795606a1d.gb", seq_sha256_12: 252795606a1d, length: 913 }
+  - id: cat
+    role: marker
+    class: reference
+    variant: CmR
+    source: { db: NCBI, accession: V00622, coords: "244-903", strand: "+" }
+    seal:   { status: SEALED, lib: "cat__v1__3416e882d5b8.gb", seq_sha256_12: 3416e882d5b8, length: 660 }
+
+architecture:
+  order:          [J23116, RBS_lldR_strong, lldR, ECK120033736, ALPaGA, RBS_hrpR, HrpR.Ec-opt, L3S2P55, PyeaR, RBS_hrpS, HrpS.Ec-opt, B0015]   # insert scope only; p15A+cat = Twist vendor vector (backbone). 3 modules with DISTINCT terminators: J23116->RBS_lldR_strong->lldR->ECK120033736 (repressor, v8 STRONG RBS @v3 TIR 19023 for clean OFF, repeat-broken) | ALPaGA->RBS_hrpR->HrpR->L3S2P55 (lactate arm) | PyeaR(trimmed)->RBS_hrpS->HrpS->B0015 (nitrate arm, terminal).
+  topology:       linear-insert
+  trims:                                 # machine-readable trims consumed by katana_build.py
+    PyeaR:
+      3prime: AGGAGGGAAAAGGATG          # 16 nt native SD+ATG trim (same as Nit) -- clean PyeaR->RBS_hrpS junction, removes uORF hazard (OSTIR-confirmed)
+  junction_rules:
+    - "RBS->ATG spacing 5-9 nt (all three cistrons)"
+    - "no spurious internal ATG/stop across junctions"
+    - "RBS_hrpR->HrpR.Ec-opt: NdeI-clean (RBS_hrpR v2 AACAA breaks the v1 AACAT CATATG)"
+    - "PyeaR->RBS_hrpS: TRIM PyeaR native SD+ATG (3' 16 nt AGGAGGGAAAAGGATG) -- uORF hazard, OSTIR-confirmed"
+    - "terminator junctions (lldR->ECK120033736, HrpR->L3S2P55, HrpS->B0015): no forbidden RE across the junction; terminators are forward-oriented (terminate the upstream CDS)"
+    - "no forbidden RE site across any junction (KpnI internal to L3S2P55 is allowed; not forbidden)"
+
+# The pipeline-owned `records:` block was removed for publication. It held
+# build provenance (resolved part pins, the seal certificate, order packaging)
+# specific to our own run and our own supplier accounts.
+#
+# Everything above this line is the whole of the design intent, and it is what
+# the format is for: an ordered list of part IDs, a host, a backbone, an assembly
+# method, constraints. Note what is absent throughout — there is nowhere in this
+# file to write a sequence. That is the point of it.

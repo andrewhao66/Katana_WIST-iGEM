@@ -1,0 +1,101 @@
+id:            pSense-Lac-dual
+version:       2                        # v2 2026-07-05: reporter RBS finalised via OSTIR — sfGFP = RBS_sfGFP_med (448 a.u. ALPaGA context), lacZ = RBS_lacZ_weak (1085 a.u.); lldR stays weak B0032 (172 a.u.). Insert 5266 bp > 5 kb → Gibson 2-frag (split after order[3], first B0015).
+track:         acoustic
+purpose:       "lactate dose-response, DUAL readout: J23116→lldR (LldR repressor); ALPaGA(lactate, LldR-repressed) → sfGFP (Accuri) + lacZ (752G/ONPG A420). Single-input characterisation sensor. Bicistron: sfGFP then lacZ. HOST: read lacZ in lacZ- DH5alpha (MG1655 is lac+ → beta-gal background)."
+host:          E_coli_MG1655            # cloning/design chassis; COLORIMETRIC assay must run in DH5alpha (lacZ-, recA-, still lldR+)
+backbone:      { vector: pTwist_Chlor_MediumCopy, ori: p15A, marker: CmR }
+assembly:      { method: gibson_2frag, decided: "2026-07-05 (Casper)", note: "Keep bicistron in ONE cell (same-culture cross-validation). Split into 2 Twist pieces: FRAG-A ~990 bp + FRAG-B ~4,310 bp, 30 bp Gibson overlap at lldR/ALPaGA (clear of both B0015 terminators); vector-side overlaps finalise at order time. Chosen over two single-reporter plasmids." }
+vendor:        Twist
+constraints:
+  fragment_bp_max: 5000                 # Twist <=5 kb/fragment. DUAL insert (backbone-stripped) ~5270 bp > cap → SPLIT decision at Stage 3 (see assembly note)
+  forbid_sites:    [EcoRI, XbaI, SpeI, PstI, NdeI, BsaI, BbsI]
+  host_context:    E_coli_MG1655        # off-target scanned against this genome (Stage-4 blastn PASS, see vault note)
+  output_gate:     acoustic-only
+
+parts:                                  # DISTINCT parts; architecture.order gives the left→right sequence (with reuse)
+  - id: J23116
+    role: promoter
+    class: reference
+    variant: constitutive-weak
+    source: { registry: iGEM, part: BBa_J23116 }
+    seal:   { status: SEALED, lib: "J23116__v1__d2a88442f986.gb", seq_sha256_12: d2a88442f986, length: 35 }
+  - id: B0032
+    role: rbs
+    class: reference
+    variant: weak
+    source: { registry: iGEM, part: BBa_B0032, motif: TCACACAGGAAAG }
+    seal:   { status: SEALED, lib: "B0032__v1__7480912e8220.gb", seq_sha256_12: 7480912e8220, length: 13, note: "lldR slot ONLY (weak constitutive repressor, OSTIR 172 a.u. in J23116 context). Reporter slots now use RBS_sfGFP_med / RBS_lacZ_weak (2026-07-05)." }
+  - id: RBS_sfGFP_med
+    role: rbs
+    class: designed
+    variant: medium
+    source: { note: "MEDIUM-TIR RBS for the sfGFP VISUAL cistron (OSTIR rung S4 = ACAAAGGACAAATACTAG). In ALPaGA context OSTIR = 448.5 a.u. (0.82x B0034); positions ON above / OFF below transilluminator eye-threshold. Same part as Nit-dual sfGFP slot → GFP-channel comparability. Replaces bare B0032 (194 a.u. w/ spacer, 9.8 no-spacer) 2026-07-05." }
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_sfGFP_med__v1__4fb6162d1eb2.gb", seq_sha256_12: 4fb6162d1eb2, length: 18 }
+  - id: RBS_lacZ_weak
+    role: rbs
+    class: designed
+    variant: weak
+    parent: B0032
+    design_record: { derivation: "B0032 core (BBa_B0032, TCACACAGGAAAG, 13nt) + 5nt TACTA spacer = 18nt functional unit", tool: manual-spacer, host: E_coli, version: 1 }
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_lacZ_weak__v1__e6d8ab8d6247.gb", seq_sha256_12: e6d8ab8d6247, length: 18, note: "lacZ cistron ONLY (752G/ONPG channel; catalytic keeps A420 linear). OSTIR 1085 a.u. Same part as Nit-dual lacZ slot." }
+  - id: lldR
+    role: cds
+    class: reference
+    variant: lactate-repressor
+    source: { db: NCBI, accession: NC_000913.3, coords: "3779054-3779830", strand: "+" }
+    seal:   { status: SEALED, lib: "lldR__v1__8b1b37ebeb6c.gb", seq_sha256_12: 8b1b37ebeb6c, length: 777 }
+  - id: ALPaGA
+    role: promoter
+    class: reference
+    variant: lactate-inducible
+    source: { db: Addgene, plasmid: 175272 }
+    seal:   { status: SEALED, lib: "ALPaGA__v1__9301944089c6.gb", seq_sha256_12: 9301944089c6, length: 352 }
+  - id: sfGFP
+    role: reporter
+    class: reference
+    variant: superfolder
+    source: { registry: iGEM, part: BBa_I746916 }
+    seal:   { status: SEALED, lib: "sfGFP__v1__08a1e654bd76.gb", seq_sha256_12: 08a1e654bd76, length: 720 }
+  - id: lacZ
+    role: reporter
+    class: reference
+    variant: beta-galactosidase
+    source: { db: NCBI, accession: NC_000913.3, coords: "363231-366305", strand: "-" }
+    seal:   { status: SEALED, lib: "lacZ__v1__b6be24d3d83b.gb", seq_sha256_12: b6be24d3d83b, length: 3075 }
+  - id: B0015
+    role: terminator
+    class: reference
+    variant: double
+    source: { registry: iGEM, part: BBa_B0015 }
+    seal:   { status: SEALED, lib: "B0015__v1__696c73e5a7a8.gb", seq_sha256_12: 696c73e5a7a8, length: 129 }
+  - id: p15A
+    role: ori
+    class: reference
+    source: { db: NCBI, accession: X06403, coords: "581-1493", strand: "+" }
+    seal:   { status: SEALED, lib: "p15A__v1__252795606a1d.gb", seq_sha256_12: 252795606a1d, length: 913 }
+  - id: cat
+    role: marker
+    class: reference
+    variant: CmR
+    source: { db: NCBI, accession: V00622, coords: "244-903", strand: "+" }
+    seal:   { status: SEALED, lib: "cat__v1__3416e882d5b8.gb", seq_sha256_12: 3416e882d5b8, length: 660 }
+
+architecture:
+  order:          [J23116, B0032, lldR, B0015, ALPaGA, RBS_sfGFP_med, sfGFP, RBS_lacZ_weak, lacZ, B0015]   # insert scope only; p15A+cat = Twist vendor vector (backbone). Reporter RBS: B0032→RBS_sfGFP_med (sfGFP), B0032→RBS_lacZ_weak (lacZ), 2026-07-05. B0032 remains at lldR only.
+  topology:       linear-insert
+  trims: {}                              # no trims required (ALPaGA sealed at 352bp with 3' at deposit RBS-start 1196 = no native SD+ATG to trim; PyeaR n/a in Lac)
+  gibson_split_after_index: 3            # split after architecture.order[3] = first B0015 (after lldR); lldR/ALPaGA boundary for 2-frag Gibson. Insert now 5266 bp > 5 kb Twist cap → split still required.
+  junction_rules:
+    - "RBS→ATG spacing 5-9 nt (all cistrons)"
+    - "no spurious internal ATG/stop across junctions"
+    - "clean bicistronic junction: sfGFP stop → RBS → lacZ ATG"
+    - "no forbidden RE site across any junction"
+
+# The pipeline-owned `records:` block was removed for publication. It held
+# build provenance (resolved part pins, the seal certificate, order packaging)
+# specific to our own run and our own supplier accounts.
+#
+# Everything above this line is the whole of the design intent, and it is what
+# the format is for: an ordered list of part IDs, a host, a backbone, an assembly
+# method, constraints. Note what is absent throughout — there is nowhere in this
+# file to write a sequence. That is the point of it.

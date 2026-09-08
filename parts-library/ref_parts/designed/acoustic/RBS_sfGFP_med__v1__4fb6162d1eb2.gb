@@ -1,0 +1,14 @@
+LOCUS       RBS_sfGFP_med   18 bp    DNA     linear   SYN 2026-07-05
+DEFINITION  Katana sealed part RBS_sfGFP_med (class=designed/synthesised).
+ACCESSION   RBS_sfGFP_med
+VERSION     RBS_sfGFP_med.1
+SOURCE      designed RBS; tool=OSTIR-ladder(local); engine=OSTIR 1.1.3 (ViennaRNA-2.7.2 CLI); verified_TIR=725 a.u. in TRUE P_yeaR CLEAN context (0.51x B0034=1431); SD-core=AGGACA; RBS->ATG spacing=7; frame=[P_yeaR 3' leader, RBS, sfGFP CDS]; host=E_coli; parent=none; role=sfGFP medium/visual RBS; REQUIRES CLEAN junction (trim P_yeaR native SD+ATG)
+FEATURES             Location/Qualifiers
+     source          1..18
+                     /note="designed RBS; tool=OSTIR-ladder(local); engine=OSTIR 1.1.3 (ViennaRNA-2.7.2 CLI); verified_TIR=725 a.u. in TRUE P_yeaR CLEAN context (0.51x B0034=1431); SD-core=AGGACA; RBS->ATG spacing=7; frame=[P_yeaR 3' leader, RBS, sfGFP CDS]; host=E_coli; parent=none; role=sfGFP medium/visual RBS; REQUIRES CLEAN junction (trim P_yeaR native SD+ATG)"
+     RBS             1..18
+                     /label="RBS_sfGFP_med"
+                     /note="class=designed(synthesised); sealed 2026-07-05; verified_TIR=725 (0.51x B0034) true P_yeaR CLEAN context; picked from sfGFP RBS ladder S4"
+ORIGIN
+        1 acaaaggaca aatactag
+//

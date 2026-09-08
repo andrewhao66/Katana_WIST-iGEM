@@ -1,0 +1,111 @@
+id:            pSense-Lac-lacZ
+version:       2                        # v2 2026-08-29: CLEAN-OFF port of Cycle 14. B0032 (weak ~172) -> RBS_lldR_strong v3 (WIST+GAGGAGGT+TACAAA, OSTIR TIR 19023 in lldR ctx) — SAME part + pin as pAP-Logic v8, so the standalone lactate characterisation sensor matches the AND-gate repressor. Insert 4528->4554 (+26). Surgical: lldR ATG onward byte-identical to v1 / shipped Twist insert. Build route = in-place inverse-PCR + Gibson of the in-hand p15A/CmR plasmid (Twist credit exhausted; IDT stock vector is high-copy pUCIDT, wrong for a tuned sensor). Supersedes v1.
+                                        # v1 2026-07-05: DERIVED from pSense-Lac-dual v2 by dropping the sfGFP cistron. Single lacZ (752G/ONPG) readout. Insert 4528 bp. SHIPPED Twist Shipment 1 (COA on file; order ids live in the inventory + intake records, not in a Spec); leaky because lldR sat on B0032.
+spec_hash:     7d172708e1d3ae43eef72924ad4d5ecc63098d18ebd49ede5c0cbea15127ef8c   # SHA-256 of INTENT (id..architecture; spec_hash line + records excluded; LF-normalized UTF-8)
+track:         acoustic
+purpose:       "lactate dose-response, SINGLE lacZ readout, CLEAN OFF: J23116->RBS_lldR_strong(v3)->lldR (LldR repressor at AND-gate-matched ~19k TIR); ALPaGA(lactate, LldR-repressed) -> lacZ (752G/ONPG A420 colorimetric). Characterisation sensor 'pSense-Lac-LacZ' v2. HOST: read lacZ in lacZ- DH5alpha (MG1655 is lac+ -> endogenous beta-gal swamps ONPG). Testable claim: OFF leak drops vs v1 and ON recovers a >=3x lactate dose-response (the P2 v1 run was flat/high-leak)."
+host:          E_coli_MG1655            # cloning/design chassis; COLORIMETRIC assay must run in DH5alpha (lacZ-, recA-, still lldR+)
+backbone:      { vector: pTwist_Chlor_MediumCopy, ori: p15A, marker: CmR }   # already in hand (shipped v1 plasmid); v2 is an in-place RBS edit of this backbone, not a new Twist order
+assembly:      { method: inverse_pcr_gibson, decided: "2026-08-28", note: "in-place edit of shipped pSense-Lac-lacZ (p15A/CmR, 6481 bp): inverse PCR deletes B0032; DpnI; DF100 gel-extract; Gibson HiFi a 125-bp IDT gBlock (J23116 arm + RBS_lldR_strong v3 + lldR arm). Result plasmid 6507 bp. Insert 4554 bp still < 5 kb Twist cap but Twist credit is exhausted (190 bp) so this is NOT a resynthesis." }
+vendor:        IDT
+constraints:
+  fragment_bp_max: 5000                 # insert 4554 bp < cap (informational; the ordered piece is a 125-bp gBlock, not the insert)
+  forbid_sites:    [EcoRI, XbaI, SpeI, PstI, NdeI, BsaI, BbsI]
+  host_context:    E_coli_MG1655        # off-target scanned against this genome (Stage-4 blastn; lldR/ALPaGA/lacZ byte-exact to Lac-dual / v1 parts -> inherited PASS except the new RBS locus)
+  output_gate:     acoustic-only
+
+parts:                                  # DISTINCT parts; architecture.order gives the left->right sequence (with reuse)
+  - id: J23116
+    role: promoter
+    class: reference
+    variant: constitutive-weak
+    expected_bp: 35
+    pin:    "J23116@v1@d2a88442f986"
+    source: { registry: iGEM, part: BBa_J23116 }
+    seal:   { status: SEALED, lib: "J23116__v1__d2a88442f986.gb", seq_sha256_12: d2a88442f986, length: 35 }
+  - id: RBS_lldR_strong
+    role: rbs
+    class: designed
+    variant: strong
+    expected_bp: 39
+    parent: null                        # designed de-novo via OSTIR; no parent part (matches library row)
+    design_record: { tool: design-rbs, engine: OSTIR, target_TIR: 19023, host: E_coli, version: 3 }
+    pin:    "RBS_lldR_strong@v3@5284a57eb9f9"
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_lldR_strong__v3__5284a57eb9f9.gb", seq_sha256_12: 5284a57eb9f9, length: 39, note: "lldR slot -- STRONG, REPEAT-BROKEN (v3, WIST+GAGGAGGT+TACAAA sp6, OSTIR TIR 19023 in lldR context). SAME pin as pAP-Logic v8. NdeI/forbidden-clean at the lldR ATG junction (spacer ends AA, not CAT). This construct has no RBS_hrpS, so the v7 43bp collision cannot arise here." }
+  - id: RBS_lacZ_weak
+    role: rbs
+    class: designed
+    variant: weak
+    expected_bp: 18
+    parent: "B0032@v1@7480912e8220"
+    design_record: { derivation: "B0032 core (BBa_B0032, TCACACAGGAAAG, 13nt) + 5nt TACTA spacer = 18nt functional unit", tool: manual-spacer, host: E_coli, version: 1 }
+    pin:    "RBS_lacZ_weak@v1@e6d8ab8d6247"
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_lacZ_weak__v1__e6d8ab8d6247.gb", seq_sha256_12: e6d8ab8d6247, length: 18, note: "lacZ cistron ONLY (752G/ONPG channel; catalytic keeps A420 linear). OSTIR 1085 a.u. Same part as Nit-dual / Lac-dual lacZ slot. UNCHANGED vs v1." }
+  - id: lldR
+    role: cds
+    class: reference
+    variant: lactate-repressor
+    expected_bp: 777
+    pin:    "lldR@v1@8b1b37ebeb6c"
+    source: { db: NCBI, accession: NC_000913.3, coords: "3779054-3779830", strand: "+" }
+    seal:   { status: SEALED, lib: "lldR__v1__8b1b37ebeb6c.gb", seq_sha256_12: 8b1b37ebeb6c, length: 777 }
+  - id: ALPaGA
+    role: promoter
+    class: reference
+    variant: lactate-inducible
+    expected_bp: 352
+    pin:    "ALPaGA@v1@9301944089c6"
+    source: { db: Addgene, plasmid: 175272 }
+    seal:   { status: SEALED, lib: "ALPaGA__v1__9301944089c6.gb", seq_sha256_12: 9301944089c6, length: 352 }
+  - id: lacZ
+    role: reporter
+    class: reference
+    variant: beta-galactosidase
+    expected_bp: 3075
+    pin:    "lacZ@v1@b6be24d3d83b"
+    source: { db: NCBI, accession: NC_000913.3, coords: "363231-366305", strand: "-" }
+    seal:   { status: SEALED, lib: "lacZ__v1__b6be24d3d83b.gb", seq_sha256_12: b6be24d3d83b, length: 3075 }
+  - id: B0015
+    role: terminator
+    class: reference
+    variant: double
+    expected_bp: 129
+    pin:    "B0015@v1@696c73e5a7a8"
+    source: { registry: iGEM, part: BBa_B0015 }
+    seal:   { status: SEALED, lib: "B0015__v1__696c73e5a7a8.gb", seq_sha256_12: 696c73e5a7a8, length: 129, note: "used 2x (repressor module + reporter module). Inherited from v1 / the shipped plasmid; v2 is a surgical RBS swap and does NOT diversify terminators. 129 bp exact direct repeat is a recA substrate on recA+ MG1655; assay host is recA- DH5alpha." }
+  - id: p15A
+    role: ori
+    class: reference
+    expected_bp: 913
+    pin:    "p15A@v1@252795606a1d"
+    source: { db: NCBI, accession: X06403, coords: "581-1493", strand: "+" }
+    seal:   { status: SEALED, lib: "p15A__v1__252795606a1d.gb", seq_sha256_12: 252795606a1d, length: 913 }
+  - id: cat
+    role: marker
+    class: reference
+    variant: CmR
+    expected_bp: 660
+    pin:    "cat@v1@3416e882d5b8"
+    source: { db: NCBI, accession: V00622, coords: "244-903", strand: "+" }
+    seal:   { status: SEALED, lib: "cat__v1__3416e882d5b8.gb", seq_sha256_12: 3416e882d5b8, length: 660 }
+
+architecture:
+  order:          [J23116, RBS_lldR_strong, lldR, B0015, ALPaGA, RBS_lacZ_weak, lacZ, B0015]   # insert scope only; p15A+cat = Twist vendor vector (backbone, already in hand). v2 vs v1 = single-part swap at the lldR RBS (B0032 13 bp -> RBS_lldR_strong v3 39 bp).
+  topology:       linear-insert
+  trims: {}                              # no trims required (ALPaGA sealed at 352 bp with 3' at deposit RBS-start 1196 = no native SD+ATG to trim; PyeaR n/a in Lac)
+  junction_rules:
+    - "RBS->ATG spacing 5-9 nt (lldR via RBS_lldR_strong v3, lacZ via RBS_lacZ_weak)"
+    - "RBS_lldR_strong->lldR ATG: NdeI-clean (spacer ends AA, not CAT)"
+    - "no spurious internal ATG/stop across junctions"
+    - "ALPaGA->RBS_lacZ_weak->lacZ: clean reporter junction (ALPaGA 3' at deposit RBS-start, no native SD to trim)"
+    - "no forbidden RE site across any junction"
+    - "v2 predicted delta vs v1: ONLY the lldR RBS locus (13->39 bp, net +26). lldR ATG onward byte-identical. ANY other delta is a STOP."
+
+# The pipeline-owned `records:` block was removed for publication. It held
+# build provenance (resolved part pins, the seal certificate, order packaging)
+# specific to our own run and our own supplier accounts.
+#
+# Everything above this line is the whole of the design intent, and it is what
+# the format is for: an ordered list of part IDs, a host, a backbone, an assembly
+# method, constraints. Note what is absent throughout — there is nowhere in this
+# file to write a sequence. That is the point of it.

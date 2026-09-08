@@ -1,0 +1,73 @@
+id:            pAP-Report-dual
+version:       2                        # v2 2026-07-06: P_hrpL SEALED (BBa_K4907019, 92a090c692d6); backbone pSC101→pMB1 (Twist has no pSC101 — pTwist Kan High Copy = pMB1/KanR, co-resides w/ pAP-Logic p15A/CmR); backbone-strip → linear-insert; reporter RBS = RBS_sfGFP_med + RBS_lacZ_weak (sealed, matches pSense duals). Insert 4168 bp. Supersedes v1 (pSC101 assumed, RBS unresolved).
+track:         acoustic
+purpose:       "AND-gate READOUT plasmid: P_hrpL → sfGFP (Accuri) + lacZ (752G/ONPG A420). Carries NO sensors — co-transformed with pAP-Logic (which supplies HrpR+HrpS) to run the lactate∧nitrate 2×2 truth table. Backbone pMB1/KanR = orthogonal to pAP-Logic's p15A/CmR on BOTH ori inc-group and marker → stable co-residence. HOST: read lacZ in lacZ- DH5alpha."
+host:          E_coli_MG1655            # cloning/design chassis; COLORIMETRIC assay in DH5alpha (lacZ-, recA-); co-resident with pAP-Logic
+backbone:      { vector: "Twist Kan (High Copy) v2", ori: pMB1, marker: KanR }   # exact Twist catalog vector — Twist's ONLY high-copy Kan destination vector is the v2 (Casper 2026-07-06); select "Twist Kan (High Copy) v2" on the order form. Twist free vendor vector; pMB1 ≠ p15A (co-resides w/ pAP-Logic); KanR ≠ CmR (dual-selectable). VENDOR VECTOR = out of insert scope, NOT a sealed part, NOT in insert bytes → this label pin does not touch the 4168 bp insert or its seal. CAVEAT: pMB1 high-copy → may titrate HrpR/HrpS + not copy-matched to low-copy pAP-Output; acceptable for truth-table validation, flag unexpected leak as high-copy artifact.
+assembly:      { method: single_fragment, decided: "2026-07-06", note: "insert 4168 bp < 5 kb Twist cap → one clonal gene into pTwist Kan High Copy; no Gibson/split. pMB1+KanR = vendor backbone (out of insert scope, like p15A/cat for the others) — NOT synthesised, NOT sealed parts." }
+vendor:        Twist
+constraints:
+  fragment_bp_max: 5000                 # Twist ≤5 kb/fragment; insert 4168 bp < cap → single piece
+  forbid_sites:    [EcoRI, XbaI, SpeI, PstI, NdeI, BsaI, BbsI]
+  host_context:    E_coli_MG1655
+  output_gate:     acoustic-only
+
+parts:                                  # DISTINCT insert parts; pMB1/KanR backbone is the Twist vendor vector (not listed)
+  - id: P_hrpL
+    role: promoter
+    class: reference
+    variant: sigma54-AND-output
+    source: { registry: iGEM, part: BBa_K4907019 }
+    seal:   { status: SEALED, lib: "P_hrpL__v1__92a090c692d6.gb", seq_sha256_12: 92a090c692d6, length: 208, note: "pHrpL sigma54 HrpR+HrpS-activated AND-gate OUTPUT promoter. Sealed 2026-07-06 from iGEM v1 JSON API; 208 bp EXACT-match to pAP-Report-dual DRAFT 2497..2704; no forbidden RE. SHARED byte-identical with pAP-Output (seal-once)." }
+  - id: RBS_sfGFP_med
+    role: rbs
+    class: designed
+    variant: medium
+    source: { note: "MEDIUM-TIR RBS for the sfGFP VISUAL cistron (OSTIR rung S4 = ACAAAGGACAAATACTAG). Reused from the pSense duals for GFP-channel comparability. TIR was verified in the P_yeaR context (725) — RE-VERIFY in the P_hrpL context (context-sensitive, the hrpS lesson): OSTIR re-scan + junction NdeI/uORF check." }
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_sfGFP_med__v1__4fb6162d1eb2.gb", seq_sha256_12: 4fb6162d1eb2, length: 18 }
+  - id: sfGFP
+    role: reporter
+    class: reference
+    variant: superfolder
+    source: { registry: iGEM, part: BBa_I746916 }
+    seal:   { status: SEALED, lib: "sfGFP__v1__08a1e654bd76.gb", seq_sha256_12: 08a1e654bd76, length: 720 }
+  - id: RBS_lacZ_weak
+    role: rbs
+    class: designed
+    variant: weak
+    parent: B0032
+    design_record: { derivation: "B0032 core (BBa_B0032, TCACACAGGAAAG, 13nt) + 5nt TACTA spacer = 18nt functional unit", tool: manual-spacer, host: E_coli, version: 1 }
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_lacZ_weak__v1__e6d8ab8d6247.gb", seq_sha256_12: e6d8ab8d6247, length: 18, note: "lacZ cistron ONLY (752G/ONPG channel; catalytic keeps A420 linear). Same part as Nit-dual/Lac-lacZ lacZ slot; replaces the DRAFT's weak-B0032 per the sfGFP-comparability decision." }
+  - id: lacZ
+    role: reporter
+    class: reference
+    variant: beta-galactosidase
+    source: { db: NCBI, accession: NC_000913.3, coords: "363231-366305", strand: "-" }
+    seal:   { status: SEALED, lib: "lacZ__v1__b6be24d3d83b.gb", seq_sha256_12: b6be24d3d83b, length: 3075, note: "ONPG/A420 on 752G; assay in lacZ- DH5alpha; backbone carries NO lacZalpha." }
+  - id: B0015
+    role: terminator
+    class: reference
+    variant: double
+    source: { registry: iGEM, part: BBa_B0015 }
+    seal:   { status: SEALED, lib: "B0015__v1__696c73e5a7a8.gb", seq_sha256_12: 696c73e5a7a8, length: 129, note: "single terminator (used 1x) — no repeat concern (contrast pAP-Logic's 3x)." }
+
+architecture:
+  order:          [P_hrpL, RBS_sfGFP_med, sfGFP, RBS_lacZ_weak, lacZ, B0015]   # insert scope only; pMB1+KanR = Twist vendor backbone. P_hrpL→sfGFP (visual) + bicistron sfGFP-stop→RBS_lacZ_weak→lacZ (colorimetric). One B0015.
+  topology:       linear-insert
+  trims: {}                              # no trims (P_hrpL 3' has no native SD+ATG to remove; RBS_sfGFP_med supplies the sfGFP RBS)
+  junction_rules:
+    - "RBS→ATG spacing 5-9 nt (both cistrons)"
+    - "no spurious internal ATG/stop across junctions"
+    - "P_hrpL→RBS_sfGFP_med→sfGFP: clean junction, NdeI/uORF-free; RE-VERIFY RBS_sfGFP_med TIR in P_hrpL context (OSTIR)"
+    - "clean bicistronic junction: sfGFP stop → RBS_lacZ_weak → lacZ ATG"
+    - "P_hrpL: preserve sigma54 -24/-12 + HrpR/HrpS UAS; no edits that break AND activation"
+    - "no forbidden RE site across any junction"
+
+# The pipeline-owned `records:` block was removed for publication. It held
+# build provenance (resolved part pins, the seal certificate, order packaging)
+# specific to our own run and our own supplier accounts.
+#
+# Everything above this line is the whole of the design intent, and it is what
+# the format is for: an ordered list of part IDs, a host, a backbone, an assembly
+# method, constraints. Note what is absent throughout — there is nowhere in this
+# file to write a sequence. That is the point of it.

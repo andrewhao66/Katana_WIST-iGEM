@@ -1,0 +1,16 @@
+LOCUS       B0015           129 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part B0015 (class=reference).
+ACCESSION   B0015
+VERSION     B0015.1
+SOURCE      iGEM Registry BBa_B0015 (double terminator B0010-B0012; uuid a0ebeeab-3947-440e-9cf1-f0a47bbc4c33)
+FEATURES             Location/Qualifiers
+     source          1..129
+                     /note="iGEM Registry BBa_B0015 (double terminator B0010-B0012; uuid a0ebeeab-3947-440e-9cf1-f0a47bbc4c33)"
+     misc_feature    1..129
+                     /label="B0015"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 ccaggcatca aataaaacga aaggctcagt cgaaagactg ggcctttcgt tttatctgtt
+       61 gtttgtcggt gaacgctctc tactagagtc acactggctc accttcgggt gggcctttct
+      121 gcgtttata
+//

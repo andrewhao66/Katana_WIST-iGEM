@@ -1,0 +1,14 @@
+LOCUS       RBS_lldR_strong 39 bp    DNA     linear   SYN 2026-08-27
+DEFINITION  Katana sealed part RBS_lldR_strong (class=designed/synthesised).
+ACCESSION   RBS_lldR_strong
+VERSION     RBS_lldR_strong.2
+SOURCE      designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2, sandbox); verified_TIR=19266 in lldR context; design_record_target=stronger-than-activator (~19k) for CLEAN OFF; WIST-JL1 leader + SD AGGAGGT + spacer AACATAA(sp7); supersedes RBS_lldR_strong v1 (13272, matched-tier) on Casper's clean-OFF call (model: ~1.45x lower leak, EC50 ~1.45mM << tumour lactate); seq coincides byte-wise with RBS_hrpS v2 (same SD+spacer) but distinct role/target; NdeI-clean at lldR junction; host=E_coli; parent=none
+FEATURES             Location/Qualifiers
+     source          1..39
+                     /note="designed synthesised 5'UTR; tool=design-rbs; engine=OSTIR 1.1.3(ViennaRNA-2.7.2, sandbox); verified_TIR=19266 in lldR context; design_record_target=stronger-than-activator (~19k) for CLEAN OFF; WIST-JL1 leader + SD AGGAGGT + spacer AACATAA(sp7); supersedes RBS_lldR_strong v1 (13272, matched-tier) on Casper's clean-OFF call (model: ~1.45x lower leak, EC50 ~1.45mM << tumour lactate); seq coincides byte-wise with RBS_hrpS v2 (same SD+spacer) but distinct role/target; NdeI-clean at lldR junction; host=E_coli; parent=none"
+     RBS             1..39
+                     /label="RBS_lldR_strong"
+                     /note="class=designed(synthesised); sealed 2026-08-27; verified_TIR=19266 (lldR ctx); v2 STRONGER for clean OFF; supersedes v1 (13272)"
+ORIGIN
+        1 aataattttg tttaacttta agaagaggag gtaacataa
+//

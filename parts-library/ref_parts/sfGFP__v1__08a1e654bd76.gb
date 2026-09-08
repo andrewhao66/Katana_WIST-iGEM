@@ -1,0 +1,25 @@
+LOCUS       sfGFP           720 bp    DNA     linear   SYN 2026-07-04
+DEFINITION  Katana sealed part sfGFP (class=reference).
+ACCESSION   sfGFP
+VERSION     sfGFP.1
+SOURCE      iGEM Registry BBa_I746916 (superfolder GFP CDS; Pedelacq 2006; Geneart de-novo synth; uuid df07298a-a5d9-4441-83b4-21a9b9db33aa)
+FEATURES             Location/Qualifiers
+     source          1..720
+                     /note="iGEM Registry BBa_I746916 (superfolder GFP CDS; Pedelacq 2006; Geneart de-novo synth; uuid df07298a-a5d9-4441-83b4-21a9b9db33aa)"
+     CDS             1..720
+                     /label="sfGFP"
+                     /note="class=reference; sealed 2026-07-04"
+ORIGIN
+        1 atgcgtaaag gcgaagagct gttcactggt gtcgtcccta ttctggtgga actggatggt
+       61 gatgtcaacg gtcataagtt ttccgtgcgt ggcgagggtg aaggtgacgc aactaatggt
+      121 aaactgacgc tgaagttcat ctgtactact ggtaaactgc cggtaccttg gccgactctg
+      181 gtaacgacgc tgacttatgg tgttcagtgc tttgctcgtt atccggacca tatgaagcag
+      241 catgacttct tcaagtccgc catgccggaa ggctatgtgc aggaacgcac gatttccttt
+      301 aaggatgacg gcacgtacaa aacgcgtgcg gaagtgaaat ttgaaggcga taccctggta
+      361 aaccgcattg agctgaaagg cattgacttt aaagaagacg gcaatatcct gggccataag
+      421 ctggaataca attttaacag ccacaatgtt tacatcaccg ccgataaaca aaaaaatggc
+      481 attaaagcga attttaaaat tcgccacaac gtggaggatg gcagcgtgca gctggctgat
+      541 cactaccagc aaaacactcc aatcggtgat ggtcctgttc tgctgccaga caatcactat
+      601 ctgagcacgc aaagcgttct gtctaaagat ccgaacgaga aacgcgatca tatggttctg
+      661 ctggagttcg taaccgcagc gggcatcacg catggtatgg atgaactgta caaatgatga
+//
