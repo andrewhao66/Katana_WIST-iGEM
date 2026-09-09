@@ -128,7 +128,10 @@ def load_yaml_simple(path: Path) -> dict:
         pass
     # Fallback: use a very simple parser for the subset we need
     # This is NOT a general YAML parser — it covers Katana spec structure only
-    sys.exit("BLOCK: PyYAML required. Install: py -m pip install pyyaml")
+    sys.exit("BLOCK: PyYAML is missing. It is the one thing this engine cannot run without.\n"
+             "       Install it with:   python -m pip install pyyaml\n"
+             "       If you made a workspace with python -m venv .venv, switch to it first,\n"
+               "       or the install goes somewhere this build cannot see.")
 
 def load_lock(lock_path: Path) -> dict:
     """Load LOCK.tsv → {id: {version, seq_sha256, length, outfile, ...}}"""
@@ -194,7 +197,12 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
         expected_len = seal.get("length")
 
         if not lib_file or not expected_sha12:
-            sys.exit(f"BLOCK Stage-1: part '{pid}' has no seal/pin — bare id rejected (v2)")
+            sys.exit(f"BLOCK Stage-1: part '{pid}' has no seal/pin — bare id rejected (v2)\n"
+                     f"       Your Spec names this part but does not say WHICH version of it,\n"
+                     f"       so the engine cannot check it is the one you meant.\n"
+                     f"       Every part needs a seal: line. add_part.py prints the exact one\n"
+                     f"       to paste when it admits a part. To see what you already have:\n"
+                     f"           python find_part.py --have")
 
         # Find in LOCK by id
         lock_key = None
@@ -203,14 +211,26 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                 if lock_key is None or int(lver) > int(lock_key[1]):
                     lock_key = (lid, lver)
         if lock_key is None:
-            sys.exit(f"BLOCK Stage-1: part '{pid}' not found in LOCK")
+            sys.exit(f"BLOCK Stage-1: part '{pid}' is not in your Parts Library yet.\n"
+                     f"       Your Spec asks for it, but the library has never been given it.\n"
+                     f"       Nothing is broken - you just need to add it first.\n"
+                     f"       See what you have:      python find_part.py --have\n"
+                     f"       Find it on NCBI:        python find_part.py {pid}\n"
+                     f"       Copy one we ship:       python add_part.py --library <yours> "
+                     f"--from parts-library/ref_parts --id {pid}")
 
         lock_row = lock[lock_key]
         lock_sha = lock_row["seq_sha256"]
 
         # Verify pin matches LOCK
         if not lock_sha.startswith(expected_sha12):
-            sys.exit(f"BLOCK Stage-1: part '{pid}' pin {expected_sha12} ≠ LOCK {lock_sha[:12]}")
+            sys.exit(f"BLOCK Stage-1: part '{pid}' pin {expected_sha12} ≠ LOCK {lock_sha[:12]}\n"
+                     f"       Your Spec is pinned to one version of this part; your library\n"
+                     f"       holds a different one. One of them has moved on.\n"
+                     f"       This is the check doing its job, not a bug.\n"
+                     f"       Look at what the library actually holds:\n"
+                     f"           python find_part.py {pid}\n"
+                     f"       then update the seal: line in your Spec to match it.")
 
         # Load the .gb file
         gb_path = LIB / lib_file
@@ -218,7 +238,10 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
             # Try the outfile from LOCK
             gb_path = LIB / lock_row["outfile"]
         if not gb_path.exists():
-            sys.exit(f"BLOCK Stage-1: part '{pid}' file not found: {gb_path}")
+            sys.exit(f"BLOCK Stage-1: part '{pid}' file not found: {gb_path}\n"
+                     f"       The manifest lists this part but its file is missing, so the\n"
+                     f"       library is incomplete. If you cloned this repository, the\n"
+                     f"       simplest repair is a fresh copy of it.")
 
         gb_text = gb_path.read_text(encoding="utf-8")
         raw_seq = extract_gb_sequence(gb_text)
@@ -233,11 +256,20 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
         part_topo = "linear"  # parts are always linear sequences
         computed = seq_sha256(raw_seq, part_topo)
         if computed != lock_sha:
-            sys.exit(f"BLOCK Stage-2: part '{pid}' recomputed hash {computed[:12]} ≠ LOCK {lock_sha[:12]}")
+            sys.exit(f"BLOCK Stage-2: part '{pid}' recomputed hash {computed[:12]} ≠ LOCK {lock_sha[:12]}\n"
+                     f"       The part file on disk does not match what the manifest sealed it\n"
+                     f"       as. Something edited it after it was sealed.\n"
+                     f"       This is exactly what the engine is for, so it has stopped.\n"
+                     f"       If you edited it on purpose, undo that. If not, take a fresh\n"
+                     f"       copy of the library and run:  python verify.py")
 
         # Length check
         if expected_len and len(raw_seq) != int(expected_len):
-            sys.exit(f"BLOCK Stage-2: part '{pid}' length {len(raw_seq)} ≠ expected {expected_len}")
+            sys.exit(f"BLOCK Stage-2: part '{pid}' length {len(raw_seq)} ≠ expected {expected_len}\n"
+                     f"       Your Spec says this part is {expected_len} bases; the library\n"
+                     f"       holds {len(raw_seq)}. A part that changed length is a different\n"
+                     f"       part. Check the length in your Spec's seal: line against:\n"
+                     f"           python find_part.py {pid}")
 
         resolved[pid] = {
             "seq": raw_seq,
@@ -279,7 +311,13 @@ def assemble_insert(spec: dict, resolved: dict) -> tuple:
     topology = arch.get("topology", "linear-insert")
 
     if not order:
-        sys.exit("BLOCK Stage-3: architecture.order is empty")
+        sys.exit("BLOCK Stage-3: architecture.order is empty.\n"
+                 "       You have listed parts, but not the ORDER they go in. The engine\n"
+                 "       will not guess an arrangement of DNA for you.\n"
+                 "       Add the ids, left to right, e.g.\n"
+                 "           architecture:\n"
+                 "             order: [my_promoter, my_rbs, my_gene, my_terminator]\n"
+                 "       Then check it reads sensibly:  python check_design.py <your.spec.yaml>")
 
     insert_parts = []
     features = []
@@ -288,7 +326,11 @@ def assemble_insert(spec: dict, resolved: dict) -> tuple:
 
     for pid in order:
         if pid not in resolved:
-            sys.exit(f"BLOCK Stage-3: part '{pid}' in architecture.order not found in resolved parts")
+            sys.exit(f"BLOCK Stage-3: '{pid}' appears in architecture.order but is not in your\n"
+                     f"       Spec's parts: list. Usually this is a typo in one of the two, or a\n"
+                     f"       part you meant to add and did not.\n"
+                     f"       This and other Spec problems are all reported at once by:\n"
+                     f"           python check_design.py <your.spec.yaml>")
 
         part_data = resolved[pid]
         seq = part_data["seq"]
@@ -619,7 +661,9 @@ def main():
     args = parser.parse_args()
 
     if not args.spec.exists():
-        sys.exit(f"BLOCK: spec file not found: {args.spec}")
+        sys.exit(f"BLOCK: spec file not found: {args.spec}\n"
+                 f"       Check the spelling and that you are in the right folder.\n"
+                 f"       To see the Design Specs next to you:   ls specs")
 
     print(f"═══ Katana Build Engine ═══")
     print(f"Spec: {args.spec}")
@@ -705,16 +749,6 @@ def main():
         if _db:
             sys.exit(f"BLOCK Stage-4b: {len(_db)} dry-lab blocking issue(s)")
         print("  Stage-4b PASS" + (f" — {len(_dw)} warning(s) to review" if _dw else " — clean"))
-        _skipped = [w for w in _dw if "OFF-TARGET SKIPPED" in w]
-        _hits = [w for w in _dw if "off-target" in w and w not in _skipped]
-        if _hits:
-            print("           Warnings are normal here and do not mean you did anything")
-            print("           wrong. A match only BLOCKs at >=100 bp AND >=95% identity,")
-            print("           because a match that long and that exact is never chance.")
-            print("           Everything shorter is surfaced so a human can glance at it.")
-        if _skipped:
-            print("           The off-target check did not run because no host genome is")
-            print("           present. To enable it:  python get_genome.py")
     except SystemExit:
         raise
     except Exception as _e:
