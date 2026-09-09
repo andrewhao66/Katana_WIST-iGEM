@@ -1,4 +1,28 @@
+# Host genomes are fetched by the user with get_genome.py, never shipped.
+#
+# They are large (4-12 MB each) and there is no correct set to bundle: the right genome is
+# whichever chassis YOUR team works in. Fetching on demand keeps the repository small and
+# means no team is excluded because we guessed wrong. See get_genome.py.
+parts-library/ref_genomes/
+ref_genomes/
+
+# Build outputs. Every one of these is regenerable from a Spec plus the sealed library,
+# which is the whole point - they are results, not sources.
+outputs/
+
+# Virtual environment, per the install instructions.
+.venv/
+venv/
+
+# Python noise
 __pycache__/
 *.pyc
+*.pyo
+
+# OS noise
 desktop.ini
 .DS_Store
+Thumbs.db
+
+# Local push helper, not part of the release.
+PUSH_KATANA.bat

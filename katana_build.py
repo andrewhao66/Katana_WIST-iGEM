@@ -714,12 +714,19 @@ def main():
     print(f"  SEALED: {insert_hash}")
 
     # ── SBOL 3 export (optional, standards interchange) ─────────────────────
-    if args.sbol:
+    sbol_target = args.sbol
+    if sbol_target is None:
+        try:
+            import sbol3  # noqa: F401
+            sbol_target = outdir / f"{sid}_insert_v{version}.ttl"
+        except ImportError:
+            print("  INFO: sbol3 not installed, so no .ttl written (pip install sbol3).")
+    if sbol_target:
         try:
             sys.path.insert(0, str(HERE))
             from katana_sbol import export_sbol
             _ok, _msgs = export_sbol(spec, resolved, insert_seq, features,
-                                     args.sbol, fmt=args.sbol_format)
+                                     sbol_target, fmt=args.sbol_format)
             for _m in _msgs:
                 print(f"  {_m}")
             if not _ok:
@@ -731,6 +738,14 @@ def main():
 
     # Gibson split if needed
     frag_cap = spec.get("constraints", {}).get("fragment_bp_max", 5000)
+
+    # One row per orderable piece, for the vendor order table written below.
+    order_records = [{"name": f"{sid}_insert_v{version}", "role": "insert",
+                      "length_bp": len(insert_seq), "sequence": insert_seq.upper(),
+                      "seq_sha256": insert_hash,
+                      "note": "complete insert" if len(insert_seq) <= frag_cap
+                              else "complete insert (ordered as the fragments below)"}]
+
     if len(insert_seq) > frag_cap:
         print(f"\n── Gibson fragment split (insert {len(insert_seq)} > {frag_cap} cap) ──")
         frags = gibson_split(insert_seq, features, spec, args.gibson_overlap)
@@ -740,6 +755,25 @@ def main():
             wrapped = "\n".join(fseq[i:i+80] for i in range(0, len(fseq), 80))
             fpath.write_text(f"{header}\n{wrapped}\n", encoding="utf-8", newline="\n")
             print(f"  {fname}: {len(fseq)} bp → {fpath}")
+
+            order_records.append({
+                "name": fname, "role": "fragment", "length_bp": len(fseq),
+                "sequence": fseq.upper(), "seq_sha256": seq_sha256(fseq, "linear"),
+                "note": f"pos {fstart}-{fend}, {args.gibson_overlap} bp overlap"})
+
+    # ── Vendor order table (CSV) ─────────────────────────────────
+    # Same sealed bases, a fourth shape. Vendors differ: some take FASTA, some want a
+    # spreadsheet upload. Emitting all of them means nobody retypes a sequence into a web
+    # form, which is precisely where a sequence and its label come apart.
+    try:
+        sys.path.insert(0, str(HERE))
+        from katana_order_table import write_order_csv
+        csv_path = outdir / f"{sid}_insert_v{version}_ORDER.csv"
+        for _m in write_order_csv(order_records, spec, csv_path):
+            print(f"  {_m}")
+        print(f"  .csv:   {csv_path}  ({len(order_records)} row(s))")
+    except Exception as _e:
+        sys.exit(f"BLOCK Stage-5: order table not written ({_e!r})")
 
     print()
 

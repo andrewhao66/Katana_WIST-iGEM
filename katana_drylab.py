@@ -74,7 +74,19 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
 
     # ---------- OFF-TARGET ----------
     host = str(spec.get("constraints", {}).get("host_context") or spec.get("host"))
-    gfile = HOST_GENOME.get(host)
+    # Prefer the registry written by get_genome.py, so a genome a team fetched for their
+    # own chassis is found without editing this file. Falls back to the built-in mapping.
+    gfile = None
+    if ref_parts:
+        _reg = ref_parts.parent / "ref_genomes" / "genomes.tsv"
+        if _reg.exists():
+            for _line in _reg.read_text(encoding="utf-8").splitlines()[1:]:
+                _c = _line.split("	")
+                if len(_c) >= 2 and _c[0] == host:
+                    gfile = _c[1]
+                    break
+    if gfile is None:
+        gfile = HOST_GENOME.get(host)
     genome = (ref_parts.parent / "ref_genomes" / gfile) if (ref_parts and gfile) else None
     if not genome or not genome.exists():
         warns.append("WARN Stage-4b: OFF-TARGET SKIPPED — no genome for host '%s'. NOT enforced this run "
