@@ -1,0 +1,344 @@
+#!/usr/bin/env python3
+"""
+add_part.py — admit one part to your Parts Library, through the gate.
+
+This is the intake door. A part gets in exactly one way: fetched from a primary source (or
+read from a file you point at), checked, written once, fingerprinted, and recorded in the
+manifest with where it came from and when. Nothing is ever edited in place afterwards — a
+corrected part becomes a new version with a new fingerprint, and the old row stays.
+
+    # a reference part, straight from NCBI, by accession and coordinates
+    python add_part.py --library my-project/parts-library --id lacZ \\
+        --accession NC_000913.3 --range 363231..366305 --strand -
+
+    # a part you designed, or one you saved from the iGEM Registry page
+    python add_part.py --library my-project/parts-library --id my_rbs \\
+        --file my_rbs.fasta --class designed --source "designed: OSTIR TIR 12000"
+
+A note on the iGEM Registry. It refuses scripted downloads (HTTP 403 on both the XML and
+FASTA endpoints, with or without a browser user agent), so there is no honest way to fetch a
+BBa_ part automatically. Open the part's page, copy its sequence into a .fasta file, and use
+--file with --source "iGEM Registry BBa_XXXXX". The provenance you record is then exactly as
+good; only the convenience is lost.
+
+Why the round-trip check at the end. It would be easy to compute a hash over the sequence in
+memory, write a file, and record that hash — and be wrong, because the thing the engine will
+later read is the FILE, not what was in memory. So after writing, this re-reads the file with
+the same parser the build engine uses and recomputes the hash from that. If they disagree the
+part is removed and nothing is recorded. Check the artifact, not the tool.
+"""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import re
+import sys
+import urllib.parse
+import urllib.request
+from datetime import date
+from pathlib import Path
+
+# Must match katana_lock.FIELDS and the LOCK.tsv header, in this order: row_sha256 is computed
+# over these keys in sequence, so any disagreement produces unreproducible rows.
+FIELDS = ["id", "version", "seq_sha256", "file_sha256", "length",
+          "source", "date", "class", "outfile"]
+
+EFETCH = ("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+          "?db=nuccore&rettype=fasta&retmode=text&id={acc}")
+
+VALID_DNA = set("ACGTNRYKMSWBDHV")   # IUPAC; N and the ambiguity codes are legal in a part
+COMPLEMENT = str.maketrans("ACGTNRYKMSWBDHVacgtnrykmswbdhv",
+                           "TGCANYRMKSWVHDBtgcanyrmkswvhdb")
+
+
+# ── hashing: must match the build engine exactly ────────────────────────────
+def sha256_hex(b: bytes) -> str:
+    return hashlib.sha256(b).hexdigest()
+
+
+def seq_sha256(seq: str) -> str:
+    """The engine's canonical sequence hash: uppercase letters, ASCII, nothing else.
+
+    Deliberately identical to katana_build.seq_sha256. If these two ever drift, every part this
+    tool admits becomes unbuildable, so the duplication is on purpose and load-bearing.
+    """
+    return sha256_hex(seq.upper().encode("ascii"))
+
+
+def row_sha256(row: dict) -> str:
+    return sha256_hex("\n".join(f"{k}={row.get(k, '')}" for k in FIELDS).encode())
+
+
+def lock_root(rows: list[dict]) -> str:
+    """SHA-256 over the ordered row hashes, recomputed rather than read from the column."""
+    return sha256_hex("\n".join(row_sha256(r) for r in rows).encode())
+
+
+def extract_gb_sequence(text: str) -> str:
+    """Byte-for-byte the same logic as katana_build.extract_gb_sequence."""
+    in_origin, parts = False, []
+    for line in text.splitlines():
+        if line.startswith("ORIGIN"):
+            in_origin = True
+            continue
+        if in_origin:
+            if line.startswith("//"):
+                break
+            parts.append(re.sub(r"[^A-Za-z]", "", line))
+    return "".join(parts).upper()
+
+
+def read_fasta(text: str) -> str:
+    return "".join(re.sub(r"[^A-Za-z]", "", l)
+                   for l in text.splitlines() if not l.startswith(">")).upper()
+
+
+# ── the manifest ────────────────────────────────────────────────────────────
+def read_lock(path: Path) -> tuple[list[str], list[dict]]:
+    lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
+    header = lines[0].split("\t")
+    return header, [dict(zip(header, l.split("\t"))) for l in lines[1:]]
+
+
+def write_lock(path: Path, header: list[str], rows: list[dict]) -> None:
+    out = ["\t".join(header)]
+    out += ["\t".join(r.get(k, "") for k in header) for r in rows]
+    with open(path, "wb") as f:
+        f.write(("\n".join(out) + "\n").encode("utf-8"))
+
+
+# ── sources ─────────────────────────────────────────────────────────────────
+def fetch_ncbi(acc: str, rng: str | None, strand: str) -> tuple[str, str]:
+    """Fetch from NCBI, letting the server do the sub-range and the reverse complement.
+
+    Asking NCBI for the range is safer than fetching a whole genome and slicing it here: an
+    off-by-one in local slicing is invisible, and coordinate conventions are exactly the thing
+    that produced failure 3 in our own project.
+    """
+    url = EFETCH.format(acc=urllib.parse.quote(acc))
+    start = end = None
+    if rng:
+        m = re.fullmatch(r"(\d+)\s*(?:\.\.|-)\s*(\d+)", rng.strip())
+        if not m:
+            raise SystemExit(f"BLOCK: --range must look like 363231..366305 (got {rng!r})")
+        start, end = int(m.group(1)), int(m.group(2))
+        if start > end:
+            raise SystemExit(f"BLOCK: --range start {start} is after end {end}. "
+                             f"For the reverse strand use --strand - and keep start < end.")
+        url += f"&seq_start={start}&seq_stop={end}"
+    if strand == "-":
+        url += "&strand=2"
+
+    req = urllib.request.Request(url, headers={"User-Agent": "katana-add-part/1.0"})
+    try:
+        data = urllib.request.urlopen(req, timeout=120).read().decode("utf-8", "replace")
+    except Exception as e:
+        raise SystemExit(f"BLOCK: NCBI download failed: {e!r}")
+
+    heads = [l[1:].strip() for l in data.splitlines() if l.startswith(">")]
+    if len(heads) != 1:
+        raise SystemExit(f"BLOCK: expected exactly 1 record from NCBI, got {len(heads)}. "
+                         f"NCBI may have returned an error page rather than sequence.")
+    seq = read_fasta(data)
+    if not seq:
+        raise SystemExit("BLOCK: NCBI returned a record with no sequence in it.")
+
+    coords = f":{start}-{end}" if start else ""
+    source = f"NCBI {acc}{coords}({strand})"
+    print(f"  fetched {len(seq)} bp from NCBI")
+    print(f"  record  {heads[0][:78]}")
+    return seq, source
+
+
+def read_local(path: Path) -> str:
+    if not path.exists():
+        raise SystemExit(f"BLOCK: no such file: {path}")
+    text = path.read_text(encoding="utf-8", errors="strict")
+    ext = path.suffix.lower()
+    if ext in (".gb", ".gbk", ".genbank"):
+        seq = extract_gb_sequence(text)
+    elif ext in (".fa", ".fasta", ".fna", ".txt", ".seq"):
+        seq = read_fasta(text)
+    else:
+        raise SystemExit(f"BLOCK: unknown file type {ext!r}. Use .fasta or .gb.")
+    if not seq:
+        raise SystemExit(f"BLOCK: no sequence found in {path}.")
+    print(f"  read {len(seq)} bp from {path}")
+    return seq
+
+
+# ── the GenBank the engine will read ────────────────────────────────────────
+def render_genbank(pid: str, version: int, seq: str, source: str, klass: str) -> str:
+    """A minimal, valid GenBank record.
+
+    GenBank rather than FASTA on purpose: the build engine parses part files through its
+    ORIGIN-block reader and only falls back to FASTA for the .faa protein case, so a .fasta
+    part would be read as empty and blocked. Verified against katana_build.py rather than
+    assumed.
+    """
+    today = date.today().strftime("%d-%b-%Y").upper()
+    lines = [
+        f"LOCUS       {pid:<24}{len(seq)} bp    DNA     linear   SYN {today}",
+        f"DEFINITION  {pid} v{version}, admitted to a Katana Parts Library.",
+        f"ACCESSION   {pid}",
+        f"VERSION     {pid}.{version}",
+        "KEYWORDS    .",
+        f"SOURCE      {source}",
+        "COMMENT     Admitted by add_part.py. The manifest row in LOCK.tsv, not this file,",
+        "            is the record of provenance; this file is the sequence it points at.",
+        f"            class: {klass}",
+        "FEATURES             Location/Qualifiers",
+        f"     source          1..{len(seq)}",
+        f'                     /note="{source}"',
+        f'                     /label="{pid}"',
+        "ORIGIN",
+    ]
+    low = seq.lower()
+    for i in range(0, len(low), 60):
+        chunk = low[i:i + 60]
+        blocks = " ".join(chunk[j:j + 10] for j in range(0, len(chunk), 10))
+        lines.append(f"{i + 1:>9} {blocks}")
+    lines.append("//")
+    return "\n".join(lines) + "\n"
+
+
+# ── main ────────────────────────────────────────────────────────────────────
+def resolve_library(arg: Path) -> Path:
+    root = arg.expanduser().resolve()
+    for cand in (root / "ref_parts", root / "parts-library" / "ref_parts", root):
+        if (cand / "LOCK.tsv").exists():
+            return cand
+    raise SystemExit(
+        f"BLOCK: no ref_parts/LOCK.tsv under {root}.\n"
+        f"       Create a library first:  python katana_init.py {arg}")
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(
+        description="Admit one part to a Katana Parts Library, with provenance and a seal.")
+    ap.add_argument("--library", type=Path, required=True,
+                    help="your library (the parts-library dir, or the project dir above it)")
+    ap.add_argument("--id", required=True, help="the name you will refer to this part by")
+    ap.add_argument("--accession", help="NCBI nucleotide accession, e.g. NC_000913.3")
+    ap.add_argument("--range", dest="rng", help="sub-range within the accession, e.g. 363231..366305")
+    ap.add_argument("--strand", choices=["+", "-"], default="+",
+                    help="which strand of that range (default +)")
+    ap.add_argument("--file", type=Path, help="a local .fasta or .gb to admit instead")
+    ap.add_argument("--class", dest="klass", choices=["reference", "designed", "synthesised"],
+                    help="reference = fetched from a database; designed = you made it "
+                         "(default: reference for --accession, designed for --file)")
+    ap.add_argument("--source", help="provenance text (auto-filled for --accession)")
+    ap.add_argument("--version", type=int, default=None,
+                    help="version number (default: 1, or one past the highest already present)")
+    ap.add_argument("--expect-length", type=int,
+                    help="refuse unless the sequence is exactly this long - a cheap guard "
+                         "against a wrong accession or a wrong range")
+    a = ap.parse_args()
+
+    if bool(a.accession) == bool(a.file):
+        return _block("give exactly one of --accession or --file.")
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]+", a.id):
+        return _block(f"--id {a.id!r} may only contain letters, digits, dot, dash, underscore.")
+
+    lib = resolve_library(a.library)
+    lock = lib / "LOCK.tsv"
+    header, rows = read_lock(lock)
+    # Defend against a manifest whose header lacks the row-hash column: every row written
+    # against such a header is unreadable by the engine, and the failure surfaces as a
+    # KeyError three stages later instead of here.
+    if "row_sha256" not in header:
+        header = header + ["row_sha256"]
+
+    print()
+    print(f"  library  {lib}  ({len(rows)} part(s) already sealed)")
+
+    # ---- get the sequence
+    if a.accession:
+        seq, auto_source = fetch_ncbi(a.accession, a.rng, a.strand)
+        klass = a.klass or "reference"
+    else:
+        seq = read_local(a.file)
+        auto_source = f"local file {a.file.name}"
+        klass = a.klass or "designed"
+    source = a.source or auto_source
+
+    # ---- check it before it gets anywhere near the manifest
+    bad = sorted(set(seq.upper()) - VALID_DNA)
+    if bad:
+        return _block(f"sequence contains characters that are not DNA: {' '.join(bad)}")
+    if a.expect_length and len(seq) != a.expect_length:
+        return _block(f"length {len(seq)} != --expect-length {a.expect_length}. "
+                      f"Nothing written. Check the accession and the range.")
+
+    version = a.version
+    same_id = [int(r["version"]) for r in rows if r["id"] == a.id and r["version"].isdigit()]
+    if version is None:
+        version = (max(same_id) + 1) if same_id else 1
+    if version in same_id:
+        return _block(f"{a.id} v{version} is already in this library. Parts are never edited "
+                      f"in place - admit a new version instead (omit --version and it will "
+                      f"use v{max(same_id) + 1}).")
+
+    shex = seq_sha256(seq)
+    outfile = f"{a.id}__v{version}__{shex[:12]}.gb"
+    out_path = lib / outfile
+    if out_path.exists():
+        return _block(f"{outfile} already exists. Refusing to overwrite a sealed part file.")
+
+    # ---- write, then read back and prove the file says what we think it says
+    with open(out_path, "wb") as f:
+        f.write(render_genbank(a.id, version, seq, source, klass).encode("utf-8"))
+
+    reread = extract_gb_sequence(out_path.read_text(encoding="utf-8"))
+    if seq_sha256(reread) != shex or len(reread) != len(seq):
+        out_path.unlink(missing_ok=True)
+        return _block("the file written does not read back as the sequence fetched. "
+                      "Nothing was recorded and the file has been removed. This is a bug in "
+                      "add_part.py - please report it.")
+
+    row = {
+        "id": a.id,
+        "version": str(version),
+        "seq_sha256": shex,
+        "file_sha256": sha256_hex(out_path.read_bytes()),
+        "length": str(len(seq)),
+        "source": source,
+        "date": date.today().isoformat(),
+        "class": klass,
+        "outfile": outfile,
+    }
+    row["row_sha256"] = row_sha256(row)
+    rows.append(row)
+
+    write_lock(lock, header, rows)
+    new_root = lock_root(rows)
+    with open(lib / "LOCK.root", "wb") as f:
+        f.write((new_root + "\n").encode("utf-8"))
+
+    print(f"  SEALED   {a.id} v{version}  {len(seq)} bp  {shex[:12]}")
+    print(f"  wrote    {outfile}")
+    print(f"  LOCK.root now {new_root[:12]}…  ({len(rows)} part(s))")
+    print()
+    print("  Paste this into your Spec's parts: list —")
+    print()
+    print(f"  - id: {a.id}")
+    print(f"    role: promoter          # promoter | rbs | cds | terminator | ...")
+    print(f"    class: {klass}")
+    print(f"    source: {{ note: \"{source}\" }}")
+    print(f"    seal:   {{ status: SEALED, lib: \"{outfile}\",")
+    print(f"              seq_sha256_12: {shex[:12]}, length: {len(seq)} }}")
+    print()
+    print("  Then add its id to architecture.order, and build:")
+    print()
+    print(f"      python katana_build.py <your.spec.yaml> --library {a.library}")
+    print()
+    return 0
+
+
+def _block(msg: str) -> int:
+    print(f"\n  BLOCK: {msg}\n")
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -46,11 +46,36 @@ HERE = Path(__file__).resolve().parent
 # it overshoots in any other layout (e.g. katana/ at the root of a published repo).
 # (An absolute fallback used to sit here. It is redundant now the walk-up is
 # depth-independent, and it hard-coded a username into a file meant to be published.)
-CANDIDATES = [q / "parts-library" / "ref_parts" for q in (HERE, *HERE.parents)]
-LIB = next((p for p in CANDIDATES if p.is_dir()), None)
-if LIB is None:
-    sys.exit("BLOCK: cannot find parts-library/ref_parts. Checked:\n  " +
-             "\n  ".join(str(c) for c in CANDIDATES))
+# A team building their OWN constructs points the engine at their OWN library, with
+#   --library <dir>   (or KATANA_LIBRARY in the environment)
+# read here, before argparse runs, because LOCK_PATH below is resolved at import time.
+# Without this the only library reachable is the one shipped in this bundle, so adopting
+# Katana would mean editing OUR sealed library - which breaks its root and makes verify.py
+# correctly report tampering. The shipped library stays sealed; yours is the one you fill.
+def _library_override():
+    import os
+    argv = sys.argv[1:]
+    for n, tok in enumerate(argv):
+        if tok == "--library" and n + 1 < len(argv):
+            return argv[n + 1]
+        if tok.startswith("--library="):
+            return tok.split("=", 1)[1]
+    return os.environ.get("KATANA_LIBRARY")
+
+_LIB_OVERRIDE = _library_override()
+if _LIB_OVERRIDE:
+    _r = Path(_LIB_OVERRIDE).expanduser().resolve()
+    LIB = next((c for c in (_r / "ref_parts", _r / "parts-library" / "ref_parts", _r)
+                if (c / "LOCK.tsv").exists()), None)
+    if LIB is None:
+        sys.exit(f"BLOCK: --library {_LIB_OVERRIDE} has no ref_parts/LOCK.tsv.\n"
+                 f"       Create one with:  python katana_init.py {_LIB_OVERRIDE}")
+else:
+    CANDIDATES = [q / "parts-library" / "ref_parts" for q in (HERE, *HERE.parents)]
+    LIB = next((p for p in CANDIDATES if p.is_dir()), None)
+    if LIB is None:
+        sys.exit("BLOCK: cannot find parts-library/ref_parts. Checked:\n  " +
+                 "\n  ".join(str(c) for c in CANDIDATES))
 
 LOCK_PATH = LIB / "LOCK.tsv"
 LOCK_ROOT_PATH = LIB / "LOCK.root"
@@ -580,6 +605,8 @@ def main():
                         help="Output directory (default: katana/outputs/)")
     parser.add_argument("--dry-run", action="store_true",
                         help="Run stages 1-4 only, no file output")
+    parser.add_argument("--library", type=Path, default=None,
+                        help="build against your own Parts Library (see katana_init.py). Read before argparse; declared here so it is documented and accepted.")
     parser.add_argument("--expect-root", type=str, default=None,
                         help="Expected Parts Library LOCK root (sha256). Binds this build to "
                              "one exact library state; omit to enforce self-consistency only.")
