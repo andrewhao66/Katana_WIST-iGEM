@@ -1,0 +1,55 @@
+# Katana CI — run the project's own gates on every push.
+#
+# The point of this pipeline is not decoration. Katana's central claim is that a
+# construct is reproducible and that the checks fail closed. A claim like that is
+# worth exactly as much as the last time somebody ran it, so it runs here, on a
+# clean machine that is not ours, every commit.
+#
+# Three jobs, deliberately separated so a red pipeline says WHICH property broke:
+#
+#   verify        the library is intact, and the checker still catches tampering
+#                 (verify.py corrupts a scratch copy eight ways and expects eight catches)
+#   determinism   every Design Spec still rebuilds to its recorded sealed hash,
+#                 and a wrong library pin / edited manifest is still refused
+#   minimal       the engine works with ONLY its required dependency installed
+#
+# `minimal` exists because the other two install everything. Optional extras are
+# supposed to degrade to a loud warning, never a crash — and the only way to know
+# that is still true is to run without them.
+
+stages: [test]
+
+default:
+  image: python:3.12
+  before_script:
+    - python --version
+
+# Full install: PyYAML + the optional CAI and SBOL extras, so the optional gates
+# actually execute rather than being skipped.
+.full: &full
+  stage: test
+  before_script:
+    - python --version
+    - pip install --no-cache-dir -r requirements.txt
+
+verify:
+  <<: *full
+  script:
+    # Exits non-zero if any part mismatches its manifest, or if any of the eight
+    # deliberate corruptions goes UNcaught.
+    - python verify.py
+
+determinism:
+  <<: *full
+  script:
+    # Oracle (every Spec -> its recorded hash), repeatability, wrong-pin refused,
+    # tampered-manifest refused, and the SBOL export round-tripping to the same hash.
+    - python test_determinism.py
+
+# No extras. Proves the near-stdlib claim: the engine must still build a construct
+# with only PyYAML present, warning about the gates it cannot run instead of dying.
+minimal-deps:
+  stage: test
+  script:
+    - pip install --no-cache-dir "PyYAML==6.0.2"
+    - python test_determinism.py
