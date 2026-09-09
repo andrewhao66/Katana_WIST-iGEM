@@ -3,36 +3,25 @@
 This bundle contains three kinds of thing, under three sets of terms. They are separated
 deliberately: a single licence covering all of it would be wrong for at least one of them.
 
-## 1. Code — MIT
+## 1. Code — Apache License 2.0
 
-`verify.py`, `verify_library_v2.py`, `test_seal_gaps.py`, `katana_lock.py`.
+Every `.py` file in this repository: the build engine (`katana_build.py`), the optional gates
+(`katana_drylab.py`, `blast_offtarget.py`, `katana_sbol.py`), the verifier (`verify.py`,
+`verify_library_v2.py`, `test_seal_gaps.py`, `katana_lock.py`) and the test suite
+(`test_determinism.py`).
 
-```
-MIT License
+The full text is in **`LICENSE`** at the root of this repository, unmodified.
 
-Copyright (c) 2026 Team WIST (iGEM 2026)
+Copyright 2026 Team WIST (iGEM 2026).
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+Apache-2.0 rather than a licence that is silent on patents, for one concrete reason: section 3 grants
+you an **express patent licence** covering the patent claims necessarily infringed by what is
+contributed here. You can adopt this code without having to price in patent risk from us, which is
+exactly the friction that stops institutions picking up student projects. It is also the licence iGEM
+provisions these repositories with, and it is OSI-approved, as the Best Software requirements ask.
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-```
-
-MIT is an OSI-approved licence, which CC BY 4.0 is not — Creative Commons themselves advise against
-using CC licences for software.
+Note that CC BY 4.0 is **not** used for the code: Creative Commons themselves advise against applying
+CC licences to software, and it is not OSI-approved.
 
 ## 2. Team-authored content — CC BY 4.0
 

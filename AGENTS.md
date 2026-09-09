@@ -1,3 +1,17 @@
+# Notes for AI assistants
+
+Read **[README.md](README.md)** first — it explains what this repository is for, how to install and
+run the tool, and the licence.
+
+## Responsible & honest use
+
+@.claude/RESPONSIBLE_AI_USE.md
+
+iGEM's policy above governs. What follows is this project's own, narrower rule set for the specific
+hazard of working in a repository that contains DNA.
+
+---
+
 # Instructions for an AI assistant working on this project
 
 **Read this before touching a sequence.** It is written for a coding assistant (Claude Code, Copilot,

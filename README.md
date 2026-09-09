@@ -25,6 +25,10 @@ This is what we did about it.
 
 ---
 
+> **Using an AI assistant (e.g. Claude Code)?** Read
+> [.claude/RESPONSIBLE_AI_USE.md](.claude/RESPONSIBLE_AI_USE.md) first, and `AGENTS.md` in this
+> repository. You remain fully responsible for everything you commit.
+
 ## Try it first, read second
 
 ```
@@ -221,7 +225,12 @@ Copy the file, change the names, drop it in your repository.
 
 ## Licence
 
-Code is **MIT**. Team-authored content is **CC BY 4.0**. The sequences are third-party and carry
-their source's terms — each accession is in `LOCK.tsv`. See `LICENSE.md`.
+Code is **Apache License 2.0** (see `LICENSE`). Team-authored content — this README, `ARCHITECTURE.md`,
+`AGENTS.md` — is **CC BY 4.0**. The sequences are third-party and carry their source's terms; each
+accession is recorded in `LOCK.tsv`. See `LICENSE.md` for how the three fit together.
+
+Apache-2.0 is used rather than a permissive licence that is silent on patents because it grants you an
+express patent licence for what is contributed here: you can adopt this without having to price in
+patent risk from us. It is also the licence iGEM ships with these repositories.
 
 Built by Team WIST for iGEM 2026. If it saves you one mislabelled part, it has paid for itself.
