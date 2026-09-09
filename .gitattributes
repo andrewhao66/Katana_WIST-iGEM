@@ -1,0 +1,32 @@
+# Line endings, and why this file is load-bearing.
+#
+# Sealed artifacts in this repository are hashed BYTE FOR BYTE. LOCK.tsv records a
+# file_sha256 for every part, and verify.py recomputes it on read. If Git rewrites a
+# single byte on the way out of the repository, that hash no longer matches and the
+# library reports itself as tampered.
+#
+# Git does exactly that by default on Windows: `core.autocrlf=true` converts LF to CRLF
+# on checkout. The bytes on disk then differ from the bytes that were sealed, and every
+# part fails its file hash — on a clean clone, for a reader who has changed nothing.
+#
+# That is not hypothetical. It shipped: the first public clone of this repository failed
+# 30 of 30 parts on a Windows machine, because the working tree it was sealed in had been
+# assembled by copying files rather than by `git checkout`, so the conversion never
+# happened for us. The sequences were fine throughout — seq_sha256 matched, since line
+# endings do not change the bases — but the byte seal is the check that is supposed to
+# notice a file changing underneath you, and it was being defeated by the version control
+# system itself.
+#
+# So: never translate anything that is hashed.
+
+# Source files normalise to LF, in the repository and in the working tree, on every OS.
+* text=auto eol=lf
+
+# Hashed artifacts are treated as binary. Byte-for-byte, no exceptions, no conversion.
+*.gb      -text
+*.gbk     -text
+*.fasta   -text
+*.fa      -text
+*.tsv     -text
+*.ttl     -text
+LOCK.root -text
