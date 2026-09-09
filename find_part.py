@@ -174,7 +174,8 @@ def main() -> int:
     print()
     print(f"      python add_part.py --library {yours} --id {top['name']} \\")
     print(f"          --accession {top['acc']} --range {top['lo']}..{top['hi']} "
-          f"--strand {top['strand']} --expect-length {top['length']}")
+          f"--strand {top['strand']} --expect-length {top['length']} \\")
+    print(f"          --expect-organism \"{top['org']}\"")
     print()
     print("  Read the organism line before you run it. More than one strain will match a common")
     print("  gene name, and a part from the wrong strain is the kind of mistake that survives")

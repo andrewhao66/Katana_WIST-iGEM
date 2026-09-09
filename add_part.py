@@ -108,7 +108,8 @@ def write_lock(path: Path, header: list[str], rows: list[dict]) -> None:
 
 
 # ── sources ─────────────────────────────────────────────────────────────────
-def fetch_ncbi(acc: str, rng: str | None, strand: str) -> tuple[str, str]:
+def fetch_ncbi(acc: str, rng: str | None, strand: str,
+               expect_org: str | None = None) -> tuple[str, str]:
     """Fetch from NCBI, letting the server do the sub-range and the reverse complement.
 
     Asking NCBI for the range is safer than fetching a whole genome and slicing it here: an
@@ -143,10 +144,43 @@ def fetch_ncbi(acc: str, rng: str | None, strand: str) -> tuple[str, str]:
     if not seq:
         raise SystemExit("BLOCK: NCBI returned a record with no sequence in it.")
 
+    # DEFECT 2: a range past the end of the record is CLIPPED by NCBI, and a shorter
+    # sequence than you asked for is a truncation - the failure this project was built around.
+    # Nothing else downstream can notice, because every hash will be self-consistent.
+    if start is not None:
+        want = end - start + 1
+        if len(seq) != want:
+            raise SystemExit(
+                f"BLOCK: asked for {want} bp ({start}..{end}) but NCBI returned {len(seq)} bp.\n"
+                f"       The record is shorter than the range, so this would seal a TRUNCATED\n"
+                f"       part. Nothing was written. Check the coordinates against the record:\n"
+                f"       https://www.ncbi.nlm.nih.gov/nuccore/{acc}")
+
+    # DEFECT 1: the sequence being what NCBI sent is not the same claim as the sequence being
+    # what you MEANT. Only the caller knows which organism they intended, so this can decide
+    # only when they say - and when they do not, it says so loudly rather than nodding along.
+    if expect_org:
+        if expect_org.lower() not in heads[0].lower():
+            raise SystemExit(
+                f"BLOCK: expected {expect_org!r} but the record says:\n"
+                f"       {heads[0][:96]}\n"
+                f"       Nothing was written. A part whose label and record disagree is exactly\n"
+                f"       the failure this software exists to prevent. If the record IS right and\n"
+                f"       your expectation was worded differently, re-run with the wording above.")
+
     coords = f":{start}-{end}" if start else ""
     source = f"NCBI {acc}{coords}({strand})"
     print(f"  fetched {len(seq)} bp from NCBI")
     print(f"  record  {heads[0][:78]}")
+    if expect_org:
+        print(f"  checked the record names {expect_org!r} before keeping it")
+    else:
+        print()
+        print("  NOTE: no --expect-organism given, so the LABEL was not checked against the")
+        print("        record. The hash proves what you downloaded; it cannot prove you asked")
+        print("        for the right thing. Read the record line above. To have this checked:")
+        print(f"            --expect-organism \"<organism as NCBI names it>\"")
+        print()
     return seq, source
 
 
@@ -272,6 +306,9 @@ def main() -> int:
     ap.add_argument("--source", help="provenance text (auto-filled for --accession)")
     ap.add_argument("--version", type=int, default=None,
                     help="version number (default: 1, or one past the highest already present)")
+    ap.add_argument("--expect-organism",
+                    help="refuse unless the fetched record names this organism - the one check "
+                         "that catches a right-looking sequence under a wrong label")
     ap.add_argument("--expect-length", type=int,
                     help="refuse unless the sequence is exactly this long - a cheap guard "
                          "against a wrong accession or a wrong range")
@@ -297,7 +334,7 @@ def main() -> int:
 
     # ---- get the sequence
     if a.accession:
-        seq, auto_source = fetch_ncbi(a.accession, a.rng, a.strand)
+        seq, auto_source = fetch_ncbi(a.accession, a.rng, a.strand, a.expect_organism)
         klass = a.klass or "reference"
     elif a.from_lib:
         seq, auto_source, src_class = copy_from_library(a.from_lib, a.id)
