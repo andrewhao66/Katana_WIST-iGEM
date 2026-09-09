@@ -6,26 +6,20 @@ WHY THIS EXISTS INSTEAD OF SHIPPING GENOMES
 
 The off-target check compares your construct against the whole genome of the organism you
 are putting it into, looking for stretches that accidentally match the host. That needs a
-genome file, and genomes are big: E. coli is 4.5 MB, yeast is 12 MB. Shipping a handful
+genome file, and genomes are big: E. coli is about 4.5 MB, yeast 12 MB. Shipping a handful
 would bloat the repository for everyone, and would still be the wrong handful for the team
-working in Vibrio or Synechocystis.
+working in Vibrio, or cyanobacteria, or something nobody thought of.
 
 So nothing is bundled. You fetch the one you actually use, once, and it lands where the
-checker looks. A team is never blocked because we failed to guess their chassis.
+checker looks. No team is ever blocked because we failed to guess their chassis.
 
-  python get_genome.py                 pick from a list
-  python get_genome.py --list          show the list and exit
-  python get_genome.py --host ecoli    fetch one non-interactively
+  python get_genome.py                 pick from a menu
+  python get_genome.py --list          show the menu and exit
+  python get_genome.py --host ecoli    fetch one without the menu
   python get_genome.py --accession NC_045512.2 --name my_virus --key MyHost
                                        fetch anything else in NCBI nucleotide
 
-EVERY ACCESSION BELOW WAS VERIFIED against NCBI on 2026-09-09 by fetching it and reading
-the organism name back out of the record header. None of them is typed from memory. The
-download is verified the same way before it is kept: a file whose headers do not match the
-organism you asked for is rejected rather than saved, because a silently wrong genome makes
-the off-target check pass for the wrong reason, which is worse than not running it at all.
-
-Requires only Python's standard library, and an internet connection for the fetch itself.
+Requires only Python's standard library, plus an internet connection for the fetch itself.
 """
 from __future__ import annotations
 
@@ -40,36 +34,90 @@ from pathlib import Path
 EFETCH = ("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
           "?db=nuccore&id={ids}&rettype=fasta&retmode=text")
 
-# key -> (display name, expected organism substring, ~MB, [accessions])
+# key -> (menu letter, group, display name, expected-organism substring, approx MB, accessions)
+#
+# EVERY ACCESSION HERE WAS VERIFIED against NCBI on 2026-09-09, by fetching the record and
+# reading the organism name back out of its header. None is typed from memory. That pass
+# caught three traps worth knowing if you extend this list:
+#
+#   * NCBI has RENAMED familiar organisms. Lactobacillus plantarum is now
+#     Lactiplantibacillus, Agrobacterium tumefaciens C58 is now A. fabrum, and Bacillus
+#     megaterium is now Priestia. The expected-organism strings below match what NCBI
+#     actually returns, not what the textbook calls them.
+#   * Guessing a consecutive accession range is unsafe. NC_012967.1 sits immediately after
+#     the four Komagataella chromosomes and is an unrelated E. coli genome.
+#   * Some organisms are several records. Yeast is 16 chromosomes and Komagataella is 4;
+#     fetching only the first would silently scan a fraction of the genome.
+#
 # The `key` is what a Design Spec's `host` / `constraints.host_context` field says.
+#
+# Everything listed is compatible with the iGEM White List as it stood on 2026-09-09 (Risk
+# Group 1 microorganisms, S. cerevisiae, K. phaffii, disarmed Agrobacterium, and the named
+# phages). The White List changes — check it yourself at responsibility.igem.org rather
+# than trusting this comment, and remember that a genome being downloadable here says
+# nothing about whether your institution or your team's division permits the work.
 GENOMES: dict[str, tuple] = {
-    "E_coli_MG1655": ("E. coli K-12 MG1655 - the default iGEM chassis",
-                      "Escherichia coli", 4.6, ["NC_000913.3"]),
-    "E_coli_Nissle": ("E. coli Nissle 1917 - probiotic chassis",
-                      "Escherichia coli", 5.4, ["CP007799.1"]),
-    "E_coli_BL21":   ("E. coli BL21(DE3) - protein expression",
-                      "Escherichia coli", 4.6, ["CP001509.3"]),
-    "B_subtilis_168":("Bacillus subtilis 168 - Gram-positive workhorse",
-                      "Bacillus subtilis", 4.2, ["NC_000964.3"]),
-    "S_cerevisiae":  ("S. cerevisiae S288C - baker's yeast, all 16 chromosomes",
-                      "Saccharomyces cerevisiae", 12.2,
-                      ["NC_001133.9","NC_001134.8","NC_001135.5","NC_001136.10",
-                       "NC_001137.3","NC_001138.5","NC_001139.9","NC_001140.6",
-                       "NC_001141.2","NC_001142.9","NC_001143.9","NC_001144.5",
-                       "NC_001145.3","NC_001146.8","NC_001147.6","NC_001148.4"]),
-    "P_putida_KT2440":("Pseudomonas putida KT2440 - robust soil bacterium",
-                      "Pseudomonas putida", 6.2, ["NC_002947.4"]),
-    "Synechocystis_6803":("Synechocystis sp. PCC 6803 - photosynthetic",
-                      "Synechocystis", 3.6, ["NC_000911.1"]),
-    "L_lactis_IL1403":("Lactococcus lactis IL1403 - food-grade",
-                      "Lactococcus lactis", 2.4, ["NC_002662.1"]),
-    "V_natriegens":  ("Vibrio natriegens - very fast growing",
-                      "Vibrio natriegens", 5.2, ["NZ_CP009977.1"]),
-    "C_glutamicum":  ("Corynebacterium glutamicum ATCC 13032 - amino-acid producer",
-                      "Corynebacterium glutamicum", 3.3, ["NC_003450.3"]),
+    "E_coli_MG1655":     ("a", "Bacteria", "E. coli K-12 MG1655 - the default iGEM chassis",
+                          "Escherichia coli", 4.6, ["NC_000913.3"]),
+    "E_coli_Nissle":     ("b", "Bacteria", "E. coli Nissle 1917 - probiotic chassis",
+                          "Escherichia coli", 5.4, ["CP007799.1"]),
+    "E_coli_BL21":       ("c", "Bacteria", "E. coli BL21(DE3) - protein expression",
+                          "Escherichia coli", 4.6, ["CP001509.3"]),
+    "B_subtilis_168":    ("d", "Bacteria", "Bacillus subtilis 168 - Gram-positive workhorse",
+                          "Bacillus subtilis", 4.2, ["NC_000964.3"]),
+    "L_lactis_IL1403":   ("e", "Bacteria", "Lactococcus lactis IL1403 - food-grade",
+                          "Lactococcus lactis", 2.4, ["NC_002662.1"]),
+    "L_plantarum_WCFS1": ("f", "Bacteria", "Lactiplantibacillus plantarum WCFS1 - probiotic",
+                          "Lactiplantibacillus plantarum", 3.3, ["NC_004567.2"]),
+    "P_putida_KT2440":   ("g", "Bacteria", "Pseudomonas putida KT2440 - robust soil bacterium",
+                          "Pseudomonas putida", 6.2, ["NC_002947.4"]),
+    "Synechocystis_6803": ("h", "Bacteria", "Synechocystis sp. PCC 6803 - photosynthetic",
+                          "Synechocystis", 3.6, ["NC_000911.1"]),
+    "V_natriegens":      ("i", "Bacteria", "Vibrio natriegens - very fast growing",
+                          "Vibrio natriegens", 5.2, ["NZ_CP009977.1"]),
+    "C_glutamicum":      ("j", "Bacteria", "Corynebacterium glutamicum ATCC 13032 - amino acids",
+                          "Corynebacterium glutamicum", 3.3, ["NC_003450.3"]),
+    "A_fabrum_C58":      ("k", "Bacteria", "Agrobacterium fabrum C58, aka A. tumefaciens - plants",
+                          "Agrobacterium fabrum", 2.9, ["NC_003062.2"]),
+    "S_coelicolor":      ("l", "Bacteria", "Streptomyces coelicolor A3(2) - natural products",
+                          "Streptomyces coelicolor", 8.7, ["NC_003888.3"]),
+    "Z_mobilis_ZM4":     ("m", "Bacteria", "Zymomonas mobilis ZM4 - ethanol producer",
+                          "Zymomonas mobilis", 2.1, ["NC_006526.2"]),
+    "P_megaterium":      ("n", "Bacteria", "Priestia megaterium DSM319, aka Bacillus megaterium",
+                          "Priestia megaterium", 5.1, ["NC_014103.1"]),
+    "S_cerevisiae":      ("o", "Fungi", "Saccharomyces cerevisiae S288C - baker's yeast",
+                          "Saccharomyces cerevisiae", 12.2,
+                          ["NC_001133.9", "NC_001134.8", "NC_001135.5", "NC_001136.10",
+                           "NC_001137.3", "NC_001138.5", "NC_001139.9", "NC_001140.6",
+                           "NC_001141.2", "NC_001142.9", "NC_001143.9", "NC_001144.5",
+                           "NC_001145.3", "NC_001146.8", "NC_001147.6", "NC_001148.4"]),
+    "K_phaffii":         ("p", "Fungi", "Komagataella phaffii GS115, aka Pichia pastoris",
+                          "Komagataella phaffii", 9.3,
+                          ["NC_012963.1", "NC_012964.1", "NC_012965.1", "NC_012966.1"]),
+    "Phage_lambda":      ("q", "Phage", "Phage lambda", "phage lambda", 0.05, ["NC_001416.1"]),
+    "Phage_T7":          ("r", "Phage", "Phage T7", "phage T7", 0.04, ["NC_001604.1"]),
+    "Phage_T4":          ("s", "Phage", "Phage T4", "phage T4", 0.17, ["NC_000866.4"]),
+    "Phage_T2":          ("t", "Phage", "Phage T2", "phage T2", 0.17, ["NC_054931.1"]),
+    "Phage_M13":         ("u", "Phage", "Phage M13", "phage M13", 0.01, ["NC_003287.2"]),
+    "Phage_PhiX174":     ("v", "Phage", "Phage PhiX174", "phiX174", 0.01, ["NC_001422.1"]),
+    "Phage_P1":          ("w", "Phage", "Phage P1", "phage P1", 0.09, ["NC_005856.1"]),
 }
-ALIASES = {"ecoli": "E_coli_MG1655", "E_coli_K12": "E_coli_MG1655",
-           "yeast": "S_cerevisiae", "subtilis": "B_subtilis_168"}
+BY_LETTER = {v[0]: k for k, v in GENOMES.items()}
+ALIASES = {"ecoli": "E_coli_MG1655", "e_coli_k12": "E_coli_MG1655",
+           "yeast": "S_cerevisiae", "subtilis": "B_subtilis_168",
+           "pichia": "K_phaffii", "lambda": "Phage_lambda"}
+
+
+def resolve(choice: str) -> str:
+    """Accept a menu letter, a host key, or a friendly alias. Returns '' if unknown."""
+    if not choice:
+        return ""
+    c = choice.strip()
+    if c.lower() in BY_LETTER:
+        return BY_LETTER[c.lower()]
+    if c in GENOMES:
+        return c
+    return ALIASES.get(c.lower(), "")
 
 
 def find_ref_genomes() -> Path:
@@ -87,18 +135,30 @@ def find_ref_genomes() -> Path:
 
 
 def show_list() -> None:
-    print("\nHost genomes this tool knows about:\n")
-    print(f"  {'key':<20} {'approx':>7}  organism")
-    print("  " + "-" * 74)
-    for key, (label, _org, mb, accs) in GENOMES.items():
-        n = f" ({len(accs)} records)" if len(accs) > 1 else ""
-        print(f"  {key:<20} {mb:>5.1f} MB  {label}{n}")
-    print("\n  Anything else:  python get_genome.py --accession <ACC[,ACC2,...]> "
-          "--name <filename> --key <HostKey>\n")
+    print()
+    print("  Which organism are you working in?  Type its LETTER and press Enter.")
+    print()
+    group = None
+    for key, (letter, grp, label, _org, mb, accs) in GENOMES.items():
+        if grp != group:
+            group = grp
+            print(f"    -- {grp} --")
+        n = f"   [{len(accs)} records]" if len(accs) > 1 else ""
+        size = f"{mb:>5.1f} MB" if mb >= 0.1 else "  < 1 MB"
+        print(f"     {letter})  {label:<52} {size}{n}")
+    print()
+    print("     other)  something else - any accession in NCBI nucleotide")
+    print("     quit )  leave without downloading anything")
+    print()
 
 
 def fetch(accessions: list[str], expect_org: str, out: Path) -> tuple[bool, str]:
-    """Download, then verify the record headers before keeping the file."""
+    """Download, then verify the record headers BEFORE keeping the file.
+
+    A silently wrong genome makes the off-target check pass for the wrong reason, which is
+    worse than not running it at all. So a download whose headers do not match the organism
+    that was asked for is refused, not saved.
+    """
     url = EFETCH.format(ids=",".join(accessions))
     try:
         data = urllib.request.urlopen(url, timeout=180).read().decode("utf-8", "replace")
@@ -107,27 +167,27 @@ def fetch(accessions: list[str], expect_org: str, out: Path) -> tuple[bool, str]
 
     heads = [l[1:].strip() for l in data.splitlines() if l.startswith(">")]
     if len(heads) != len(accessions):
-        return False, (f"expected {len(accessions)} record(s), got {len(heads)} — "
-                       f"NOT saved. NCBI may have returned an error page.")
+        return False, (f"expected {len(accessions)} record(s), got {len(heads)} - NOT saved. "
+                       f"NCBI may have returned an error page instead of sequence.")
     if expect_org:
         wrong = [h for h in heads if expect_org.lower() not in h.lower()]
         if wrong:
-            return False, (f"record header does not mention '{expect_org}' — NOT saved. "
-                           f"First mismatch: {wrong[0][:80]}")
+            return False, (f"a record does not mention '{expect_org}' - NOT saved. "
+                           f"First mismatch: {wrong[0][:70]}")
     bases = sum(len(l.strip()) for l in data.splitlines() if not l.startswith(">"))
     if bases < 1000:
-        return False, f"only {bases} bases returned — NOT saved."
+        return False, f"only {bases} bases returned - NOT saved."
 
     out.write_text(data, encoding="utf-8", newline="\n")
     sha = hashlib.sha256(data.encode("utf-8")).hexdigest()
-    return True, (f"{len(heads)} record(s), {bases:,} bases, sha256 {sha[:16]}…")
+    return True, f"{len(heads)} record(s), {bases:,} bases, sha256 {sha[:16]}"
 
 
 def register(ref_dir: Path, key: str, filename: str, accessions: list[str], note: str) -> None:
-    """Record what was fetched, so the checker can find it and a human can audit it.
+    """Record what was fetched, so the checker finds it and a human can audit it.
 
-    Same discipline the parts library uses: an accession, a date, and a hash. A genome you
-    cannot trace is no better than a sequence you cannot trace.
+    The same discipline every part in the library gets: an accession, a date, and a hash.
+    A genome you cannot trace is no better than a sequence you cannot trace.
     """
     reg = ref_dir / "genomes.tsv"
     header = "host_key\tfilename\taccessions\tfetched\tnote\n"
@@ -143,8 +203,8 @@ def register(ref_dir: Path, key: str, filename: str, accessions: list[str], note
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fetch a host genome for the off-target check.")
-    ap.add_argument("--list", action="store_true", help="show known genomes and exit")
-    ap.add_argument("--host", help="key from --list (e.g. E_coli_MG1655)")
+    ap.add_argument("--list", action="store_true", help="show the menu and exit")
+    ap.add_argument("--host", help="menu letter, host key, or alias (e.g. a, E_coli_MG1655, ecoli)")
     ap.add_argument("--accession", help="any NCBI nucleotide accession(s), comma-separated")
     ap.add_argument("--name", help="filename stem, used with --accession")
     ap.add_argument("--key", help="host key to register it under, used with --accession")
@@ -161,39 +221,57 @@ def main() -> int:
         key = args.key or (args.name or accs[0])
         stem = args.name or accs[0].replace(".", "_")
         expect = ""
-        print(f"\nFetching {len(accs)} record(s) from NCBI …")
+        print(f"\n  Fetching {len(accs)} record(s) from NCBI ...")
     else:
-        key = ALIASES.get(args.host or "", args.host or "")
+        key = resolve(args.host) if args.host else ""
         if not key:
             show_list()
             try:
-                choice = input("Which host are you working in? (type a key, or q to quit): ").strip()
+                choice = input("  Letter (or 'other' / 'quit'): ").strip()
             except EOFError:
-                return 1
-            if choice.lower() in ("q", "quit", ""):
+                choice = ""
+            low = choice.lower()
+            # An empty line used to exit printing NOTHING at all, which looked exactly like
+            # it had silently done something. Always say what happened.
+            if low in ("", "q", "quit", "exit"):
+                print("\n  Nothing selected, so nothing was downloaded.")
+                print("  Run this again when you know which organism you need.\n")
                 return 0
-            key = ALIASES.get(choice, choice)
+            if low == "other":
+                print("\n  For anything not on the menu, pass the accession directly:\n")
+                print("    python get_genome.py --accession <ACCESSION> --name <filename> --key <HostKey>")
+                print("    e.g. python get_genome.py --accession NC_045512.2 --name sars2 --key SARS2\n")
+                print("  The key is whatever your Design Spec's host field says.\n")
+                return 0
+            key = resolve(choice)
+            if not key:
+                print(f"\n  '{choice}' is not one of the letters above, so nothing was downloaded.")
+                print("  Run this again and type a single letter, or 'quit' to leave.\n")
+                return 1
         if key not in GENOMES:
-            print(f"\nBLOCK: '{key}' is not a key I know. Run --list to see them, or use "
-                  f"--accession to fetch anything else.")
+            print(f"\n  BLOCK: '{key}' is not a host I know. Run --list for the menu, "
+                  f"or use --accession for anything else.")
             return 1
-        label, expect, mb, accs = GENOMES[key]
+        _letter, _grp, label, expect, mb, accs = GENOMES[key]
         stem = key
-        print(f"\n{label}\n  about {mb:.1f} MB, {len(accs)} record(s) from NCBI. Fetching …")
+        print(f"\n  {label}")
+        print(f"  about {mb:.1f} MB, {len(accs)} record(s) from NCBI. Fetching ...")
 
     out = ref_dir / f"{stem}.fna"
     t0 = time.time()
     ok, msg = fetch(accs, expect, out)
     if not ok:
-        print(f"  BLOCK: {msg}")
+        print(f"  REFUSED: {msg}\n")
         return 1
 
     register(ref_dir, key, out.name, accs, msg)
-    print(f"  OK — {msg}")
+    print(f"  OK - {msg}")
     print(f"  saved  {out}")
     print(f"  took   {time.time() - t0:.1f}s")
-    print(f"\nThe off-target check will now use it for host '{key}'. Re-run your build "
-          f"and Stage 4b should stop reporting OFF-TARGET SKIPPED.\n")
+    print()
+    print(f"  The off-target check will now use it for host '{key}'. Build again and")
+    print("  Stage 4b should stop reporting OFF-TARGET SKIPPED.")
+    print()
     return 0
 
 
