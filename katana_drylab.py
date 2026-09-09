@@ -110,7 +110,8 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
                                   "(misassembly / wrong part / recode artifact)." % (ln, idp, gs, ge))
                 else:
                     warns.append("WARN Stage-4b: off-target %dbp %.1f%% @%d-%d not at an expected locus "
-                                 "(likely native terminator / coincidental) — REVIEW." % (ln, idp, gs, ge))
+                                 "(under the >=%dbp/>=%.0f%% BLOCK threshold) - REVIEW."
+                                 % (ln, idp, gs, ge, BLOCK_LEN, BLOCK_ID))
         except Exception as e:
             warns.append("WARN Stage-4b: off-target scan error (%r). NOT enforced this run." % e)
 
