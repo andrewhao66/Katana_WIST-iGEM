@@ -269,8 +269,21 @@ def main() -> int:
     print(f"  saved  {out}")
     print(f"  took   {time.time() - t0:.1f}s")
     print()
-    print(f"  The off-target check will now use it for host '{key}'. Build again and")
-    print("  Stage 4b should stop reporting OFF-TARGET SKIPPED.")
+    print(f"  The off-target check will now use it for host '{key}'.")
+    print("  Build again and Stage 4b should stop reporting OFF-TARGET SKIPPED:")
+    print()
+    # Print the command rather than describing it, and name a real Spec rather than a
+    # placeholder. Telling someone to "build again" makes them scroll back for the line
+    # they need; it costs nothing to hand it to them here.
+    specs = sorted((Path(__file__).resolve().parent / "specs").glob("*.spec.yaml"))
+    if specs:
+        print(f"      python katana_build.py specs/{specs[0].name}")
+        if len(specs) > 1:
+            print()
+            print(f"  (that is one of {len(specs)} Design Specs in specs/ - "
+                  f"use whichever you are building)")
+    else:
+        print("      python katana_build.py <path-to-your-spec>.spec.yaml")
     print()
     return 0
 
