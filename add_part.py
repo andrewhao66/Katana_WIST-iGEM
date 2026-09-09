@@ -167,6 +167,45 @@ def read_local(path: Path) -> str:
     return seq
 
 
+def copy_from_library(src: Path, pid: str) -> tuple[str, str, str]:
+    """Take a part that is already sealed somewhere else, verifying it on the way out.
+
+    The source row's hash is not trusted because it is written down. The part file is read and
+    re-hashed, and a disagreement means the source library is damaged - which is worth knowing
+    about loudly rather than propagating into a second library.
+
+    Provenance travels with the part. The original source string is kept and annotated with the
+    library it came through, because "copied from a sealed library that recorded NCBI x:y-z" and
+    "fetched from NCBI x:y-z" are different claims and only one of them is true here.
+    """
+    src = src.expanduser().resolve()
+    lock = src if src.name == "LOCK.tsv" else src / "LOCK.tsv"
+    if not lock.exists():
+        raise SystemExit(f"BLOCK: no LOCK.tsv at {lock}")
+
+    rows = read_lock(lock)[1]
+    hits = [r for r in rows if r["id"] == pid]
+    if not hits:
+        names = ", ".join(sorted({r["id"] for r in rows})[:12])
+        raise SystemExit(f"BLOCK: no part called {pid!r} in {lock}.\n"
+                         f"       That library holds: {names} ...\n"
+                         f"       List them all with:  python find_part.py --have")
+    row = hits[-1]   # the newest version of that id
+
+    part_file = lock.parent / row["outfile"]
+    if not part_file.exists():
+        raise SystemExit(f"BLOCK: {lock} lists {row['outfile']} but the file is missing.")
+
+    seq = extract_gb_sequence(part_file.read_text(encoding="utf-8"))
+    if seq_sha256(seq) != row["seq_sha256"]:
+        raise SystemExit(f"BLOCK: {pid} in the SOURCE library does not match its own hash. "
+                         f"That library is damaged - do not copy from it. Run verify.py there.")
+
+    print(f"  copied  {pid} v{row['version']}  {len(seq)} bp  from {lock.parent.name}/")
+    print(f"  checked its hash against the source manifest before copying")
+    return seq, f"{row['source']} [copied from {lock.parent.name}]", row.get("class", "reference")
+
+
 # ── the GenBank the engine will read ────────────────────────────────────────
 def render_genbank(pid: str, version: int, seq: str, source: str, klass: str) -> str:
     """A minimal, valid GenBank record.
@@ -224,6 +263,9 @@ def main() -> int:
     ap.add_argument("--strand", choices=["+", "-"], default="+",
                     help="which strand of that range (default +)")
     ap.add_argument("--file", type=Path, help="a local .fasta or .gb to admit instead")
+    ap.add_argument("--from", dest="from_lib", type=Path,
+                    help="copy a part already sealed in another library "
+                         "(give its LOCK.tsv, or the ref_parts dir holding it)")
     ap.add_argument("--class", dest="klass", choices=["reference", "designed", "synthesised"],
                     help="reference = fetched from a database; designed = you made it "
                          "(default: reference for --accession, designed for --file)")
@@ -235,8 +277,9 @@ def main() -> int:
                          "against a wrong accession or a wrong range")
     a = ap.parse_args()
 
-    if bool(a.accession) == bool(a.file):
-        return _block("give exactly one of --accession or --file.")
+    given = [bool(a.accession), bool(a.file), bool(a.from_lib)]
+    if sum(given) != 1:
+        return _block("give exactly one of --accession, --file or --from.")
     if not re.fullmatch(r"[A-Za-z0-9_.\-]+", a.id):
         return _block(f"--id {a.id!r} may only contain letters, digits, dot, dash, underscore.")
 
@@ -256,6 +299,9 @@ def main() -> int:
     if a.accession:
         seq, auto_source = fetch_ncbi(a.accession, a.rng, a.strand)
         klass = a.klass or "reference"
+    elif a.from_lib:
+        seq, auto_source, src_class = copy_from_library(a.from_lib, a.id)
+        klass = a.klass or src_class
     else:
         seq = read_local(a.file)
         auto_source = f"local file {a.file.name}"
