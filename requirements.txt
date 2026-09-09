@@ -3,6 +3,11 @@
 # The engine core is deliberately near-stdlib: the only hard requirement is a YAML
 # parser for Design Specs. Everything else is optional and gated, and the engine
 # reports loudly (never silently) when an optional gate could not run.
+#
+# INSTALL THIS INSIDE A VIRTUAL ENVIRONMENT. These are exact pins, which is what makes
+# a build reproducible - but run against a system-wide Python they will UNINSTALL newer
+# versions you already had and replace them with these, silently, for every other project
+# on that machine. A venv confines them to this project. The README says so too.
 
 PyYAML==6.0.2            # required: parse .spec.yaml Design Specs
 
@@ -11,4 +16,7 @@ python-codon-tables==0.1.12   # optional: real E. coli CAI for designed CDSs
 
 # Optional — SBOL 3 interchange (`--sbol out.ttl`). Without it the engine still builds;
 # it just cannot emit SBOL, and says so rather than failing quietly.
-sbol3==1.2.0                  # optional: validated SBOL 3 export
+sbol3==1.2.0.post0            # optional: validated SBOL 3 export
+#   NOTE: .post0 matters. There is no plain 1.2.0 on PyPI, so `sbol3==1.2.0` resolves to the
+#   YANKED 1.2 wheel (withdrawn: built from an older commit than its tag). Pip warns and
+#   installs it anyway.
