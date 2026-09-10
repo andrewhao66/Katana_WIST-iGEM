@@ -59,24 +59,59 @@ def read_rows(lock: Path) -> list[dict]:
     return [dict(zip(head, l.split("\t"))) for l in lines[1:]]
 
 
-def show_have(lock: Path, needle: str = "") -> int:
+def rel(p: Path) -> str:
+    """Show a path relative to where the reader is standing, when that is shorter."""
+    try:
+        return str(Path(p).resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(p)
+
+
+def list_rows(lock: Path, title: str, note: str = "") -> int:
+    """Print one library's contents under a heading."""
     rows = read_rows(lock)
-    if needle:
-        rows = [r for r in rows if needle.lower() in r["id"].lower()]
-    if not rows:
-        return 0
-    print()
-    print(f"  Already sealed in {lock.parent.name}/ next to you:")
+    print(f"  {title} - {len(rows)} part(s)")
+    if note:
+        print(f"  {note}")
     print()
     for r in rows:
-        print(f"    {r['id']:<20} {r['length']:>6} bp  {r['class']:<12} {r['source'][:46]}")
-    print()
-    print("  These are verified and carry their provenance already, so copy them rather than")
-    print("  fetching them again:")
-    print()
-    print(f"      python add_part.py --library <your-library> --from {lock} --id {rows[0]['id']}")
+        print(f"    {r['id']:<20} {r['length']:>6} bp  {r['class']:<12} {r['source'][:44]}")
     print()
     return len(rows)
+
+
+def show_have(yours: Path, shipped: Path | None) -> int:
+    """Show YOUR library and, separately, the one shipped here to copy from.
+
+    Showing only one of them is how the trap worked: a reader with their own library saw our
+    thirty parts, wrote a Spec against them, and the build refused parts they had never added.
+    Your library and the reference library are different things, and saying so is the point of
+    the whole design - yours is the one you fill, ours stays sealed so it can go on being
+    checkable.
+    """
+    total = 0
+    yours_lock = yours / "LOCK.tsv" if yours else None
+    if yours_lock and yours_lock.exists():
+        total += list_rows(yours_lock, f"YOUR library: {rel(yours)}")
+        if total == 0:
+            print("    (empty so far - nothing has been admitted yet)")
+            print()
+
+    if shipped and shipped.exists() and shipped != yours_lock:
+        n = list_rows(
+            shipped,
+            "AVAILABLE TO COPY, from the library shipped with this repository",
+            "These are already verified and carry their provenance, so copy them "
+            "rather than fetching them again.")
+        if yours_lock and yours_lock.exists():
+            first = read_rows(shipped)[0]["id"]
+            print("  To copy one across:")
+            print()
+            print(f"      python add_part.py --library {rel(yours.parent)} "
+                  f"--from {rel(shipped.parent)} --id {first}")
+            print()
+        total += n
+    return total
 
 
 def search_ncbi(gene: str, organism: str, limit: int) -> list[dict]:
@@ -129,7 +164,16 @@ def main() -> int:
             print("\n  No parts-library found beside you. Run this from inside the katana folder,\n"
                   "  or make your own library first:  python katana_init.py my-project\n")
             return 1
-        show_have(local / "LOCK.tsv")
+        # --library, when given, names YOUR library. Before this it was used only to write the
+        # example command, while the listing always showed the shipped one.
+        mine = None
+        if a.library:
+            r = a.library.expanduser().resolve()
+            mine = next((c for c in (r / "ref_parts", r / "parts-library" / "ref_parts", r)
+                         if (c / "LOCK.tsv").exists()), None)
+        elif (Path("my-project/parts-library/ref_parts/LOCK.tsv")).exists():
+            mine = Path("my-project/parts-library/ref_parts").resolve()
+        show_have(mine, (local / "LOCK.tsv") if local else None)
         if not a.gene:
             print("  To search NCBI for something else:  python find_part.py <gene name>\n")
             return 0
