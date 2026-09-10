@@ -405,7 +405,7 @@ def main() -> int:
     print("  Paste this into the parts list in your Spec —")
     print()
     print(f"  - id: {a.id}")
-    print(f"    role: promoter          # promoter | rbs | cds | terminator | ...")
+    print(f"    role: SET_THIS          # promoter | rbs | cds | terminator | reporter")
     print(f"    class: {klass}")
     print(f"    source: {{ note: \"{source}\" }}")
     print(f"    seal:   {{ status: SEALED, lib: \"{outfile}\",")

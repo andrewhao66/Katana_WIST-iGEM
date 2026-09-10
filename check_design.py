@@ -146,11 +146,27 @@ def analyse(spec: dict, rep: Report) -> None:
                         "Without it the engine cannot tell which version of the part you mean, "
                         "so it refuses to build.",
                         f"Run  python find_part.py {pid}  and paste the seal block it prints.")
-        if not role_of(p):
+        r = role_of(p)
+        known = {PROMOTER, RBS, TERM} | CODING | BACKBONE
+        if not r:
             rep.check(f"'{pid}' has no role given.",
                       "Role is what lets this checker reason about your design at all. Without "
                       "it, this part is invisible to every check below.",
                       "Add  role: promoter | rbs | cds | terminator  as appropriate.")
+        elif r in ("set_this", "changeme", "change_me", "todo", "xxx"):
+            rep.problem(f"'{pid}' still has the placeholder role '{p.get('role')}'.",
+                        "The seal block was pasted but the role was never set. An unrecognised "
+                        "role is invisible to every biology check below, so this part would be "
+                        "silently skipped rather than checked.",
+                        "Set it to what this part DOES in your circuit: promoter, rbs, cds, "
+                        "terminator or reporter.")
+        elif r not in known:
+            rep.problem(f"'{pid}' has an unrecognised role: '{p.get('role')}'.",
+                        "Only promoter, rbs, cds, terminator, reporter, ori and marker are "
+                        "understood. Anything else is skipped by every check below, so the part "
+                        "goes unexamined instead of being examined and passing.",
+                        "Use one of the recognised roles, or leave the part out of "
+                        "architecture.order if it is not part of the construct.")
 
     # ---- the biology, in the order the parts actually appear ----
     seq = [(str(pid), role_of(by_id.get(str(pid), {}))) for pid in order if str(pid) in by_id]

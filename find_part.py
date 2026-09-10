@@ -252,8 +252,23 @@ def main() -> int:
             print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} {r['length']:>5} bp  "
                   f"{r['seq_sha256'][:12]}  added {r.get('date', '?')}")
         print()
-        print("  Copy its seal block into your Spec, then build. Adding it again would only make")
-        print("  a second version of a part you already hold.")
+        newest_row = max(already_mine,
+                         key=lambda r: int(r["version"]) if str(r["version"]).isdigit() else 0)
+        print("  Nothing to download. To USE it, paste these lines into the parts list of your")
+        print("  Design Spec - this is the \"seal block\", and it is what tells the engine exactly")
+        print("  which version of the part you mean:")
+        print()
+        print(f"  - id: {newest_row['id']}")
+        print( "    role: SET_THIS          # promoter | rbs | cds | terminator | reporter")
+        print(f"    class: {newest_row.get('class', 'reference')}")
+        print(f"    source: {{ note: \"{newest_row.get('source', '')}\" }}")
+        print(f"    seal:   {{ status: SEALED, lib: \"{newest_row['outfile']}\",")
+        print(f"              seq_sha256_12: {newest_row['seq_sha256'][:12]}, "
+              f"length: {newest_row['length']} }}")
+        print()
+        print("  Set role: to whatever job this part does in your circuit - the library records")
+        print("  what a part IS, not what you are using it for. Then add its id to")
+        print("  architecture.order and build.")
         print()
         if local:
             near_rows = [r for r in read_rows(local / "LOCK.tsv")
