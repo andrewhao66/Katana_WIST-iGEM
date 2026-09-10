@@ -172,10 +172,14 @@ def main() -> int:
     print("  Coordinates above are 1-based inclusive, converted from NCBI's 0-based summary")
     print("  and checked against parts this project sealed months ago. To admit the first one:")
     print()
-    print(f"      python add_part.py --library {yours} --id {top['name']} \\")
-    print(f"          --accession {top['acc']} --range {top['lo']}..{top['hi']} "
-          f"--strand {top['strand']} --expect-length {top['length']} \\")
-    print(f"          --expect-organism \"{top['org']}\"")
+    # One line, deliberately. A trailing backslash continues a command in bash but is a SYNTAX
+    # ERROR in PowerShell, where the continuation is a backtick - and most people reading this
+    # are on Windows. A long line wraps in the terminal; pasting a wrapped line still works,
+    # because the wrap is visual rather than a newline.
+    print(f"      python add_part.py --library {yours} --id {top['name']} "
+          f"--accession {top['acc']} --range {top['lo']}..{top['hi']} "
+          f"--strand {top['strand']} --expect-length {top['length']} "
+          f"--expect-organism \"{top['org']}\"")
     print()
     print("  Read the organism line before you run it. More than one strain will match a common")
     print("  gene name, and a part from the wrong strain is the kind of mistake that survives")

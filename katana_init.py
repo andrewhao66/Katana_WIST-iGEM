@@ -154,8 +154,9 @@ def main() -> int:
     print()
     print("  Next, put a part in your library. A reference part from NCBI:")
     print()
-    print(f"      python add_part.py --library {_rel(lib)} --id lacZ \\")
-    print( "          --accession NC_000913.3 --range 363231..366305 --strand -")
+    # One line: backslash continuation is a PowerShell syntax error. See find_part.py.
+    print(f"      python add_part.py --library {_rel(lib)} --id lacZ "
+           "--accession NC_000913.3 --range 363231..366305 --strand -")
     print()
     print("  or a part you designed yourself, from a local FASTA or GenBank file:")
     print()
