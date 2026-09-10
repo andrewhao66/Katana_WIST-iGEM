@@ -201,6 +201,8 @@ def main() -> int:
     ap.add_argument("--search-anyway", action="store_true",
                     help="search NCBI even when the part is already in your library, "
                          "to compare your copy against today's record")
+    ap.add_argument("--seal", action="store_true",
+                    help="print the seal block to paste into a Design Spec")
     a = ap.parse_args()
 
     local = find_local_library(Path.cwd().resolve())
@@ -254,22 +256,24 @@ def main() -> int:
         print()
         newest_row = max(already_mine,
                          key=lambda r: int(r["version"]) if str(r["version"]).isdigit() else 0)
-        print("  Nothing to download. To USE it, paste these lines into the parts list of your")
-        print("  Design Spec - this is the \"seal block\", and it is what tells the engine exactly")
-        print("  which version of the part you mean:")
-        print()
-        print(f"  - id: {newest_row['id']}")
-        print( "    role: SET_THIS          # promoter | rbs | cds | terminator | reporter")
-        print(f"    class: {newest_row.get('class', 'reference')}")
-        print(f"    source: {{ note: \"{newest_row.get('source', '')}\" }}")
-        print(f"    seal:   {{ status: SEALED, lib: \"{newest_row['outfile']}\",")
-        print(f"              seq_sha256_12: {newest_row['seq_sha256'][:12]}, "
-              f"length: {newest_row['length']} }}")
-        print()
-        print("  Set role: to whatever job this part does in your circuit - the library records")
-        print("  what a part IS, not what you are using it for. Then add its id to")
-        print("  architecture.order and build.")
-        print()
+        if a.seal:
+            # Only when asked. Checking whether you HAVE a part and writing it into a Spec are
+            # two different jobs, and answering both at once is what made this output long
+            # enough to stop being an answer.
+            print("  Seal block - paste this into the parts list of your Design Spec:")
+            print()
+            print(f"  - id: {newest_row['id']}")
+            print( "    role: SET_THIS          # promoter | rbs | cds | terminator | reporter")
+            print(f"    class: {newest_row.get('class', 'reference')}")
+            print(f"    source: {{ note: \"{newest_row.get('source', '')}\" }}")
+            print(f"    seal:   {{ status: SEALED, lib: \"{newest_row['outfile']}\",")
+            print(f"              seq_sha256_12: {newest_row['seq_sha256'][:12]}, "
+                  f"length: {newest_row['length']} }}")
+            print()
+            print("  Set role: to what this part DOES in your circuit - the library records what a")
+            print("  part IS, not what you are using it for. Then add its id to architecture.order.")
+            print()
+
         if local:
             near_rows = [r for r in read_rows(local / "LOCK.tsv")
                          if a.gene.lower() in r["id"].lower()
@@ -281,6 +285,11 @@ def main() -> int:
                     print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} "
                           f"{r['length']:>5} bp  {r['seq_sha256'][:12]}")
                 print()
+
+        if not a.seal:
+            print(f"  Writing a Spec and need its seal block?  "
+                  f"python find_part.py {a.gene} --seal")
+            print()
 
         if not a.search_anyway:
             # The question was "is it in my library". It is. Answering a question and then
