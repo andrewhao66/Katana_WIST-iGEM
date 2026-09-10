@@ -15,11 +15,14 @@ corrected part becomes a new version with a new fingerprint, and the old row sta
     python add_part.py --library my-project/parts-library --id my_rbs \\
         --file my_rbs.fasta --class designed --source "designed: OSTIR TIR 12000"
 
-A note on the iGEM Registry. It refuses scripted downloads (HTTP 403 on both the XML and
-FASTA endpoints, with or without a browser user agent), so there is no honest way to fetch a
-BBa_ part automatically. Open the part's page, copy its sequence into a .fasta file, and use
---file with --source "iGEM Registry BBa_XXXXX". The provenance you record is then exactly as
-good; only the convenience is lost.
+The iGEM Registry, corrected. An earlier version of this file said the Registry could not be
+fetched. That was wrong, and the error is worth recording: two endpoints on parts.igem.org (the
+cgi/XML one and the FASTA one) return 403, and testing only those two led to a conclusion about
+the whole Registry. api.registry.igem.org/v1 is public, needs no account, and returns the
+sequence along with a uuid and an SO role accession. A negative result about one route is not a
+result about the destination.
+
+    python add_part.py --library my-project/parts-library --registry BBa_B0015
 
 Why the round-trip check at the end. It would be easy to compute a hash over the sequence in
 memory, write a file, and record that hash — and be wrong, because the thing the engine will
@@ -184,6 +187,62 @@ def fetch_ncbi(acc: str, rng: str | None, strand: str,
     return seq, source
 
 
+REGISTRY_API = "https://api.registry.igem.org/v1"
+
+
+def fetch_registry(name: str) -> tuple[str, str, str]:
+    """Fetch a part from the iGEM Registry by its BBa_ name.
+
+    Uses api.registry.igem.org, which is public and needs no account. The older
+    parts.igem.org cgi/XML and FASTA endpoints return 403 and are not usable; testing only those
+    two is how this tool previously came to claim the Registry could not be fetched at all.
+
+    Returns (sequence, provenance, role_label). The role label is what the Registry SAYS the part
+    is, reported so you can see it - not written into your Spec, because what a part is and what
+    you are using it for are different questions and the second one is yours.
+    """
+    import json
+    def _get(url: str):
+        req = urllib.request.Request(url, headers={"User-Agent": "katana-add-part/1.0"})
+        return json.loads(urllib.request.urlopen(req, timeout=60).read())
+
+    try:
+        hits = _get(f"{REGISTRY_API}/parts?name={urllib.parse.quote(name)}").get("data") or []
+    except Exception as e:
+        raise SystemExit(f"BLOCK: could not reach the iGEM Registry: {e!r}")
+    if not hits:
+        raise SystemExit(f"BLOCK: the Registry has no part called {name!r}.\n"
+                         f"       Names look like BBa_B0015 or BBa_J23100. Check the spelling on\n"
+                         f"       parts.igem.org, or use --accession for a part from NCBI.")
+    uuid = hits[0]["uuid"]
+    rec = _get(f"{REGISTRY_API}/parts/{uuid}")
+
+    seq = (rec.get("sequence") or "").strip()
+    if not seq:
+        raise SystemExit(f"BLOCK: the Registry record for {name} carries no sequence.\n"
+                         f"       Some entries are documentation only. Nothing was written.")
+
+    role = ((rec.get("role") or {}).get("label") or "").strip()
+    so = ((rec.get("role") or {}).get("accession") or "").strip()
+    updated = ((rec.get("audit") or {}).get("updated") or "")[:10]
+    title = (rec.get("title") or "").strip()
+
+    # The uuid is an identity check independent of the sequence hash: it says the Registry means
+    # THIS record, not merely something with the same bases.
+    prov = f"iGEM Registry {name} (uuid {uuid}"
+    if so:
+        prov += f"; {so} {role}"
+    if updated:
+        prov += f"; record updated {updated}"
+    prov += ")"
+
+    print(f"  fetched {len(seq)} bp from the iGEM Registry")
+    if title:
+        print(f"  record  {title[:70]}")
+    print(f"  uuid    {uuid}")
+    return seq, prov, role
+
+
 def read_local(path: Path) -> str:
     if not path.exists():
         raise SystemExit(f"BLOCK: no such file: {path}")
@@ -291,12 +350,15 @@ def main() -> int:
         description="Admit one part to a Katana Parts Library, with provenance and a seal.")
     ap.add_argument("--library", type=Path, required=True,
                     help="your library (the parts-library dir, or the project dir above it)")
-    ap.add_argument("--id", required=True, help="the name you will refer to this part by")
+    ap.add_argument("--id", help="the name you will refer to this part by. With --registry it "
+                                 "defaults to the Registry name without its BBa_ prefix.")
     ap.add_argument("--accession", help="NCBI nucleotide accession, e.g. NC_000913.3")
     ap.add_argument("--range", dest="rng", help="sub-range within the accession, e.g. 363231..366305")
     ap.add_argument("--strand", choices=["+", "-"], default="+",
                     help="which strand of that range (default +)")
     ap.add_argument("--file", type=Path, help="a local .fasta or .gb to admit instead")
+    ap.add_argument("--registry", metavar="BBa_XXXXX",
+                    help="fetch a part from the iGEM Registry by name")
     ap.add_argument("--from", dest="from_lib", type=Path,
                     help="copy a part already sealed in another library "
                          "(give its LOCK.tsv, or the ref_parts dir holding it)")
@@ -314,9 +376,14 @@ def main() -> int:
                          "against a wrong accession or a wrong range")
     a = ap.parse_args()
 
-    given = [bool(a.accession), bool(a.file), bool(a.from_lib)]
+    given = [bool(a.accession), bool(a.file), bool(a.from_lib), bool(a.registry)]
     if sum(given) != 1:
-        return _block("give exactly one of --accession, --file or --from.")
+        return _block("give exactly one of --accession, --file, --from or --registry.")
+    if not a.id:
+        if a.registry:
+            a.id = a.registry[4:] if a.registry.upper().startswith("BBA_") else a.registry
+        else:
+            return _block("--id is required (it is the name you will refer to this part by).")
     if not re.fullmatch(r"[A-Za-z0-9_.\-]+", a.id):
         return _block(f"--id {a.id!r} may only contain letters, digits, dot, dash, underscore.")
 
@@ -335,6 +402,9 @@ def main() -> int:
     # ---- get the sequence
     if a.accession:
         seq, auto_source = fetch_ncbi(a.accession, a.rng, a.strand, a.expect_organism)
+        klass = a.klass or "reference"
+    elif a.registry:
+        seq, auto_source, reg_role = fetch_registry(a.registry)
         klass = a.klass or "reference"
     elif a.from_lib:
         seq, auto_source, src_class = copy_from_library(a.from_lib, a.id)
