@@ -223,18 +223,40 @@ def main() -> int:
             return 0
 
     # Say so if they already have it, before sending them to the internet for a second copy.
+    # An EXACT id match and a name that merely CONTAINS the search term are different findings:
+    # searching "lldR" turns up RBS_lldR_strong, which is a different part, and calling those
+    # "matches" invites someone to take the wrong one.
     if local:
-        rows = [r for r in read_rows(local / "LOCK.tsv")
-                if a.gene.lower() in r["id"].lower()]
-        if rows:
-            print(f"\n  You already have {len(rows)} part(s) matching '{a.gene}' beside you:")
-            for r in rows:
+        all_rows = read_rows(local / "LOCK.tsv")
+        exact = [r for r in all_rows if r["id"].lower() == a.gene.lower()]
+        near = [r for r in all_rows
+                if a.gene.lower() in r["id"].lower() and r not in exact]
+
+        def _show(rs):
+            for r in rs:
                 print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} {r['length']:>5} bp  "
                       f"{r['seq_sha256'][:12]}  {r['source'][:34]}")
-            print("\n  Copy one instead of fetching it again:")
-            print(f"\n      python add_part.py --library {yours} --from {local / 'LOCK.tsv'} "
-                  f"--id {rows[0]['id']}")
-            print("\n  Still want to search NCBI as well? Continuing.\n")
+
+        if exact:
+            best = max(exact, key=lambda r: int(r["version"]) if r["version"].isdigit() else 0)
+            print(f"\n  You already have '{a.gene}' in the library beside you:")
+            _show(exact)
+            print()
+            print("  COPYING IT IS THE EASIER ROUTE and the one to take unless you have a reason")
+            print("  not to. It needs no internet, and it gives you the exact bases already")
+            print("  verified here, with their provenance carried across:")
+            print()
+            print(f"      python add_part.py --library {rel(yours)} "
+                  f"--from {rel(local)} --id {best['id']}")
+            print()
+            print("  Fetching from NCBI instead gives you whatever the record says TODAY. That is")
+            print("  usually the same sequence, and when it is not, you want to meet that")
+            print("  deliberately rather than by accident. The search below runs either way.")
+        if near:
+            print(f"\n  Also present, with names containing '{a.gene}' but NOT the same part:")
+            _show(near)
+        if exact or near:
+            print()
 
     print(f"  Searching NCBI for '{a.gene}' in {a.organism} ...")
     try:
