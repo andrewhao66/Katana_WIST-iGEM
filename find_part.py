@@ -74,9 +74,53 @@ def list_rows(lock: Path, title: str, note: str = "") -> int:
     if note:
         print(f"  {note}")
     print()
+
+    # An id can appear more than once: a corrected part becomes a NEW version and the old row
+    # stays, so the history remains legible. That storage rule is right; rendering it without the
+    # version and the fingerprint is not, because those are the only two things that tell the
+    # rows apart. One id here has two versions of the same length, and one of those is
+    # byte-identical to a different part - picking it back up would reintroduce a repeat hazard
+    # this project already hit.
+    newest = {}
     for r in rows:
-        print(f"    {r['id']:<20} {r['length']:>6} bp  {r['class']:<12} {r['source'][:44]}")
+        v = int(r["version"]) if str(r.get("version", "")).isdigit() else 0
+        if v >= newest.get(r["id"], (-1, None))[0]:
+            newest[r["id"]] = (v, r["seq_sha256"])
+
+    multi = {i for i in newest if sum(1 for r in rows if r["id"] == i) > 1}
+    for r in rows:
+        v = str(r.get("version", "?"))
+        mark = ""
+        if r["id"] in multi:
+            mark = "  <- newest" if newest[r["id"]][1] == r["seq_sha256"] else "  (older)"
+        print(f"    {r['id']:<20} v{v:<3} {r['length']:>5} bp  {r['seq_sha256'][:12]}  "
+              f"{r['class']:<11} {r['source'][:30]}{mark}")
     print()
+    # Two DIFFERENT ids holding the same bases is worth saying out loud. Using both in one
+    # construct makes an exact direct repeat, and a repeat over ~40 bp is a recombination
+    # substrate in the cell and a flag at most synthesis vendors. This project has already been
+    # bitten by exactly that: two RBS parts came out byte-identical and produced a 43 bp repeat
+    # that forced a construct revision. The information was always in the manifest; nothing ever
+    # looked.
+    by_hash = {}
+    for r in rows:
+        by_hash.setdefault(r["seq_sha256"], set()).add(r["id"])
+    twins = [ids for ids in by_hash.values() if len(ids) > 1]
+    if twins:
+        print("  NOTE: different names, identical sequence -")
+        for ids in twins:
+            print(f"        {' = '.join(sorted(ids))}")
+        print("        Using two of these in one construct creates an exact direct repeat.")
+        print("        Over about 40 bp that is a recombination substrate in the cell and a")
+        print("        flag at most synthesis vendors. Worth knowing before you design, not after.")
+        print()
+
+    if multi:
+        print(f"  {len(multi)} id(s) above appear more than once. Those are versions of the same")
+        print("  part, kept rather than overwritten so the history stays readable. Use the newest")
+        print("  unless you have a reason not to, and pin the fingerprint in your Spec so the")
+        print("  engine can tell which one you meant.")
+        print()
     return len(rows)
 
 
@@ -185,7 +229,8 @@ def main() -> int:
         if rows:
             print(f"\n  You already have {len(rows)} part(s) matching '{a.gene}' beside you:")
             for r in rows:
-                print(f"    {r['id']:<20} {r['length']:>6} bp  {r['source'][:52]}")
+                print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} {r['length']:>5} bp  "
+                      f"{r['seq_sha256'][:12]}  {r['source'][:34]}")
             print("\n  Copy one instead of fetching it again:")
             print(f"\n      python add_part.py --library {yours} --from {local / 'LOCK.tsv'} "
                   f"--id {rows[0]['id']}")
