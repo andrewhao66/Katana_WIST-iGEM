@@ -198,6 +198,9 @@ def main() -> int:
     ap.add_argument("--have", action="store_true",
                     help="just list what is already sealed in the library beside you")
     ap.add_argument("--limit", type=int, default=6, help="how many candidates to show (default 6)")
+    ap.add_argument("--search-anyway", action="store_true",
+                    help="search NCBI even when the part is already in your library, "
+                         "to compare your copy against today's record")
     a = ap.parse_args()
 
     local = find_local_library(Path.cwd().resolve())
@@ -252,6 +255,26 @@ def main() -> int:
         print("  Put its seal: block into your Spec and build. Adding it again would only make")
         print("  a second version of a part you already hold.")
         print()
+        if local:
+            near_rows = [r for r in read_rows(local / "LOCK.tsv")
+                         if a.gene.lower() in r["id"].lower()
+                         and r["id"].lower() != a.gene.lower()]
+            if near_rows:
+                print(f"  Also in the library shipped here, with names containing '{a.gene}' "
+                      f"but NOT the same part:")
+                for r in near_rows:
+                    print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} "
+                          f"{r['length']:>5} bp  {r['seq_sha256'][:12]}")
+                print()
+
+        if not a.search_anyway:
+            # The question was "is it in my library". It is. Answering a question and then
+            # explaining how to do the thing anyway is how a reader ends up with a duplicate.
+            print("  Not searching NCBI: you already have this. To compare your copy against")
+            print(f"  today's record anyway:  python find_part.py {a.gene} --search-anyway")
+            print()
+            return 0
+
 
     if local:
         all_rows = read_rows(local / "LOCK.tsv")
