@@ -169,8 +169,13 @@ def main() -> int:
         print()
 
     top = hits[0]
-    print("  Coordinates above are 1-based inclusive, converted from NCBI's 0-based summary")
-    print("  and checked against parts this project sealed months ago. To admit the first one:")
+    # Lead with the ACTION. The provenance note is worth keeping but it is not what the reader
+    # came for, so it goes underneath rather than in front of the command.
+    if len(hits) > 1:
+        print(f"  {len(hits)} matches. Number 1 is the one below - check its organism line is the")
+        print("  strain you actually work in, then run this to add it to your library:")
+    else:
+        print("  That is the one. Run this to add it to your library:")
     print()
     # One line, deliberately. A trailing backslash continues a command in bash but is a SYNTAX
     # ERROR in PowerShell, where the continuation is a backtick - and most people reading this
@@ -181,9 +186,19 @@ def main() -> int:
           f"--strand {top['strand']} --expect-length {top['length']} "
           f"--expect-organism \"{top['org']}\"")
     print()
-    print("  Read the organism line before you run it. More than one strain will match a common")
-    print("  gene name, and a part from the wrong strain is the kind of mistake that survives")
-    print("  all the way to a synthesis order.")
+    print()
+    print("  It will fetch the sequence, check the record really is that organism, fingerprint it,")
+    print("  and print a seal: block to paste into your Design Spec. Then you can build.")
+    print()
+    if len(hits) > 1:
+        # Only worth saying when it actually happened. A caution about a thing that did not
+        # occur is boilerplate, and boilerplate teaches people to skim the next one.
+        print("  Why the organism matters: a common gene name matches several strains, and a part")
+        print("  from the wrong one is the kind of mistake that survives all the way to a")
+        print("  synthesis order. The --expect-organism above is what stops that.")
+        print()
+    print("  Coordinates are 1-based inclusive, converted from NCBI's 0-based summary and checked")
+    print("  against parts this project sealed months ago.")
     print()
     return 0
 
