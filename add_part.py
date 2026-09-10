@@ -37,6 +37,7 @@ import hashlib
 import re
 import sys
 import urllib.parse
+import urllib.error
 import urllib.request
 from datetime import date
 from pathlib import Path
@@ -187,6 +188,18 @@ def fetch_ncbi(acc: str, rng: str | None, strand: str,
     return seq, source
 
 
+# The Sequence Ontology terms the Registry uses, mapped to the role vocabulary a Katana Spec
+# speaks. Reporting a recorded fact, not deciding anything: the Registry states the part's role
+# and gives an ontology accession for it. Anything not on this list is left for the human, with
+# the Registry's own label shown so they can see what it said.
+SO_TO_ROLE = {
+    "SO:0000167": "promoter",
+    "SO:0000141": "terminator",
+    "SO:0000139": "rbs",          # Ribosome Entry Site
+    "SO:0000316": "cds",
+}
+
+
 REGISTRY_API = "https://api.registry.igem.org/v1"
 
 
@@ -203,8 +216,25 @@ def fetch_registry(name: str) -> tuple[str, str, str]:
     """
     import json
     def _get(url: str):
+        # The Registry rate-limits, and this function is called twice per part, so adding a few
+        # parts in a row hits 429. Back off and retry rather than surfacing a raw exception that
+        # gives no hint that simply waiting would have worked.
+        import time
         req = urllib.request.Request(url, headers={"User-Agent": "katana-add-part/1.0"})
-        return json.loads(urllib.request.urlopen(req, timeout=60).read())
+        for attempt, pause in enumerate((0, 2, 5, 10)):
+            if pause:
+                if attempt == 1:
+                    print(f"  the Registry is rate-limiting; waiting {pause}s and retrying ...")
+                time.sleep(pause)
+            try:
+                return json.loads(urllib.request.urlopen(req, timeout=60).read())
+            except urllib.error.HTTPError as e:
+                if e.code != 429:
+                    raise
+        raise SystemExit(
+            "BLOCK: the iGEM Registry is rate-limiting this machine (HTTP 429) and did not\n"
+            "       recover after several retries. Nothing was written. Wait a minute or two\n"
+            "       and run the same command again - it is not a problem with your part.")
 
     try:
         hits = _get(f"{REGISTRY_API}/parts?name={urllib.parse.quote(name)}").get("data") or []
@@ -236,11 +266,17 @@ def fetch_registry(name: str) -> tuple[str, str, str]:
         prov += f"; record updated {updated}"
     prov += ")"
 
+    mapped = SO_TO_ROLE.get(so, "")
     print(f"  fetched {len(seq)} bp from the iGEM Registry")
     if title:
         print(f"  record  {title[:70]}")
     print(f"  uuid    {uuid}")
-    return seq, prov, role
+    if mapped:
+        print(f"  role    {so} {role} -> role: {mapped} (from the Registry, not a guess)")
+    elif role:
+        print(f"  role    the Registry says {so} {role}; set role: yourself, it is not one of the "
+              f"four this tool maps")
+    return seq, prov, mapped
 
 
 def read_local(path: Path) -> str:
@@ -400,12 +436,15 @@ def main() -> int:
     print(f"  library  {lib}  ({len(rows)} part(s) already sealed)")
 
     # ---- get the sequence
+    # Default for every source that does not tell us the role. Only the Registry does.
+    role_line = "SET_THIS"
     if a.accession:
         seq, auto_source = fetch_ncbi(a.accession, a.rng, a.strand, a.expect_organism)
         klass = a.klass or "reference"
     elif a.registry:
         seq, auto_source, reg_role = fetch_registry(a.registry)
         klass = a.klass or "reference"
+        role_line = reg_role or "SET_THIS"
     elif a.from_lib:
         seq, auto_source, src_class = copy_from_library(a.from_lib, a.id)
         klass = a.klass or src_class
@@ -475,7 +514,11 @@ def main() -> int:
     print("  Paste this into the parts list in your Spec —")
     print()
     print(f"  - id: {a.id}")
-    print(f"    role: SET_THIS          # promoter | rbs | cds | terminator | reporter")
+    if role_line == "SET_THIS":
+        print( "    role: SET_THIS          # promoter | rbs | cds | terminator | reporter")
+    else:
+        print(f"    role: {role_line:<17} # from the Registry's own SO term; change it if this "
+              f"part plays a different job here")
     print(f"    class: {klass}")
     print(f"    source: {{ note: \"{source}\" }}")
     print(f"    seal:   {{ status: SEALED, lib: \"{outfile}\",")
