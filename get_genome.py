@@ -16,7 +16,7 @@ checker looks. No team is ever blocked because we failed to guess their chassis.
   python get_genome.py                 pick from a menu
   python get_genome.py --list          show the menu and exit
   python get_genome.py --host ecoli    fetch one without the menu
-  python get_genome.py --accession M77789.2 --name pUC19 --key pUC19
+  python get_genome.py --accession YOUR_ACCESSION --name a_name --key YourHost
                                        fetch anything else in NCBI nucleotide
 
 Requires only Python's standard library, plus an internet connection for the fetch itself.
@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import re
 import sys
 import time
 import urllib.request
@@ -152,6 +153,41 @@ def show_list() -> None:
     print()
 
 
+# Real NCBI nucleotide accessions look like NC_000913.3, M77789.2, L09137, CP009124.1:
+# one to four letters, an optional underscore, digits, and an optional .version.
+ACCESSION_SHAPE = re.compile(r"^[A-Za-z]{1,4}_?\d{4,9}(\.\d+)?$")
+
+
+def check_accessions(accs: list) -> None:
+    """Refuse input that is not an accession, and say so without blaming NCBI.
+
+    The old path sent a placeholder to NCBI, got nothing usable back, and reported that NCBI
+    "may have returned an error page" - which sends a reader debugging a remote service when the
+    actual problem is that they pasted an example without editing it.
+    """
+    bad = [a for a in accs if not ACCESSION_SHAPE.match(a.strip())]
+    if not bad:
+        return
+    print()
+    print(f"  BLOCK: {', '.join(bad)} is not an NCBI accession.")
+    print()
+    if any(re.search(r"YOUR|ACCESSION|EXAMPLE|HOSTNAME|<|>", b, re.I) for b in bad):
+        print("  That looks like the placeholder from the example. It is meant to be replaced,")
+        print("  not run: the example shows you the SHAPE of the command, and you supply the")
+        print("  accession of whatever you actually want. Nothing has been downloaded.")
+    else:
+        print("  Accessions look like NC_000913.3, M77789.2 or CP009124.1 - letters, then")
+        print("  digits, sometimes with an underscore and a version suffix.")
+    print()
+    print("  To find one: search https://www.ncbi.nlm.nih.gov/nuccore for your organism or")
+    print("  plasmid, and copy the accession from the record header.")
+    print()
+    print("  For the standard iGEM chassis you do not need an accession at all - run")
+    print("  python get_genome.py with no arguments and pick a letter from the menu.")
+    print()
+    raise SystemExit(1)
+
+
 def fetch(accessions: list[str], expect_org: str, out: Path) -> tuple[bool, str]:
     """Download, then verify the record headers BEFORE keeping the file.
 
@@ -243,6 +279,7 @@ def main() -> int:
         key = args.key or (args.name or accs[0])
         stem = args.name or accs[0].replace(".", "_")
         expect = ""
+        check_accessions(accs)
         print(f"\n  Fetching {len(accs)} record(s) from NCBI ...")
     else:
         key = resolve(args.host) if args.host else ""
@@ -262,7 +299,8 @@ def main() -> int:
             if low == "other":
                 print("\n  For anything not on the menu, pass the accession directly:\n")
                 print("    python get_genome.py --accession <ACCESSION> --name <filename> --key <HostKey>")
-                print("    e.g. python get_genome.py --accession M77789.2 --name pUC19 --key pUC19\n")
+                print("    e.g. for the cloning vector pUC19, whose accession is M77789.2:")
+                print("         python get_genome.py --accession M77789.2 --name pUC19 --key pUC19\n")
                 print("  The key is whatever your Design Spec's host field says.\n")
                 return 0
             key = resolve(choice)
@@ -278,6 +316,8 @@ def main() -> int:
         stem = key
         print(f"\n  {label}")
         print(f"  about {mb:.1f} MB, {len(accs)} record(s) from NCBI. Fetching ...")
+
+    check_accessions(accs)
 
     out = ref_dir / f"{stem}.fna"
     t0 = time.time()
