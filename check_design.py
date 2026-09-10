@@ -141,11 +141,53 @@ def analyse(spec: dict, rep: Report) -> None:
                   "one of the two positions.")
 
     for pid, p in by_id.items():
-        if not p.get("seal"):
+        seal = p.get("seal")
+        if not seal:
             rep.problem(f"'{pid}' has no seal block.",
                         "Without it the engine cannot tell which version of the part you mean, "
                         "so it refuses to build.",
                         f"Run  python find_part.py {pid}  and paste the seal block it prints.")
+        elif isinstance(seal, dict):
+            # Look INSIDE the block. Checking only that one exists let the starter template -
+            # the first Spec a beginner opens - report "nothing to report" while carrying
+            # PASTE_FROM_add_part and length 0. A placeholder that passes every check turns
+            # "not filled in yet" into "checked and fine", which is the worst possible reading.
+            pin = str(seal.get("seq_sha256_12", "")).strip()
+            lib = str(seal.get("lib", "")).strip()
+            length = seal.get("length", None)
+            placeholder = any("PASTE" in s.upper() or "CHANGE" in s.upper() or "TODO" in s.upper()
+                              for s in (pin, lib))
+            if placeholder:
+                rep.problem(f"'{pid}' still has the placeholder seal block from the template.",
+                            "The Spec has not been pointed at a real part yet, so the engine will "
+                            "stop at Stage 1. Nothing is broken - this part just has not been "
+                            "filled in.",
+                            f"Add the part with add_part.py, or if you already hold it run  "
+                            f"python find_part.py {pid} --seal  and paste what it prints.")
+            else:
+                if not (len(pin) == 12 and all(c in "0123456789abcdefABCDEF" for c in pin)):
+                    rep.problem(f"'{pid}' has a seq_sha256_12 that is not a 12-character "
+                                f"fingerprint: '{pin}'.",
+                                "That value is how the engine confirms it loaded the part you "
+                                "meant. A malformed one cannot match anything, so the build stops.",
+                                f"Run  python find_part.py {pid} --seal  and copy the value it "
+                                f"prints.")
+                try:
+                    n = int(length)
+                except (TypeError, ValueError):
+                    n = -1
+                if n <= 0:
+                    rep.problem(f"'{pid}' has length {length!r} in its seal block.",
+                                "A part with no length is not a part. The engine checks the "
+                                "sequence it loads against this number, so it must be the real "
+                                "one.",
+                                f"Run  python find_part.py {pid} --seal  and copy the length it "
+                                f"prints.")
+                if not lib:
+                    rep.check(f"'{pid}' has no lib: filename in its seal block.",
+                              "The engine can usually find the part from the manifest anyway, but "
+                              "the filename is what makes the Spec readable to a human.",
+                              f"Run  python find_part.py {pid} --seal  and use the full block.")
         r = role_of(p)
         known = {PROMOTER, RBS, TERM} | CODING | BACKBONE
         if not r:
