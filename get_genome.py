@@ -16,7 +16,7 @@ checker looks. No team is ever blocked because we failed to guess their chassis.
   python get_genome.py                 pick from a menu
   python get_genome.py --list          show the menu and exit
   python get_genome.py --host ecoli    fetch one without the menu
-  python get_genome.py --accession NC_045512.2 --name my_virus --key MyHost
+  python get_genome.py --accession M77789.2 --name pUC19 --key pUC19
                                        fetch anything else in NCBI nucleotide
 
 Requires only Python's standard library, plus an internet connection for the fetch itself.
@@ -262,7 +262,7 @@ def main() -> int:
             if low == "other":
                 print("\n  For anything not on the menu, pass the accession directly:\n")
                 print("    python get_genome.py --accession <ACCESSION> --name <filename> --key <HostKey>")
-                print("    e.g. python get_genome.py --accession NC_045512.2 --name sars2 --key SARS2\n")
+                print("    e.g. python get_genome.py --accession M77789.2 --name pUC19 --key pUC19\n")
                 print("  The key is whatever your Design Spec's host field says.\n")
                 return 0
             key = resolve(choice)
