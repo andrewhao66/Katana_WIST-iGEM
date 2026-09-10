@@ -402,7 +402,7 @@ def main() -> int:
     print(f"  wrote    {outfile}")
     print(f"  LOCK.root now {new_root[:12]}…  ({len(rows)} part(s))")
     print()
-    print("  Paste this into your Spec's parts: list —")
+    print("  Paste this into the parts list in your Spec —")
     print()
     print(f"  - id: {a.id}")
     print(f"    role: promoter          # promoter | rbs | cds | terminator | ...")

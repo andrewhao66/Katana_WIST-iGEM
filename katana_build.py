@@ -200,7 +200,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
             sys.exit(f"BLOCK Stage-1: part '{pid}' has no seal/pin — bare id rejected (v2)\n"
                      f"       Your Spec names this part but does not say WHICH version of it,\n"
                      f"       so the engine cannot check it is the one you meant.\n"
-                     f"       Every part needs a seal: line. add_part.py prints the exact one\n"
+                     f"       Every part needs a seal block. add_part.py prints the exact one\n"
                      f"       to paste when it admits a part. To see what you already have:\n"
                      f"           python find_part.py --have")
 
@@ -230,7 +230,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       This is the check doing its job, not a bug.\n"
                      f"       Look at what the library actually holds:\n"
                      f"           python find_part.py {pid}\n"
-                     f"       then update the seal: line in your Spec to match it.")
+                     f"       then update the seal block in your Spec to match it.")
 
         # Load the .gb file
         gb_path = LIB / lib_file
@@ -268,7 +268,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
             sys.exit(f"BLOCK Stage-2: part '{pid}' length {len(raw_seq)} ≠ expected {expected_len}\n"
                      f"       Your Spec says this part is {expected_len} bases; the library\n"
                      f"       holds {len(raw_seq)}. A part that changed length is a different\n"
-                     f"       part. Check the length in your Spec's seal: line against:\n"
+                     f"       part. Check the length in the Spec's seal block against:\n"
                      f"           python find_part.py {pid}")
 
         resolved[pid] = {
@@ -327,7 +327,7 @@ def assemble_insert(spec: dict, resolved: dict) -> tuple:
     for pid in order:
         if pid not in resolved:
             sys.exit(f"BLOCK Stage-3: '{pid}' appears in architecture.order but is not in your\n"
-                     f"       Spec's parts: list. Usually this is a typo in one of the two, or a\n"
+                     f"       Spec's parts list. Usually this is a typo in one of the two, or a\n"
                      f"       part you meant to add and did not.\n"
                      f"       This and other Spec problems are all reported at once by:\n"
                      f"           python check_design.py <your.spec.yaml>")

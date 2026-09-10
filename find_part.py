@@ -252,7 +252,7 @@ def main() -> int:
             print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} {r['length']:>5} bp  "
                   f"{r['seq_sha256'][:12]}  added {r.get('date', '?')}")
         print()
-        print("  Put its seal: block into your Spec and build. Adding it again would only make")
+        print("  Copy its seal block into your Spec, then build. Adding it again would only make")
         print("  a second version of a part you already hold.")
         print()
         if local:
@@ -349,7 +349,7 @@ def main() -> int:
     print()
     print()
     print("  It will fetch the sequence, check the record really is that organism, fingerprint it,")
-    print("  and print a seal: block to paste into your Design Spec. Then you can build.")
+    print("  and print a seal block to paste into your Design Spec. Then you can build.")
     print()
     if len(hits) > 1:
         # Only worth saying when it actually happened. A caution about a thing that did not

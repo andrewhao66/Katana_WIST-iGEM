@@ -113,23 +113,23 @@ def analyse(spec: dict, rep: Report) -> None:
     if not parts:
         rep.problem("The Spec lists no parts at all.",
                     "There is nothing to build.",
-                    "Add parts under a parts: heading. add_part.py prints the block to paste.")
+                    "Add a parts list to the Spec. add_part.py prints the block to paste.")
         return
 
     for pid in order:
         if str(pid) not in by_id:
-            rep.problem(f"'{pid}' is in architecture.order but not in parts:.",
+            rep.problem(f"'{pid}' is in architecture.order but not in the parts list.",
                         "The engine will stop at Stage 3. Usually a typo in one of the two.",
-                        f"Either add a parts: entry for '{pid}', or correct the spelling in order.")
+                        f"Either add a parts entry for '{pid}', or correct the spelling in order.")
 
     unused = [pid for pid in by_id
               if pid not in [str(o) for o in order]
               and role_of(by_id[pid]) not in BACKBONE]
     if unused:
         rep.check(f"Listed but never used: {', '.join(unused)}.",
-                  "A part in parts: that is missing from architecture.order is not built into "
+                  "A part in the parts list that is missing from architecture.order is not built into "
                   "anything. Often it was meant to be in the order and was forgotten.",
-                  "Add it to architecture.order, or remove it from parts: to keep the Spec honest.")
+                  "Add it to architecture.order, or drop it from the parts list, to keep the Spec honest.")
 
     dupes = {pid for pid in by_id if [str(o) for o in order].count(pid) > 1}
     if dupes:
@@ -142,12 +142,12 @@ def analyse(spec: dict, rep: Report) -> None:
 
     for pid, p in by_id.items():
         if not p.get("seal"):
-            rep.problem(f"'{pid}' has no seal: line.",
+            rep.problem(f"'{pid}' has no seal block.",
                         "Without it the engine cannot tell which version of the part you mean, "
                         "so it refuses to build.",
-                        f"Run  python find_part.py {pid}  and paste the seal: block it prints.")
+                        f"Run  python find_part.py {pid}  and paste the seal block it prints.")
         if not role_of(p):
-            rep.check(f"'{pid}' has no role:.",
+            rep.check(f"'{pid}' has no role given.",
                       "Role is what lets this checker reason about your design at all. Without "
                       "it, this part is invisible to every check below.",
                       "Add  role: promoter | rbs | cds | terminator  as appropriate.")
@@ -218,7 +218,7 @@ def analyse(spec: dict, rep: Report) -> None:
     if not cons.get("host_context"):
         rep.check("No constraints.host_context set.",
                   "Same reason: this is the field the off-target scan actually reads.",
-                  "Set it to the same value as host:.")
+                  "Set it to the same value you gave for host.")
     if not spec.get("backbone"):
         rep.check("No backbone: named.",
                   "The backbone is the circular carrier the insert goes into. Vendors and "
