@@ -201,6 +201,28 @@ def register(ref_dir: Path, key: str, filename: str, accessions: list[str], note
                    encoding="utf-8", newline="\n")
 
 
+def specs_by_host(here: Path) -> dict:
+    """Which host does each Design Spec beside us declare?
+
+    Read with a deliberately dumb line scan rather than a YAML parser: this tool's whole point is
+    that it works with nothing installed, and pulling in PyYAML to print a hint would break that.
+    A Spec whose host cannot be read this way simply does not appear, which is the safe direction.
+    """
+    out = {}
+    for p in sorted((here / "specs").glob("*.spec.yaml")):
+        try:
+            for line in p.read_text(encoding="utf-8", errors="replace").splitlines():
+                s = line.strip()
+                if s.startswith("host:"):
+                    h = s.split(":", 1)[1].split("#")[0].strip().strip("\"'")
+                    if h:
+                        out.setdefault(h, []).append(p.name)
+                    break
+        except Exception:
+            continue
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fetch a host genome for the off-target check.")
     ap.add_argument("--list", action="store_true", help="show the menu and exit")
@@ -270,21 +292,39 @@ def main() -> int:
     print(f"  took   {time.time() - t0:.1f}s")
     print()
     print(f"  The off-target check will now use it for host '{key}'.")
-    print("  Build again and Stage 4b should stop reporting OFF-TARGET SKIPPED:")
     print()
-    # Print the command rather than describing it, and name a real Spec rather than a
-    # placeholder. Telling someone to "build again" makes them scroll back for the line
-    # they need; it costs nothing to hand it to them here.
-    specs = sorted((Path(__file__).resolve().parent / "specs").glob("*.spec.yaml"))
-    if specs:
-        print(f"      python katana_build.py specs/{specs[0].name}")
-        if len(specs) > 1:
-            print()
-            print(f"  (that is one of {len(specs)} Design Specs in specs/ - "
-                  f"use whichever you are building)")
+
+    # Only promise the SKIPPED warning will go away for a Spec that actually uses this host.
+    # Saying it unconditionally was a lie whenever the reader picked a chassis the example does
+    # not use, and it sent them to a build that still reported SKIPPED after a 5 MB download.
+    here = Path(__file__).resolve().parent
+    hosts = specs_by_host(here)
+    mine = hosts.get(key, [])
+
+    if mine:
+        print(f"  {len(mine)} Design Spec(s) here use host '{key}'. For those, Stage 4b will")
+        print("  now run the off-target scan for real instead of reporting SKIPPED:")
+        print()
+        print(f"      python katana_build.py specs/{mine[0]}")
+        print()
+    elif hosts:
+        others = ", ".join(sorted(hosts))
+        print(f"  NOTE: none of the Design Specs here use host '{key}'.")
+        print(f"        That is perfectly fine if you are building your own construct in it.")
+        print(f"        But if you are following the worked example, its host is {others},")
+        print(f"        and Stage 4b will still report OFF-TARGET SKIPPED until you fetch that")
+        print(f"        one too. Nothing you have done is wrong, and the genome you just")
+        print(f"        downloaded is kept - a library can hold several.")
+        print()
+        for h, names in sorted(hosts.items()):
+            print(f"        {h:<22} needed by {names[0]}"
+                  + (f" (+{len(names) - 1} more)" if len(names) > 1 else ""))
+        print()
+        print("        To fetch it:   python get_genome.py")
+        print()
     else:
         print("      python katana_build.py <path-to-your-spec>.spec.yaml")
-    print()
+        print()
     return 0
 
 

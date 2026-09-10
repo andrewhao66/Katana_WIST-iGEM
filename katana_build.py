@@ -749,6 +749,17 @@ def main():
         if _db:
             sys.exit(f"BLOCK Stage-4b: {len(_db)} dry-lab blocking issue(s)")
         print("  Stage-4b PASS" + (f" — {len(_dw)} warning(s) to review" if _dw else " — clean"))
+        _skipped = [w for w in _dw if "OFF-TARGET SKIPPED" in w]
+        _hits = [w for w in _dw if "off-target" in w and w not in _skipped]
+        if _hits:
+            print("           Warnings are normal here and do not mean you did anything")
+            print("           wrong. A match only BLOCKs at >=100 bp AND >=95% identity,")
+            print("           because a match that long and that exact is never chance.")
+            print("           Everything shorter is surfaced so a human can glance at it.")
+        if _skipped:
+            print("           The off-target check did not run: the genome it needs for")
+            print("           this construct is not here. The line above says which.")
+            print("           To fetch it:  python get_genome.py")
     except SystemExit:
         raise
     except Exception as _e:

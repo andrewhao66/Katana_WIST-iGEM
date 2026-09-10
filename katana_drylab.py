@@ -89,8 +89,23 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
         gfile = HOST_GENOME.get(host)
     genome = (ref_parts.parent / "ref_genomes" / gfile) if (ref_parts and gfile) else None
     if not genome or not genome.exists():
-        warns.append("WARN Stage-4b: OFF-TARGET SKIPPED — no genome for host '%s'. NOT enforced this run "
-                     "(add to katana_drylab.HOST_GENOME + ref_genomes/)." % host)
+        _present = []
+        if ref_parts:
+            _reg = ref_parts.parent / "ref_genomes" / "genomes.tsv"
+            if _reg.exists():
+                _present = [l.split("\t")[0] for l in
+                            _reg.read_text(encoding="utf-8").splitlines()[1:] if l.strip()]
+        if _present:
+            # A reader who has just downloaded a genome reads "no genome" as "no genomes at
+            # all", runs the fetcher again, and gets the same result. Name what IS here.
+            warns.append("WARN Stage-4b: OFF-TARGET SKIPPED - this construct needs the genome "
+                         "of host %s, but the genome(s) present are for: %s. NOT enforced this "
+                         "run. Fetch the matching one with: python get_genome.py"
+                         % (host, ", ".join(sorted(set(_present)))))
+        else:
+            warns.append("WARN Stage-4b: OFF-TARGET SKIPPED - no genome here for host %s. "
+                         "NOT enforced this run. Fetch one with: python get_genome.py"
+                         % host)
     else:
         try:
             sys.path.insert(0, str(Path(__file__).resolve().parent))
