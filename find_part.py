@@ -226,6 +226,33 @@ def main() -> int:
     # An EXACT id match and a name that merely CONTAINS the search term are different findings:
     # searching "lldR" turns up RBS_lldR_strong, which is a different part, and calling those
     # "matches" invites someone to take the wrong one.
+    # Check YOUR library first. Reporting only the shipped one told a reader who had just added
+    # a part that they still needed to add it, and recommended copying something they already
+    # held. The tool was reporting on a different library than the one it kept pointing at.
+    mine_lock = None
+    if a.library:
+        r = a.library.expanduser().resolve()
+        mine_lock = next((c / "LOCK.tsv" for c in
+                          (r / "ref_parts", r / "parts-library" / "ref_parts", r)
+                          if (c / "LOCK.tsv").exists()), None)
+    elif Path("my-project/parts-library/ref_parts/LOCK.tsv").exists():
+        mine_lock = Path("my-project/parts-library/ref_parts/LOCK.tsv")
+
+    already_mine = []
+    if mine_lock:
+        already_mine = [r for r in read_rows(mine_lock)
+                        if r["id"].lower() == a.gene.lower()]
+    if already_mine:
+        print()
+        print(f"  '{a.gene}' is ALREADY IN YOUR LIBRARY. Nothing more to do for this part:")
+        for r in already_mine:
+            print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} {r['length']:>5} bp  "
+                  f"{r['seq_sha256'][:12]}  added {r.get('date', '?')}")
+        print()
+        print("  Put its seal: block into your Spec and build. Adding it again would only make")
+        print("  a second version of a part you already hold.")
+        print()
+
     if local:
         all_rows = read_rows(local / "LOCK.tsv")
         exact = [r for r in all_rows if r["id"].lower() == a.gene.lower()]
@@ -237,7 +264,7 @@ def main() -> int:
                 print(f"    {r['id']:<20} v{str(r.get('version','?')):<3} {r['length']:>5} bp  "
                       f"{r['seq_sha256'][:12]}  {r['source'][:34]}")
 
-        if exact:
+        if exact and not already_mine:
             best = max(exact, key=lambda r: int(r["version"]) if r["version"].isdigit() else 0)
             print(f"\n  You already have '{a.gene}' in the library beside you:")
             _show(exact)
