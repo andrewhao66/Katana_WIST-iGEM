@@ -23,6 +23,3 @@ __pycache__/
 desktop.ini
 .DS_Store
 Thumbs.db
-
-# Local push helper, not part of the release.
-PUSH_KATANA.bat

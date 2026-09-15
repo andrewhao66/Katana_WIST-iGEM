@@ -1,0 +1,52 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Kagami audit — demo_pSense_dual</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+:root{--bg:#eef1f4;--surface:#fff;--surface-2:#f7f9fb;--ink:#161b24;--muted:#586470;--faint:#8892a0;--border:#dce1e8;--accent:#0e6e78;--accent-ink:#0a545c;--warn:#a9761a;--pass:#2c7d5a;--fail:#c23945;--warn-soft:#f3e7cf;--pass-soft:#dbeee5;--fail-soft:#f4dcde}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#0e131a;--surface:#161d27;--surface-2:#1a2330;--ink:#e9edf2;--muted:#9aa5b2;--faint:#6a7583;--border:#26313f;--accent:#40b7c2;--accent-ink:#7fd3da;--warn:#d7a44e;--pass:#54c48d;--fail:#e56d76;--warn-soft:#3a2e15;--pass-soft:#12352a;--fail-soft:#3c1e22}}
+*{box-sizing:border-box}body{background:var(--bg);color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;margin:0;line-height:1.5}
+.wrap{max-width:860px;margin:0 auto;padding:32px 22px 64px}
+h1{font-family:"Archivo",sans-serif;font-size:26px;font-weight:800;letter-spacing:-.01em;margin:0}
+.sub{font-family:"IBM Plex Mono",monospace;color:var(--muted);font-size:13px;margin-top:6px}
+.eyebrow{font-family:"IBM Plex Mono",monospace;font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--accent-ink);margin-bottom:8px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:20px;margin-top:22px}
+.strip{display:flex;gap:3px;height:52px;margin:4px 0}
+.seg{position:relative;border-radius:6px;display:flex;align-items:center;overflow:hidden;min-width:0;background:var(--surface-2);border:1px solid var(--border)}
+.seg .role{font-family:"IBM Plex Mono",monospace;font-size:11px;padding:0 6px 0 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
+.vdot{position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%}
+.vdot.pass{background:var(--pass)}.vdot.warn{background:var(--warn)}.vdot.fail{background:var(--fail)}
+.ruler{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint)}
+.vpill{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;padding:5px 12px;border-radius:999px}
+.vpill.ok{background:var(--pass-soft);color:var(--pass)}.vpill.cond{background:var(--warn-soft);color:var(--warn)}.vpill.bad{background:var(--fail-soft);color:var(--fail)}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.rrow{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:baseline;padding:12px 0;border-top:1px solid var(--border);font-size:14px}
+.rrow .st{font-family:"IBM Plex Mono",monospace;font-weight:700;text-align:center}
+.rrow .st.p{color:var(--pass)}.rrow .st.w{color:var(--warn)}.rrow .st.f{color:var(--fail)}
+.what .note{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
+.what .fix{display:block;color:var(--accent-ink);font-size:12.5px;margin-top:2px}
+.loc{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--faint);white-space:nowrap}
+h2{font-family:"Archivo",sans-serif;font-size:15px;margin:0 0 6px}
+footer{margin-top:28px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;color:var(--faint)}
+</style></head><body><div class="wrap">
+<div class="eyebrow">◤ Kagami · reverse-Katana audit</div>
+<h1>demo_pSense_dual</h1>
+<div class="sub">846 bp · linear · 4 blocks identified</div>
+<div class="card"><div class="top" style="margin-bottom:12px"><h2>Decomposition</h2>
+<span class="vpill cond">CONDITIONAL · 5 flag, 0 fail</span></div>
+<div class="strip"><div class="seg" style="flex-grow:4.137115839243499;border-left:4px solid var(--accent)"><span class="vdot pass"></span><span class="role">J23116</span></div>
+<div class="seg" style="flex-grow:2.0;border-left:4px solid var(--warn)"><span class="vdot warn"></span><span class="role">B0034</span></div>
+<div class="seg" style="flex-grow:77.30496453900709;border-left:4px solid var(--accent-ink)"><span class="vdot pass"></span><span class="role">reporter_cds</span></div>
+<div class="seg" style="flex-grow:15.24822695035461;border-left:4px solid var(--muted)"><span class="vdot pass"></span><span class="role">B0015</span></div></div>
+<div class="ruler"><span>0 bp</span><span>identified vs public reference seed set</span><span>846 bp</span></div>
+</div>
+<div class="card"><h2 style="margin-bottom:6px">Audit</h2><div class="rrow"><span class="st w">!</span><span class="what"><b>Block labelled &quot;B0032&quot; is actually B0034 (RBS (strong))</b><span class="note">Sequence matches BBa_B0034 at 100.0% identity, 100% coverage. Strength class differs (weak→strong): expression will be markedly stronger than the label implies.</span><span class="fix">→ Re-label to B0034, or swap in the real B0032 sequence from the Registry via katana-parts-library.</span></span><span class="loc">36-47</span></div>
+<div class="rrow"><span class="st w">!</span><span class="what"><b>RBS→ATG spacing 10 nt (outside 5–9)</b><span class="note">Spacing outside the 5–9 nt window shifts translation initiation rate and can silence the downstream CDS.</span><span class="fix">→ Adjust the spacer between the RBS and the start codon to 5–9 nt.</span></span><span class="loc">36-47</span></div>
+<div class="rrow"><span class="st w">!</span><span class="what"><b>EcoRI site present (1×) — BioBrick (RFC[10]) incompatible</b><span class="note">EcoRI = GAATTC. Blocks standard BioBrick assembly and any digest using it.</span><span class="fix">→ Domesticate the EcoRI site (synonymous change in a CDS) if BioBrick or that enzyme is needed.</span></span><span class="loc">712</span></div>
+<div class="rrow"><span class="st w">!</span><span class="what"><b>Type IIS site(s) present: BsmBI×1</b><span class="note">Relevant if a Golden Gate / MoClo assembly uses that enzyme (BsaI/BsmBI/SapI).</span><span class="fix">→ Domesticate if the assembly enzyme matches; otherwise informational.</span></span><span class="loc">—</span></div>
+<div class="rrow"><span class="st w">!</span><span class="what"><b>Host off-target scan skipped (no host genome supplied)</b><span class="note">Pass --host &lt;genome.fna&gt; to run the &gt;40 bp recombination-substrate check with real blastn.</span><span class="fix">→ Supply the host genome (e.g. MG1655) to complete the scan.</span></span><span class="loc">—</span></div>
+<div class="rrow"><span class="st p">✓</span><span class="what"><b>CDS at 58-711 ORF-clean</b></span><span class="loc">58-711</span></div>
+<div class="rrow"><span class="st p">✓</span><span class="what"><b>Global GC 50.9%</b></span><span class="loc">—</span></div>
+<div class="rrow"><span class="st p">✓</span><span class="what"><b>846 bp ≤ Twist cap 5000 bp</b></span><span class="loc">—</span></div></div>
+<footer>Kagami reports; it does not seal. Rebuild clean via forward Katana (katana-spec → parts-library → assemble). Public parts only · WIST iGEM.</footer>
+</div></body></html>

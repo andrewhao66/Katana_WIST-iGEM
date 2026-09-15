@@ -1,0 +1,24 @@
+# Kagami intake requests → hand to katana-parts-library.
+# Each part is fetched FRESH from its primary source, then verified,
+# sealed and hashed by the library — NEVER sealed from this construct
+# (circular-provenance-seal-rule). Kagami does not hash/seal parts itself.
+
+[reference] J23116
+    primary source : BBa_J23116
+    action         : fetch from primary source → verify → seal → hash → LOCK (katana-parts-library intake gate)
+    note           : seed — verify vs iGEM Registry BBa_J23116  |  DO NOT seal from this construct (circular-provenance).
+
+[reference] B0034
+    primary source : BBa_B0034
+    action         : fetch from primary source → verify → seal → hash → LOCK (katana-parts-library intake gate)
+    note           : seed — verify vs iGEM Registry BBa_B0034  |  DO NOT seal from this construct (circular-provenance).
+
+[unresolved] UNRESOLVED_58_711
+    primary source : NONE — no reference match
+    action         : IDENTIFY the primary source for this cds (654 bp) before it can enter the library. A block with no independent source CANNOT be sealed.
+
+[reference] B0015
+    primary source : BBa_B0015
+    action         : fetch from primary source → verify → seal → hash → LOCK (katana-parts-library intake gate)
+    note           : seed — verify vs iGEM Registry BBa_B0015  |  DO NOT seal from this construct (circular-provenance).
+

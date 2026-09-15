@@ -1,0 +1,35 @@
+# DRAFT Katana Design Spec — reverse-engineered by Kagami.
+# INTENT only, NO base pairs. Every part must still earn its seal via
+# katana-parts-library intake (fetch primary source; never from this .gb).
+# Review, resolve any UNRESOLVED parts, then run forward Katana to rebuild.
+id:        demo_pSense_dual-recovered
+version:   1
+track:     acoustic          # community / WIST iGEM — public parts only
+purpose:   "recovered from an audited sequence; verify intent"
+host:      E_coli_MG1655
+assembly:  { method: null, decide_with: assembly-strategy-advisor }
+vendor:    Twist
+constraints:
+  forbid_sites: [EcoRI, XbaI, SpeI, PstI, BsaI, BsmBI, SapI]
+  host_context: E_coli_MG1655
+  output_gate:  acoustic-only
+
+parts:                        # ORDERED; pins added at intake (id@version@seq_sha12)
+  - id: J23116           role: promoter   class: reference   pin: TBD@v1@TBD
+    source: { registry: iGEM, part: BBa_J23116 }
+  - id: B0034            role: rbs        class: reference   pin: TBD@v1@TBD
+    source: { registry: iGEM, part: BBa_B0034 }   # NOTE: input labelled 'B0032' — corrected to B0034
+  - id: UNRESOLVED_58_711 role: cds        class: unresolved  # needs a primary source before it can be sealed
+  - id: B0015            role: terminator class: reference   pin: TBD@v1@TBD
+    source: { registry: iGEM, part: BBa_B0015 }
+
+architecture:
+  order:    [J23116, B0034, UNRESOLVED_58_711, B0015]
+  topology: linear
+  junction_rules: [ "RBS→ATG spacing 5-9 nt", "no spurious internal ATG/stop",
+                    "no forbidden RE site across any junction" ]
+
+records:   # PIPELINE-OWNED — stamped by forward Katana, not by Kagami
+  spec_hash: null
+  ref_parts: []
+  seal_certificate: null

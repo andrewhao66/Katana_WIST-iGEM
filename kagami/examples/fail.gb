@@ -1,0 +1,7 @@
+LOCUS       fail 100 bp DNA linear SYN
+FEATURES             Location/Qualifiers
+     CDS             1..39
+                     /label="broken_cds"
+ORIGIN
+        1 atgaaaaaaaaaaaaaaataaaaaaaaaaaaaaaaataa
+//
