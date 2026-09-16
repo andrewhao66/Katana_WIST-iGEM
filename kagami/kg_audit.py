@@ -21,7 +21,21 @@ BIOBRICK_FORBIDDEN = ("EcoRI", "XbaI", "SpeI", "PstI")
 
 STOPS = {"TAA", "TAG", "TGA"}
 
+# Five tiers, and the distinction is the whole point of the 2026-09-15 rework:
+#   FAIL  — a defect in the DNA itself (internal stop, empty). Blocks.
+#   FLAG  — a real property of the DNA that is actionable in essentially any context
+#           (mislabel, truncation, bad spacing, GC/homopolymer/repeat). Holds back PASS.
+#   NOTE  — a real observation whose importance depends on the reader's assembly/host
+#           context (a Type IIS site with no matching enzyme; host homology in a recA- strain).
+#           Surfaced, never hidden, but does NOT hold back PASS.
+#   SKIP  — a check that did not run (no host chosen). Shown as not-run, never counted as a
+#           finding, because "we did not check" must never read as "we checked and it is fine".
+#   PASS  — a positive result.
+# The verdict word a reader sees is derived from these: any FAIL -> FAIL; else any FLAG ->
+# "REVIEW — N to resolve"; else "PASS — N notes" (or a bare PASS). This is what lets a genuinely
+# clean construct read PASS while its contextual notes stay visible.
 PASS, FLAG, FAIL = "PASS", "FLAG", "FAIL"
+NOTE, SKIP = "NOTE", "SKIP"
 
 
 class Finding:
@@ -118,7 +132,14 @@ def _find_sd(block_seq):
     return best, best + len(SD_CONSENSUS)
 
 
-def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None):
+def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
+          host_reca=None, assembly=None):
+    """assembly: the assembly method context, one of {None, "BsaI", "BsmBI", "SapI",
+    "BioBrick"}. It decides SEVERITY, not presence: a restriction/Type IIS site is only an
+    actionable FLAG when the chosen method's enzyme would cut it; otherwise it is a NOTE.
+    host_reca: recA status of the chosen host (True/False/None). A >40 bp host match is a FLAG
+    in a recA+ (or unknown) host and only a NOTE in a recA- cloning strain, because that is the
+    background in which it is actually a recombination substrate."""
     seq = record.seq
     findings = []
 
@@ -263,29 +284,50 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None):
                 fix="Adjust the spacer between the RBS and the start codon to 5–9 nt."))
 
     # ---- RESTRICTION SITES ----
+    # Severity depends on the assembly context. A site is only an actionable FLAG when the chosen
+    # method's enzyme would actually cut it; otherwise it is surfaced as a NOTE, so a SapI site does
+    # not read as a problem for a construct that is simply being synthesised.
+    biobrick_context = (assembly == "BioBrick")
     for name in BIOBRICK_FORBIDDEN:
         pos = _site_positions(seq, SIXCUT[name])
         if pos:
-            findings.append(Finding(
-                "restriction", FLAG,
-                f"{name} site present ({len(pos)}×) — BioBrick (RFC[10]) incompatible",
-                loc=", ".join(str(p) for p in pos[:6]) + ("…" if len(pos) > 6 else ""),
-                detail=f"{name} = {SIXCUT[name]}. Blocks standard BioBrick assembly and "
-                       f"any digest using it.",
-                fix=f"Domesticate the {name} site (synonymous change in a CDS) if BioBrick "
-                    f"or that enzyme is needed."))
-    ts_report = []
+            loc = ", ".join(str(p) for p in pos[:6]) + ("…" if len(pos) > 6 else "")
+            if biobrick_context:
+                findings.append(Finding(
+                    "restriction", FLAG,
+                    f"{name} site present ({len(pos)}×) — breaks the BioBrick (RFC[10]) assembly "
+                    f"you selected",
+                    loc=loc,
+                    detail=f"{name} = {SIXCUT[name]}. RFC[10] assembly and any digest using {name} "
+                           f"will cut here.",
+                    fix=f"Domesticate the {name} site (synonymous change in a CDS)."))
+            else:
+                findings.append(Finding(
+                    "restriction", NOTE,
+                    f"{name} site present ({len(pos)}×)",
+                    loc=loc,
+                    detail=f"{name} = {SIXCUT[name]}. Only matters if you submit this as a BioBrick "
+                           f"(RFC[10]) part or digest with {name}; irrelevant for synthesis.",
+                    fix=""))
+    chosen_ts = assembly if assembly in TYPEIIS else None
     for name, site in TYPEIIS.items():
         n = len(_site_positions(seq, site))
-        if n:
-            ts_report.append(f"{name}×{n}")
-    if ts_report:
-        findings.append(Finding(
-            "restriction", FLAG,
-            "Type IIS site(s) present: " + ", ".join(ts_report),
-            detail="Relevant if a Golden Gate / MoClo assembly uses that enzyme "
-                   "(BsaI/BsmBI/SapI).",
-            fix="Domesticate if the assembly enzyme matches; otherwise informational."))
+        if not n:
+            continue
+        if name == chosen_ts:
+            findings.append(Finding(
+                "restriction", FLAG,
+                f"{name} site present ({n}×) — cuts inside your Golden Gate / MoClo assembly",
+                detail=f"{name} = {site}. You selected {name} assembly, so an internal {name} site "
+                       f"will fragment the construct.",
+                fix=f"Domesticate the internal {name} site(s) before assembly."))
+        else:
+            findings.append(Finding(
+                "restriction", NOTE,
+                f"Type IIS site present: {name}×{n}",
+                detail=f"{name} = {site}. Only matters if you assemble with {name} "
+                       f"(Golden Gate / MoClo); irrelevant for synthesis or a non-{name} method.",
+                fix=""))
 
     # ---- GC / HOMOPOLYMER ----
     gc = _gc(seq)
@@ -315,20 +357,32 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None):
     if host_seq:
         longest = _longest_shared(seq, host_seq)
         if longest > 40:
-            findings.append(Finding("host-homology", FLAG,
-                                    f"{longest} bp exact match to host chromosome (>40 bp)",
-                                    detail="A recA+ recombination substrate.",
-                                    fix="Recode/replace the host-identical stretch, or accept "
-                                        "with a logged override (recA− host)."))
+            if host_reca is False:
+                findings.append(Finding(
+                    "host-homology", NOTE,
+                    f"{longest} bp exact match to the host chromosome (>40 bp)",
+                    detail="A recombination substrate only in a recA+ background; inert in the "
+                           "recA− cloning strain you selected.",
+                    fix="Fine as-is in a recA− strain; recode the stretch before moving it into "
+                        "a recA+ host."))
+            else:
+                findings.append(Finding(
+                    "host-homology", FLAG,
+                    f"{longest} bp exact match to the host chromosome (>40 bp)",
+                    detail="A recombination substrate in the recA+ host selected — the plasmid can "
+                           "recombine into the chromosome across this stretch.",
+                    fix="Recode/replace the host-identical stretch, or clone/propagate in a "
+                        "recA− strain."))
         else:
             findings.append(Finding("host-homology", PASS,
                                     f"Longest host match {longest} bp (≤40)"))
     else:
-        findings.append(Finding("host-homology", FLAG,
-                                "Host off-target scan skipped (no host genome supplied)",
-                                detail="Pass --host <genome.fna> to run the >40 bp "
-                                       "recombination-substrate check with real blastn.",
-                                fix="Supply the host genome (e.g. MG1655) to complete the scan."))
+        findings.append(Finding("host-homology", SKIP,
+                                "Host off-target scan not run (no host selected)",
+                                detail="Choose a host to run the >40 bp recombination-substrate "
+                                       "check. This is a not-run check, not a problem with the "
+                                       "sequence.",
+                                fix=""))
 
     # ---- SIZE vs VENDOR ----
     if fragment_bp_max:
@@ -360,9 +414,30 @@ def _longest_shared(seq, genome, cap=60):
     return best
 
 
-def verdict(findings):
+def count(findings, status):
+    return sum(1 for f in findings if f.status == status)
+
+
+def verdict_kind(findings):
+    """Canonical verdict token for logic, colour and exit codes: FAIL / REVIEW / PASS.
+    NOTE and SKIP never make a construct anything other than a PASS."""
     if any(f.status == FAIL for f in findings):
         return FAIL
     if any(f.status == FLAG for f in findings):
-        return "CONDITIONAL"
+        return "REVIEW"
+    return PASS
+
+
+def verdict(findings):
+    """Human verdict line. A construct with only contextual notes reads PASS — N notes, so a
+    genuinely clean design is not dressed up as a problem, while the notes stay visible below."""
+    kind = verdict_kind(findings)
+    if kind == FAIL:
+        return FAIL
+    if kind == "REVIEW":
+        n = count(findings, FLAG)
+        return f"REVIEW — {n} to resolve"
+    n = count(findings, NOTE)
+    if n:
+        return f"PASS — {n} note" + ("s" if n != 1 else "")
     return PASS

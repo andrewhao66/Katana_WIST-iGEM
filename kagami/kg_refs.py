@@ -21,8 +21,28 @@ import os
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _FASTA = os.path.join(_DIR, "refs", "reference_parts.fasta")
 _TSV = os.path.join(_DIR, "refs", "reference_parts.tsv")
+_GENOMES = os.path.join(_DIR, "genomes")
 
 STRENGTH_ORDER = {"weak": 1, "medium": 2, "strong": 3}
+
+# Host chassis for the >40 bp off-target / recombination-substrate check. Each maps to a bundled
+# genome FASTA and a recA status. recA decides SEVERITY, not presence (see kg_audit): a host match
+# is a recombination substrate only in a recA+ background. K-12 derivatives share essentially the
+# same chromosome, so DH5alpha and MG1655 point at the same genome and differ only in recA — which
+# is exactly the distinction that matters for a student cloning a plasmid before moving it to a
+# chassis. Ordered; the GUI adds a "No host / skip" entry ahead of these.
+HOSTS = [
+    ("E. coli K-12 MG1655 (recA+, the chassis)",
+     dict(file="MG1655_ecoli_NC_000913.3.fna", reca=True)),
+    ("E. coli cloning strain — DH5α / Top10 (recA−)",
+     dict(file="MG1655_ecoli_NC_000913.3.fna", reca=False)),
+]
+
+
+def host_genome_path(fname):
+    """Absolute path to a bundled host genome, or None if it is not present."""
+    p = os.path.join(_GENOMES, fname)
+    return p if os.path.isfile(p) else None
 
 # Minimal built-in fallback so the tool still runs if the data file is absent.
 _FALLBACK = [

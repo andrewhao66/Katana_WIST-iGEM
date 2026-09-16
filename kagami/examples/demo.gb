@@ -1,30 +1,30 @@
-LOCUS       demo_pSense_dual        846 bp    DNA     linear   SYN
+LOCUS       demo_pSense_dual        843 bp    DNA     linear   SYN
 DEFINITION  Kagami demo construct (contains a deliberate B0032/B0034 mislabel).
 FEATURES             Location/Qualifiers
      promoter        1..35
                      /label="J23116"
-     RBS             36..53
+     RBS             36..47
                      /label="B0032"
-     CDS             58..711
+     CDS             55..708
                      /label="reporter_cds"
-     misc_feature    712..717
+     misc_feature    709..714
                      /label="EcoRI_junction"
-     terminator      718..846
+     terminator      715..843
                      /label="B0015"
 ORIGIN
-        1 ttgacagcta gctcagtcct agggactatg ctagcaaaga ggagaaatac tagaattatg
-       61 ccatttagcc gcggcaatac atcggagacg cctgccaatt tcgaaatcaa gacccgtcgg
-      121 acaattaccg atcgtaattc ggcaactttt atgggaggag cctttaatgc agcccgcaat
-      181 atgaaggatt gcagacagcg gagcgagact gcacatgatt cgggtagtac ggccgcagga
-      241 atacctacgg atgtcacagc aaatgctatc cttggtgagc gttatccact cgccttgctc
-      301 cctcatattt caagtgtata tattaccgca catgaccttt gtcccgtgct acaggcgaca
-      361 actgaacgga ggtaccccag cttgcttcgg aaggggacat acgatgcatc atgttcgcca
-      421 cccgtaccgg cgcttgcctc cctcacatct acctttcacc tggtagggac aaatgtggta
-      481 catggcgcag gttcgctaca ggtccgatgt gggccgaact ttctcccgag ggctactctt
-      541 aatatctatc agagagttat tcgccgcttc tggcttacca ggctacgcga tcactgtaga
-      601 tcgcgttggg atcacgtccg gccgggttgt cgaatgagca ccagtagcat ggggatgaaa
-      661 ctttctgcca gtcaacagaa aagccgggag cctgctgcac catttagata agaattccca
-      721 ggcatcaaat aaaacgaaag gctcagtcga aagactgggc ctttcgtttt atctgttgtt
-      781 tgtcggtgaa cgctctctac tagagtcaca ctggctcacc ttcgggtggg cctttctgcg
-      841 tttata
+        1 ttgacagcta gctcagtcct agggactatg ctagcaaaga ggagaaacac aacaatgcca
+       61 tttagccgcg gcaatacatc ggagacgcct gccaatttcg aaatcaagac ccgtcggaca
+      121 attaccgatc gtaattcggc aacttttatg ggaggagcct ttaatgcagc ccgcaatatg
+      181 aaggattgca gacagcggag cgagactgca catgattcgg gtagtacggc cgcaggaata
+      241 cctacggatg tcacagcaaa tgctatcctt ggtgagcgtt atccactcgc cttgctccct
+      301 catatttcaa gtgtatatat taccgcacat gacctttgtc ccgtgctaca ggcgacaact
+      361 gaacggaggt accccagctt gcttcggaag gggacatacg atgcatcatg ttcgccaccc
+      421 gtaccggcgc ttgcctccct cacatctacc tttcacctgg tagggacaaa tgtggtacat
+      481 ggcgcaggtt cgctacaggt ccgatgtggg ccgaactttc tcccgagggc tactcttaat
+      541 atctatcaga gagttattcg ccgcttctgg cttaccaggc tacgcgatca ctgtagatcg
+      601 cgttgggatc acgtccggcc gggttgtcga atgagcacca gtagcatggg gatgaaactt
+      661 tctgccagtc aacagaaaag ccgggagcct gctgcaccat ttagataaga attcccaggc
+      721 atcaaataaa acgaaaggct cagtcgaaag actgggcctt tcgttttatc tgttgtttgt
+      781 cggtgaacgc tctctactag agtcacactg gctcaccttc gggtgggcct ttctgcgttt
+      841 ata
 //

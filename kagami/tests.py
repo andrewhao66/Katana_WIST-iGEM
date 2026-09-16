@@ -344,5 +344,87 @@ if os.path.exists(_shipped):
                 if len(l.split("\t")) > 5 and _br._is_composite(l.split("\t")[5])]
     check("the shipped reference set contains no composite devices", not _bad)
 
+# 16. Verdict tiering (2026-09-15). A contextual finding is a NOTE, not a flag, so a genuinely
+#      clean construct reads "PASS — N notes" rather than a CONDITIONAL that reads as a problem,
+#      while the notes stay visible. Restriction-site severity depends on the chosen assembly;
+#      host-homology severity depends on the host's recA status; a not-run check is SKIP and is
+#      never counted. Built from the same real parts as Ellie Lin's construct: sfGFP carries one
+#      SapI site (GAAGAGC), which is exactly the case that used to inflate a clean audit.
+def _finds(seq_text, **kw):
+    with tempfile.TemporaryDirectory() as _wd:
+        _p = os.path.join(_wd, "c.gb")
+        open(_p, "w", encoding="utf-8").write(_gb(seq_text, []))
+        _rec = kg_parse.parse(_p)
+        _blocks = kg_identify.identify(_rec, _wd)
+        return kg_audit.audit(_rec, _blocks, **kw)
+
+_reporter = N(R["J23116"]["seq"]) + N(R["sfGFP"]["seq"]) + N(R["B0015"]["seq"])
+_syn = _finds(_reporter)                                   # synthesis (no assembly), no host
+_ts = [f for f in _syn if f.category == "restriction" and "SapI" in f.summary]
+check("a SapI site is a NOTE when not assembling with SapI",
+      bool(_ts) and all(f.status == "NOTE" for f in _ts))
+check("host check with no host selected is SKIP, not a flag",
+      any(f.category == "host-homology" and f.status == "SKIP" for f in _syn))
+check("NOTE + SKIP does not hold back a PASS",
+      kg_audit.verdict_kind(_syn) == "PASS")
+check("the verdict line reads 'PASS — N notes'",
+      kg_audit.verdict(_syn).startswith("PASS — ") and "note" in kg_audit.verdict(_syn))
+
+_sapi_asm = _finds(_reporter, assembly="SapI")
+check("the same SapI site becomes an actionable FLAG under SapI assembly",
+      any(f.category == "restriction" and f.status == "FLAG" and "SapI" in f.summary
+          for f in _sapi_asm))
+check("an actionable flag makes verdict_kind REVIEW, not PASS",
+      kg_audit.verdict_kind(_sapi_asm) == "REVIEW")
+
+_hostgenome = "AAAAAAAA" + N(R["sfGFP"]["seq"])[80:150] + "AAAAAAAA"   # shares a >40 bp stretch
+_hh_plus = _finds(_reporter, host_seq=_hostgenome, host_reca=True)
+_hh_minus = _finds(_reporter, host_seq=_hostgenome, host_reca=False)
+check("host homology is a FLAG in a recA+ host",
+      any(f.category == "host-homology" and f.status == "FLAG" for f in _hh_plus))
+check("the same host homology is only a NOTE in a recA- host",
+      any(f.category == "host-homology" and f.status == "NOTE" for f in _hh_minus)
+      and not any(f.category == "host-homology" and f.status == "FLAG" for f in _hh_minus))
+check("verdict_kind is PASS when the only non-pass item is a recA- host note",
+      kg_audit.verdict_kind(_hh_minus) == "PASS")
+
+# 17. The bundled host genome the GUI dropdown resolves to is actually present and readable.
+_mg = kg_refs.host_genome_path(kg_refs.HOSTS[0][1]["file"])
+check("the MG1655 host genome ships and resolves", bool(_mg) and os.path.getsize(_mg) > 1_000_000)
+
+# 18. rebuild's plan() decides, per block, whether a part can be sealed from an independent primary
+#     source. Registry parts are fetchable; a designed/non-Registry part or an unidentified block
+#     STOPS the rebuild (a part with no independent source cannot be sealed — the core law).
+import kg_rebuild
+
+
+class _B:
+    def __init__(self, ident_id=None, ident_registry="", ident_role=None, start=1, end=10):
+        self.ident_id = ident_id
+        self.ident_registry = ident_registry
+        self.ident_role = ident_role
+        self.claim_role = None
+        self.start = start
+        self.end = end
+        self.length = end - start + 1
+
+
+_bl = [_B("J23116", "BBa_J23116", "promoter"),          # fetchable from the Registry
+       _B("RBS_sfGFP_med", "", "rbs"),                  # designed / non-Registry -> blocker
+       _B(None, "", "cds", 50, 700)]                    # unidentified -> blocker
+_parts, _blk = kg_rebuild.plan(_bl)
+check("plan: a Registry part is marked fetch",
+      any(p["id"] == "J23116" and p["how"] == "fetch" for p in _parts))
+check("plan: a designed/non-Registry part blocks the rebuild",
+      any(b["id"] == "RBS_sfGFP_med" for b in _blk))
+check("plan: an unidentified block blocks the rebuild",
+      any("UNRESOLVED" in b["id"] for b in _blk))
+_parts2, _blk2 = kg_rebuild.plan(_bl, have={"RBS_sfGFP_med"})
+check("plan: a part already in your library is reused, not re-fetched",
+      any(p["id"] == "RBS_sfGFP_med" and p["how"] == "reuse" for p in _parts2)
+      and not any(b["id"] == "RBS_sfGFP_med" for b in _blk2))
+check("find_engine returns None when no engine sits beside Kagami",
+      kg_rebuild.find_engine(os.path.join(HERE, "no_such_dir")) is None)
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

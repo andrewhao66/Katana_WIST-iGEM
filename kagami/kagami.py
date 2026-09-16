@@ -23,7 +23,7 @@ Usage:
     --emit-spec OUT.spec.yaml        write a draft Katana Spec (rebuild bridge)
     --emit-intake OUT.intake.txt     write per-part library intake requests
 
-Exit codes:  0 PASS   5 CONDITIONAL (flags, no fail)   1 FAIL   2 ERROR
+Exit codes:  0 PASS (incl. PASS — N notes)   5 REVIEW (flags, no fail)   1 FAIL   2 ERROR
 """
 import argparse
 import html
@@ -81,6 +81,8 @@ def run(args):
 
     cap = VENDOR_CAP.get(args.vendor) if args.vendor else None
     host_seq = _load_host(args.host) if args.host else None
+    host_reca = {"pos": True, "neg": False}.get(getattr(args, "host_reca", None))
+    assembly = getattr(args, "assembly", None)
     if getattr(args, "registry", False):
         print("registry : checking claimed BBa_* labels against the iGEM Registry ...")
         _reg = registry_findings(record, blocks)
@@ -90,7 +92,8 @@ def run(args):
         _reg = []
 
     findings = kg_audit.audit(record, blocks, vendor=args.vendor,
-                              fragment_bp_max=cap, host_seq=host_seq)
+                              fragment_bp_max=cap, host_seq=host_seq,
+                              host_reca=host_reca, assembly=assembly)
     findings = _reg + findings
     v = kg_audit.verdict(findings)
 
@@ -122,11 +125,12 @@ def run(args):
                 f.write("\n")
         print(f"[intake] {args.emit_intake}   (→ katana-parts-library)")
 
-    return {"PASS": 0, "CONDITIONAL": 5, "FAIL": 1}[v]
+    return {"PASS": 0, "REVIEW": 5, "FAIL": 1}[kg_audit.verdict_kind(findings)]
 
 
 # ---------------------------------------------------------------- text report
-_MARK = {"PASS": "PASS", "FLAG": "FLAG", "FAIL": "FAIL"}
+_MARK = {"PASS": "PASS", "FLAG": "FLAG", "FAIL": "FAIL", "NOTE": "note", "SKIP": "----"}
+_ORDER = {"FAIL": 0, "FLAG": 1, "NOTE": 2, "SKIP": 3, "PASS": 4}
 
 
 def _block_line(b):
@@ -163,24 +167,27 @@ def print_text(record, blocks, findings, v):
     for b in blocks:
         print(_block_line(b))
 
-    order = {"FAIL": 0, "FLAG": 1, "PASS": 2}
     print("\nAUDIT:")
-    for f in sorted(findings, key=lambda x: order[x.status]):
+    for f in sorted(findings, key=lambda x: _ORDER.get(x.status, 9)):
         loc = f" @ {f.loc}" if f.loc else ""
-        print(f"  [{_MARK[f.status]}] {f.category:<16} {f.summary}{loc}")
+        print(f"  [{_MARK.get(f.status, f.status)}] {f.category:<16} {f.summary}{loc}")
         if f.detail:
             print(f"         · {f.detail}")
-        if f.fix and f.status != "PASS":
+        if f.fix and f.status not in ("PASS", "SKIP"):
             print(f"         → fix: {f.fix}")
 
-    nfail = sum(1 for f in findings if f.status == "FAIL")
-    nflag = sum(1 for f in findings if f.status == "FLAG")
+    kind = kg_audit.verdict_kind(findings)
+    nfail = kg_audit.count(findings, "FAIL")
+    nflag = kg_audit.count(findings, "FLAG")
+    nnote = kg_audit.count(findings, "NOTE")
     print("\n" + "-" * 72)
-    print(f"VERDICT: {v}   ({nfail} fail, {nflag} flag)")
-    if v == "CONDITIONAL":
-        print("  Not clean, not broken — review the flags before ordering/building.")
-    elif v == "FAIL":
+    print(f"VERDICT: {v}   ({nfail} fail, {nflag} to resolve, {nnote} note)")
+    if kind == "REVIEW":
+        print("  Nothing failed outright, but there are items to resolve before ordering/building.")
+    elif kind == "FAIL":
         print("  A hard error is present — fix before this construct is used.")
+    elif nnote:
+        print("  Clean to order. The notes are context to be aware of, not problems.")
     else:
         print("  All checks passed on the audited dimensions.")
     print("  Kagami reports; it does not SEAL. To rebuild clean, use --emit-spec")
@@ -209,7 +216,8 @@ def write_json(path, record, blocks, findings, v):
 _ROLE_COLOR = {"promoter": "var(--accent)", "rbs": "var(--warn)",
                "cds": "var(--accent-ink)", "reporter": "var(--accent-ink)",
                "terminator": "var(--muted)"}
-_STAT = {"PASS": ("p", "✓"), "FLAG": ("w", "!"), "FAIL": ("f", "✕")}
+_STAT = {"PASS": ("p", "✓"), "FLAG": ("w", "!"), "FAIL": ("f", "✕"),
+         "NOTE": ("n", "○"), "SKIP": ("s", "–")}
 
 
 def write_html(path, record, blocks, findings, v):
@@ -227,33 +235,42 @@ def write_html(path, record, blocks, findings, v):
                     dot = "fail"; break
                 if f.status == "FLAG":
                     dot = "warn"
+                elif f.status == "NOTE" and dot == "pass":
+                    dot = "note"
         lbl = html.escape(b.ident_id or (b.claim_label or "?"))
         segs.append(
             f'<div class="seg" style="flex-grow:{w};border-left:4px solid {color}">'
             f'<span class="vdot {dot}"></span><span class="role">{lbl}</span></div>')
 
-    order = {"FAIL": 0, "FLAG": 1, "PASS": 2}
     rows = []
-    for f in sorted(findings, key=lambda x: order[x.status]):
-        cls, gly = _STAT[f.status]
+    for f in sorted(findings, key=lambda x: _ORDER.get(x.status, 9)):
+        cls, gly = _STAT.get(f.status, ("n", "○"))
         loc = f'<span class="loc">{html.escape(f.loc)}</span>' if f.loc else '<span class="loc">—</span>'
         note = f'<span class="note">{html.escape(f.detail)}</span>' if f.detail else ""
-        fix = f'<span class="fix">→ {html.escape(f.fix)}</span>' if (f.fix and f.status != "PASS") else ""
+        fix = f'<span class="fix">→ {html.escape(f.fix)}</span>' if (f.fix and f.status not in ("PASS", "SKIP")) else ""
         rows.append(
             f'<div class="rrow"><span class="st {cls}">{gly}</span>'
             f'<span class="what"><b>{html.escape(f.summary)}</b>{note}{fix}</span>{loc}</div>')
 
-    vclass = {"PASS": "ok", "CONDITIONAL": "cond", "FAIL": "bad"}[v]
-    nfail = sum(1 for f in findings if f.status == "FAIL")
-    nflag = sum(1 for f in findings if f.status == "FLAG")
+    kind = kg_audit.verdict_kind(findings)
+    vclass = {"PASS": "ok", "REVIEW": "cond", "FAIL": "bad"}[kind]
+    nfail = kg_audit.count(findings, "FAIL")
+    nnote = kg_audit.count(findings, "NOTE")
+    # The verdict line (v) already carries its own count ("PASS — 1 note", "REVIEW — 1 to resolve"),
+    # so the pill is that line plus only the SECONDARY count, never a repeat of the primary one.
+    if kind == "FAIL":
+        pill = f"{v} · {nfail} error" + ("s" if nfail != 1 else "")
+    elif kind == "REVIEW" and nnote:
+        pill = f"{v} · {nnote} note" + ("s" if nnote != 1 else "")
+    else:
+        pill = v
 
     doc = _HTML.replace("{{NAME}}", html.escape(record.name)) \
               .replace("{{LEN}}", f"{seqlen:,}") \
               .replace("{{TOPO}}", record.topology) \
               .replace("{{NBLOCK}}", str(len(blocks))) \
-              .replace("{{VERDICT}}", v) \
               .replace("{{VCLASS}}", vclass) \
-              .replace("{{VSUM}}", f"{nflag} flag, {nfail} fail") \
+              .replace("{{PILL}}", html.escape(pill)) \
               .replace("{{STRIP}}", "\n".join(segs)) \
               .replace("{{ROWS}}", "\n".join(rows))
     with open(path, "w", encoding="utf-8") as fh:
@@ -277,14 +294,14 @@ h1{font-family:"Archivo",sans-serif;font-size:26px;font-weight:800;letter-spacin
 .seg{position:relative;border-radius:6px;display:flex;align-items:center;overflow:hidden;min-width:0;background:var(--surface-2);border:1px solid var(--border)}
 .seg .role{font-family:"IBM Plex Mono",monospace;font-size:11px;padding:0 6px 0 9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:500}
 .vdot{position:absolute;top:6px;right:6px;width:9px;height:9px;border-radius:50%}
-.vdot.pass{background:var(--pass)}.vdot.warn{background:var(--warn)}.vdot.fail{background:var(--fail)}
+.vdot.pass{background:var(--pass)}.vdot.warn{background:var(--warn)}.vdot.fail{background:var(--fail)}.vdot.note{background:var(--faint)}
 .ruler{display:flex;justify-content:space-between;font-family:"IBM Plex Mono",monospace;font-size:10.5px;color:var(--faint)}
 .vpill{font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;padding:5px 12px;border-radius:999px}
 .vpill.ok{background:var(--pass-soft);color:var(--pass)}.vpill.cond{background:var(--warn-soft);color:var(--warn)}.vpill.bad{background:var(--fail-soft);color:var(--fail)}
 .top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
 .rrow{display:grid;grid-template-columns:20px 1fr auto;gap:12px;align-items:baseline;padding:12px 0;border-top:1px solid var(--border);font-size:14px}
 .rrow .st{font-family:"IBM Plex Mono",monospace;font-weight:700;text-align:center}
-.rrow .st.p{color:var(--pass)}.rrow .st.w{color:var(--warn)}.rrow .st.f{color:var(--fail)}
+.rrow .st.p{color:var(--pass)}.rrow .st.w{color:var(--warn)}.rrow .st.f{color:var(--fail)}.rrow .st.n{color:var(--muted)}.rrow .st.s{color:var(--faint)}
 .what .note{display:block;color:var(--muted);font-size:12.5px;margin-top:2px}
 .what .fix{display:block;color:var(--accent-ink);font-size:12.5px;margin-top:2px}
 .loc{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--faint);white-space:nowrap}
@@ -295,7 +312,7 @@ footer{margin-top:28px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;co
 <h1>{{NAME}}</h1>
 <div class="sub">{{LEN}} bp · {{TOPO}} · {{NBLOCK}} blocks identified</div>
 <div class="card"><div class="top" style="margin-bottom:12px"><h2>Decomposition</h2>
-<span class="vpill {{VCLASS}}">{{VERDICT}} · {{VSUM}}</span></div>
+<span class="vpill {{VCLASS}}">{{PILL}}</span></div>
 <div class="strip">{{STRIP}}</div>
 <div class="ruler"><span>0 bp</span><span>identified vs public reference seed set</span><span>{{LEN}} bp</span></div>
 </div>
@@ -375,6 +392,74 @@ def registry_findings(record, blocks):
                 fix="Identify what this really is before building with it."))
     return out
 
+def run_rebuild(args):
+    """Audit the input, then drive the forward engine to seal the parts and rebuild a clean,
+    order-ready construct. The seal always comes from each part's primary source, never the audited
+    bytes; unresolved or non-Registry parts stop the rebuild with instructions."""
+    import kg_rebuild
+    if not os.path.exists(args.input):
+        print(f"ERROR: input not found: {args.input}", file=sys.stderr)
+        return 2
+    here = os.path.dirname(os.path.abspath(__file__))
+    engine = getattr(args, "engine", None) or kg_rebuild.find_engine(here)
+    if not engine:
+        print("ERROR: rebuild needs the forward Katana engine (katana_init.py, add_part.py,\n"
+              "       katana_build.py) alongside Kagami. They ship together in the katana bundle —\n"
+              "       run this from the unzipped bundle, or pass --engine <dir>.", file=sys.stderr)
+        return 2
+
+    record = kg_parse.parse(args.input)
+    if getattr(args, "library", None):
+        added, replaced, problems = kg_refs.add_library(args.library)
+        print(f"library  : {added} of your part(s) loaded for identification"
+              + (f", {replaced} shipped reference(s) superseded" if replaced else ""))
+        for p in problems:
+            print(f"  REFUSED  {p}")
+    with tempfile.TemporaryDirectory() as wd:
+        blocks = kg_identify.identify(record, wd)
+
+    lib = args.library or os.path.join(
+        os.path.dirname(os.path.abspath(args.input)),
+        os.path.splitext(os.path.basename(args.input))[0] + "_katana", "parts-library")
+    print(f"\nRebuilding {record.name}: {len(blocks)} block(s) identified.\n")
+    res = kg_rebuild.rebuild(record, blocks, library=lib, engine=engine,
+                             vendor=args.vendor or "Twist", outdir=args.outdir,
+                             progress=lambda m: print("  " + m))
+    print()
+    st = res["status"]
+    if st == "rebuilt":
+        print("REBUILT — clean, sealed, order-ready.")
+        if res.get("gb"):
+            print(f"  construct: {res['gb']}")
+        for o in res["outputs"]:
+            if o != res.get("gb"):
+                print(f"  output:    {o}")
+        print(f"  spec:      {res['spec']}")
+        print("\n  Every base traces to a part sealed from its own primary source, not from the")
+        print("  sequence you audited. Run katana-diff to see what moved.")
+        return 0
+    if st == "blocked-unresolved":
+        print("STOPPED — these parts have no independent primary source, so they cannot be sealed:")
+        for b in res["blockers"]:
+            print(f"  [{b['id']}] {b['reason']}")
+        ok = [p for p in res.get("parts", []) if p.get("how") == "fetch"]
+        if ok:
+            print("\n  Parts that WOULD auto-seal from the Registry once the above are resolved:")
+            for p in ok:
+                print(f"    {p['id']} ({p['registry']})")
+        return 5
+    if st == "seal-failed":
+        print("STOPPED — a part could not be sealed from its primary source:")
+        print(res["detail"])
+        return 1
+    if st == "build-failed":
+        print("STOPPED — the parts sealed, but the rebuild did not validate. Katana said:")
+        print(res["detail"])
+        print(f"\n  The recovered Spec is at: {res['spec']}  (fix and re-run katana_build).")
+        return 1
+    return 1
+
+
 def main():
     for stream in (sys.stdout, sys.stderr):
         try:
@@ -387,6 +472,15 @@ def main():
     a.add_argument("input")
     a.add_argument("--vendor", choices=sorted(VENDOR_CAP))
     a.add_argument("--host")
+    a.add_argument("--host-reca", dest="host_reca", choices=["pos", "neg"],
+                   help="recA status of the host given by --host: pos (recA+, the default "
+                        "assumption if omitted) or neg (recA-, a cloning strain). A >40 bp host "
+                        "match is an actionable finding only in a recA+ background; in a recA- "
+                        "strain it drops to a note.")
+    a.add_argument("--assembly", choices=["BsaI", "BsmBI", "SapI", "BioBrick"],
+                   help="the assembly method context. A Type IIS or BioBrick-forbidden site is only "
+                        "an actionable finding when the chosen method's enzyme would cut it; "
+                        "otherwise it is reported as a note. Omit for plain synthesis.")
     a.add_argument("--registry", action="store_true",
                    help="check labels that name an iGEM Registry part (BBa_*) against the Registry "
                         "itself. Needs the network. It verifies CLAIMS; it cannot identify an "
@@ -399,11 +493,28 @@ def main():
     a.add_argument("--json")
     a.add_argument("--emit-spec", dest="emit_spec")
     a.add_argument("--emit-intake", dest="emit_intake")
+
+    rb = sub.add_parser("rebuild",
+                        help="audit, then seal the parts from their primary source and rebuild a "
+                             "clean, order-ready construct via forward Katana (one command).")
+    rb.add_argument("input")
+    rb.add_argument("--library", metavar="PATH",
+                    help="your Katana parts library: designed parts you already sealed are reused, "
+                         "and freshly-fetched Registry parts are added here. Omitted: a fresh "
+                         "library is created beside the input.")
+    rb.add_argument("--vendor", choices=sorted(VENDOR_CAP), default="Twist")
+    rb.add_argument("--outdir", help="where to write the recovered Spec and build outputs "
+                                     "(default: beside the library).")
+    rb.add_argument("--engine", help="directory holding the Katana engine tools "
+                                     "(default: found next to Kagami in the bundle).")
+
     args = ap.parse_args()
-    if args.cmd != "audit":
-        ap.print_help()
-        return 2
-    return run(args)
+    if args.cmd == "audit":
+        return run(args)
+    if args.cmd == "rebuild":
+        return run_rebuild(args)
+    ap.print_help()
+    return 2
 
 
 if __name__ == "__main__":

@@ -33,8 +33,12 @@ def norm(pid):
 
 
 promoter = norm("J23116")                 # weak Anderson promoter
-rbs_seq = norm("B0034") + "TACTAG"        # B0034 (strong) + scar — but we LABEL it B0032
-spacer = "AATT"                           # 4 nt spacer -> RBS→ATG spacing check
+# The RBS FEATURE is exactly B0034 (strong), but we LABEL it B0032 (weak): the signature mislabel.
+# It must be exactly B0034 with nothing appended - an earlier version appended a "TACTAG" scar, and
+# B0034+TACTAG is itself a real 18 bp Registry part (BBa_K2066527), so at full catalogue scale the
+# auditor correctly named THAT instead of B0034 and the demo stopped teaching its own lesson.
+rbs_seq = norm("B0034")                   # B0034 (strong) - but LABELLED B0032 below
+spacer = "CACAACA"                        # 7 nt benign spacer (no part collision, no RE site)
 cds = make_orf(218)
 junction = "GAATTC"                        # EcoRI site in the CDS→terminator junction (flag)
 term = norm("B0015")
