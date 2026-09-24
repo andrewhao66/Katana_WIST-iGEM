@@ -298,13 +298,18 @@ class App:
             joined = getattr(record, "assembled_from", None)
             if joined:
                 self.q.put(("joined", joined))
+            ident_status = {}
             with tempfile.TemporaryDirectory() as wd:
-                blocks = kg_identify.identify(record, wd)
+                blocks = kg_identify.identify(record, wd, status=ident_status)
                 host_seq = None
                 if host and os.path.isfile(host):
                     host_seq = kg_parse.parse(host).seq
+                # The startup banner already warns when BLAST+ is missing, but that scrolls away
+                # and says nothing about THIS audit. Pass the status so the report itself carries
+                # it, and so the verdict is held back to REVIEW rather than reading PASS.
                 findings = kg_audit.audit(record, blocks, host_seq=host_seq,
-                                          host_reca=host_reca, assembly=assembly)
+                                          host_reca=host_reca, assembly=assembly,
+                                          identify_status=ident_status)
             v = kg_audit.verdict(findings)
             self.q.put(("done", (record, blocks, findings, v)))
         except Exception as exc:                      # surface it, never swallow it

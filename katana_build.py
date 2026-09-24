@@ -122,16 +122,38 @@ def load_yaml_simple(path: Path) -> dict:
     Falls back to PyYAML if available."""
     try:
         import yaml
+    except ImportError:
+        sys.exit("BLOCK: PyYAML is missing. It is the one thing this engine cannot run without.\n"
+                 "       Install it with:   python -m pip install pyyaml\n"
+                 "       If you made a workspace with python -m venv .venv, switch to it first,\n"
+                 "       or the install goes somewhere this build cannot see.")
+    # A malformed Spec used to escape as a raw Python traceback ending in a scanner error,
+    # while check_design.py — given the SAME file — printed a clear message. Two entry points
+    # handling one failure two different ways is the defect; a traceback is not a verdict.
+    try:
         with open(path, "r", encoding="utf-8") as f:
             return yaml.safe_load(f)
-    except ImportError:
-        pass
-    # Fallback: use a very simple parser for the subset we need
-    # This is NOT a general YAML parser — it covers Katana spec structure only
-    sys.exit("BLOCK: PyYAML is missing. It is the one thing this engine cannot run without.\n"
-             "       Install it with:   python -m pip install pyyaml\n"
-             "       If you made a workspace with python -m venv .venv, switch to it first,\n"
-               "       or the install goes somewhere this build cannot see.")
+    except Exception as e:
+        msg = [f"BLOCK: could not read {path} as YAML.",
+               f"       {e}"]
+        # PyYAML records where it gave up. Quote that line back: "line 12, column 30" is a
+        # coordinate, but the line itself is the answer.
+        mark = getattr(e, "problem_mark", None)
+        if mark is not None:
+            try:
+                src = path.read_text(encoding="utf-8").splitlines()
+                if 0 <= mark.line < len(src):
+                    msg.append("")
+                    msg.append(f"       line {mark.line + 1}:  {src[mark.line].rstrip()}")
+                    msg.append("       " + " " * (len(f"line {mark.line + 1}:  ") + mark.column) + "^")
+            except Exception:
+                pass
+        msg += ["",
+                "       Usually this is an indentation slip, or a missing quote around a value",
+                "       that contains a colon.",
+                "       To see the whole Spec checked at once, run:",
+                "           python check_design.py " + str(path)]
+        sys.exit("\n".join(msg))
 
 def load_lock(lock_path: Path) -> dict:
     """Load LOCK.tsv → {id: {version, seq_sha256, length, outfile, ...}}"""

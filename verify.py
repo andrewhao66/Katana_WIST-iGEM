@@ -61,7 +61,23 @@ def main() -> int:
 
     print("1. Verifying every part against the manifest…")
     rc1, out1 = run(VERIFIER, str(LOCK))
-    print("   " + (out1.strip().splitlines() or ["(no output)"])[-1])
+    _lines = out1.strip().splitlines() or ["(no output)"]
+    if rc1 == 0:
+        # Clean run: the verifier's last line IS the summary ("SEALED — N parts verified …").
+        print("   " + _lines[-1])
+    else:
+        # A failing run is the case this wrapper exists to report, and it used to print only
+        # the LAST line. One tampered character produces four distinct problems, and the last
+        # of them (the LOCK.root mismatch) is the least diagnostic of the four — it says the
+        # manifest changed, not WHICH part or WHICH field. Show all of them; a user should not
+        # have to re-run the underlying script by hand to see what they broke.
+        _CAP = 40
+        for line in _lines[:_CAP]:
+            print("   " + line)
+        if len(_lines) > _CAP:
+            print(f"   … and {len(_lines) - _CAP} more line(s). For the complete list:")
+            print(f"       {Path(sys.executable).name} verify_library_v2.py "
+                  f"parts-library/ref_parts/LOCK.tsv")
 
     print("\n2. Trying to break the checker, eight ways…")
     rc2, out2 = run(SUITE, str(LIB))

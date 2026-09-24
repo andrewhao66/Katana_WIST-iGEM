@@ -186,18 +186,45 @@ def _find_orfs(seq, min_aa=50):
     return found
 
 
-def identify(record, workdir):
-    """Return an ordered list[Block] covering the construct, with claim + identity."""
+def identify(record, workdir, status=None):
+    """Return an ordered list[Block] covering the construct, with claim + identity.
+
+    status: an optional dict the caller passes in to LEARN WHETHER IDENTIFICATION ACTUALLY RAN.
+    Filled with {"ran": bool, "reason": str}. This exists because an empty identity result is
+    ambiguous in exactly the way that matters: "no reference matched these bases" and "we never
+    got to ask" both leave blocks reading `unidentified`. Without this, a missing BLAST+ made a
+    construct with a planted mislabel report PASS — clean to order, exit 0, silently. Callers that
+    pass nothing keep the old signature and the old behaviour.
+    """
     seq = record.seq
     blocks = []
 
+    if status is not None:
+        status.clear()
+        status.update({"ran": True, "reason": ""})
+
+    def _not_run(reason):
+        if status is not None:
+            status.update({"ran": False, "reason": reason})
+
     id_hits = []
-    if _have_blast() and len(seq) >= 8:
+    if len(seq) < 8:
+        # Not a failure: there is nothing to identify. Left as ran=True so a 4 bp input does not
+        # produce an alarming "identification did not run" on top of its real findings.
+        pass
+    elif not _have_blast():
+        _not_run("NCBI BLAST+ was not found on this computer "
+                 "(blastn/makeblastdb are not on PATH)")
+    else:
         try:
             db = _write_ref_db(workdir)
             id_hits = _tile(_blast(seq, db, workdir))
-        except Exception:
-            id_hits = []   # identification unavailable → audit still runs on invariants
+        except Exception as exc:
+            # A BLAST+ that IS installed but fails to run is the same hole as one that is absent,
+            # and it is the harder of the two to notice. Name the error rather than swallowing it.
+            id_hits = []
+            _not_run(f"NCBI BLAST+ is installed but failed to run ({exc.__class__.__name__}: {exc})"
+                     .strip())
 
     refs = kg_refs.by_id()
 

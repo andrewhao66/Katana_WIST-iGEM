@@ -133,8 +133,20 @@ def _find_sd(block_seq):
 
 
 def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
-          host_reca=None, assembly=None):
-    """assembly: the assembly method context, one of {None, "BsaI", "BsmBI", "SapI",
+          host_reca=None, assembly=None, identify_status=None):
+    """identify_status: the dict filled by kg_identify.identify(..., status=...), or None if the
+    caller did not ask. When it says identification did NOT run, that is raised as a FLAG, which
+    holds the verdict back to REVIEW.
+
+    Why FLAG and not SKIP, since SKIP is what the host scan uses. SKIP is for a check the user
+    OPTED OUT of: no host chosen means no host scan, and reporting that as a problem would be
+    wrong. A missing BLAST+ is not an opt-out — the user asked for the audit and silently did not
+    get its central half. It matches the Registry precedent instead: an unreachable Registry is
+    already a FLAG ("could not reach" is not "checked and fine"), and identification is the more
+    important of the two, so it cannot grade softer. Without this, a construct carrying a known
+    mislabel read PASS — clean to order, exit 0.
+
+    assembly: the assembly method context, one of {None, "BsaI", "BsmBI", "SapI",
     "BioBrick"}. It decides SEVERITY, not presence: a restriction/Type IIS site is only an
     actionable FLAG when the chosen method's enzyme would cut it; otherwise it is a NOTE.
     host_reca: recA status of the chosen host (True/False/None). A >40 bp host match is a FLAG
@@ -148,14 +160,34 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         findings.append(Finding("invariant", FAIL, "Empty sequence",
                                 fix="Provide a non-empty FASTA/GenBank."))
         return findings
+
+    # ---- DID THE IDENTIFICATION HALF ACTUALLY RUN? ----
+    # First, because every finding below that depends on naming a part is weaker if it did not,
+    # and because the reader must meet this before they meet a verdict.
+    _ident_ran = not (identify_status is not None and identify_status.get("ran") is False)
+    if not _ident_ran:
+        findings.append(Finding(
+            "identification", FLAG,
+            "Part identification did NOT run — this audit cannot catch a mislabel",
+            detail=(identify_status.get("reason") or "NCBI BLAST+ unavailable") +
+                   ". Everything that does not depend on naming a part still ran (reading frame, "
+                   "restriction sites, GC, repeats, size), and those results stand. But no block "
+                   "was compared against a reference, so a part whose label disagrees with its "
+                   "bases would NOT have been reported. Blocks shown as \"unidentified\" below "
+                   "mean 'not checked', not 'checked and unmatched'.",
+            fix="Install NCBI BLAST+ (https://blast.ncbi.nlm.nih.gov/doc/blast-help/"
+                "downloadblast.html) so blastn and makeblastdb are on PATH, then re-run."))
     if not blocks:
         findings.append(Finding("invariant", FLAG,
                                 "No blocks identified against the reference seed set",
-                                detail="Sequence parsed but nothing matched the public "
-                                       "seed parts. Expand the reference set (fetch from "
-                                       "the Registry) or supply an annotated GenBank.",
-                                fix="Add the relevant parts to the seed set via "
-                                    "katana-parts-library intake, then re-run."))
+                                detail=("Identification did not run, so nothing could match."
+                                        if not _ident_ran else
+                                        "Sequence parsed but nothing matched the public "
+                                        "seed parts. Expand the reference set (fetch from "
+                                        "the Registry) or supply an annotated GenBank."),
+                                fix=("Install NCBI BLAST+ and re-run." if not _ident_ran else
+                                     "Add the relevant parts to the seed set via "
+                                     "katana-parts-library intake, then re-run.")))
 
     # ---- IDENTITY: claim vs sequence (the headline check) ----
     for b in blocks:

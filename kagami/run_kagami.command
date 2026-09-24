@@ -22,7 +22,10 @@ for c in python3 python; do
 done
 if [ -z "$PY" ]; then
   echo
-  echo "  Python 3 was not found. Install it from https://www.python.org/downloads/ and try again."
+  echo "  Python 3 was not found. Copy the line below, paste it into Terminal, press Return,"
+  echo "  click through the installer it opens, then run this file again."
+  echo
+  echo "    curl -L -o ~/Downloads/python-3.12.10.pkg https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg && open ~/Downloads/python-3.12.10.pkg"
   echo
   exit 2
 fi

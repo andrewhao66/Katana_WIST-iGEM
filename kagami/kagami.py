@@ -76,8 +76,16 @@ def run(args):
         print("           If that is not the order they belong in, the audit below is of a "
               "construct you did not build.")
 
+    ident_status = {}
     with tempfile.TemporaryDirectory() as wd:
-        blocks = kg_identify.identify(record, wd)
+        blocks = kg_identify.identify(record, wd, status=ident_status)
+    if not ident_status.get("ran", True):
+        # Say it here too, not only in the findings list. This is the line whose absence let a
+        # planted mislabel read "PASS — clean to order": the user's first run is the likeliest
+        # moment to hit it, before they have installed BLAST+.
+        print(f"identify : NOT RUN — {ident_status.get('reason', 'BLAST+ unavailable')}")
+        print("           Checks that do not need to name a part still ran; a MISLABEL CANNOT "
+              "BE CAUGHT without this step.")
 
     cap = VENDOR_CAP.get(args.vendor) if args.vendor else None
     host_seq = _load_host(args.host) if args.host else None
@@ -93,7 +101,8 @@ def run(args):
 
     findings = kg_audit.audit(record, blocks, vendor=args.vendor,
                               fragment_bp_max=cap, host_seq=host_seq,
-                              host_reca=host_reca, assembly=assembly)
+                              host_reca=host_reca, assembly=assembly,
+                              identify_status=ident_status)
     findings = _reg + findings
     v = kg_audit.verdict(findings)
 
@@ -158,12 +167,24 @@ def _block_line(b):
     return f"  {b.start:>6}-{b.end:<6} {strand}  {role:<11} {ident}{conf}{claim}{amb}"
 
 
+def _ident_not_run(findings):
+    """True when the identification step did not run. Read off the findings so every output
+    format (text, JSON, HTML) agrees without threading another argument through each one."""
+    return any(f.category == "identification" and f.status == "FLAG" for f in findings)
+
+
 def print_text(record, blocks, findings, v):
     print("=" * 72)
     print(f"KAGAMI · sequence audit   ·   {record.name}   ·   {len(record.seq)} bp   "
           f"· {record.topology}")
     print("=" * 72)
-    print(f"\nDECOMPOSITION — {len(blocks)} block(s) identified against the public seed set:")
+    if _ident_not_run(findings):
+        # "identified against the public seed set" is the same false reassurance as the PASS was,
+        # only smaller: nothing was compared against the seed set on this run.
+        print(f"\nDECOMPOSITION — {len(blocks)} block(s) from the file's OWN ANNOTATION only "
+              f"(not identified — BLAST+ unavailable):")
+    else:
+        print(f"\nDECOMPOSITION — {len(blocks)} block(s) identified against the public seed set:")
     for b in blocks:
         print(_block_line(b))
 
@@ -200,6 +221,9 @@ def write_json(path, record, blocks, findings, v):
     obj = dict(
         name=record.name, length=len(record.seq), topology=record.topology,
         verdict=v,
+        # Explicit, because a pipeline consuming this JSON cannot otherwise tell an empty
+        # `identity` field meaning "no reference matched" from one meaning "never asked".
+        identification_ran=not _ident_not_run(findings),
         blocks=[dict(start=b.start, end=b.end, strand=b.strand,
                      claim=b.claim_label, identity=b.ident_id, name=b.ident_name,
                      role=b.ident_role or b.claim_role, variant=b.ident_variant,
@@ -265,10 +289,15 @@ def write_html(path, record, blocks, findings, v):
     else:
         pill = v
 
+    _nr = _ident_not_run(findings)
     doc = _HTML.replace("{{NAME}}", html.escape(record.name)) \
               .replace("{{LEN}}", f"{seqlen:,}") \
               .replace("{{TOPO}}", record.topology) \
               .replace("{{NBLOCK}}", str(len(blocks))) \
+              .replace("{{BLOCKWORD}}", "blocks from the file's own annotation — NOT identified"
+                       if _nr else "blocks identified") \
+              .replace("{{RULERWORD}}", "identification DID NOT RUN (BLAST+ unavailable)"
+                       if _nr else "identified vs public reference seed set") \
               .replace("{{VCLASS}}", vclass) \
               .replace("{{PILL}}", html.escape(pill)) \
               .replace("{{STRIP}}", "\n".join(segs)) \
@@ -310,11 +339,11 @@ footer{margin-top:28px;font-family:"IBM Plex Mono",monospace;font-size:11.5px;co
 </style></head><body><div class="wrap">
 <div class="eyebrow">◤ Kagami · reverse-Katana audit</div>
 <h1>{{NAME}}</h1>
-<div class="sub">{{LEN}} bp · {{TOPO}} · {{NBLOCK}} blocks identified</div>
+<div class="sub">{{LEN}} bp · {{TOPO}} · {{NBLOCK}} {{BLOCKWORD}}</div>
 <div class="card"><div class="top" style="margin-bottom:12px"><h2>Decomposition</h2>
 <span class="vpill {{VCLASS}}">{{PILL}}</span></div>
 <div class="strip">{{STRIP}}</div>
-<div class="ruler"><span>0 bp</span><span>identified vs public reference seed set</span><span>{{LEN}} bp</span></div>
+<div class="ruler"><span>0 bp</span><span>{{RULERWORD}}</span><span>{{LEN}} bp</span></div>
 </div>
 <div class="card"><h2 style="margin-bottom:6px">Audit</h2>{{ROWS}}</div>
 <footer>Kagami reports; it does not seal. Rebuild clean via forward Katana (katana-spec → parts-library → assemble). Public parts only · WIST iGEM.</footer>
@@ -415,8 +444,16 @@ def run_rebuild(args):
               + (f", {replaced} shipped reference(s) superseded" if replaced else ""))
         for p in problems:
             print(f"  REFUSED  {p}")
+    _rb_status = {}
     with tempfile.TemporaryDirectory() as wd:
-        blocks = kg_identify.identify(record, wd)
+        blocks = kg_identify.identify(record, wd, status=_rb_status)
+    if not _rb_status.get("ran", True):
+        # The rebuild path needs this even more than the audit does: without identification every
+        # block is unresolved, so the rebuild can only stop. Say why, instead of letting it look
+        # like the construct is the problem.
+        print(f"identify : NOT RUN — {_rb_status.get('reason', 'BLAST+ unavailable')}")
+        print("           No block can be traced to a primary source without it, so the rebuild "
+              "below will stop on every part.")
 
     lib = args.library or os.path.join(
         os.path.dirname(os.path.abspath(args.input)),

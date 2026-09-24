@@ -49,12 +49,29 @@ def load_spec(path: Path) -> dict:
         sys.exit("BLOCK: PyYAML is missing, and this reads YAML.\n"
                  "       Install it with:   python -m pip install pyyaml")
     try:
-        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        # Read from the handle, not from a string: PyYAML names its source in the error, and
+        # from a string that name is the useless "<unicode string>" rather than the file.
+        with open(path, "r", encoding="utf-8") as fh:
+            return yaml.safe_load(fh) or {}
     except Exception as e:
-        sys.exit(f"BLOCK: could not read {path} as YAML.\n"
-                 f"       {e}\n"
-                 f"       Usually this is an indentation slip, or a missing quote around a value\n"
-                 f"       that contains a colon.")
+        msg = [f"BLOCK: could not read {path} as YAML.",
+               f"       {e}"]
+        # Quote the offending line back. PyYAML gives "line 12, column 30", which is a
+        # coordinate; the line itself is the answer. katana_build.py prints the same block.
+        mark = getattr(e, "problem_mark", None)
+        if mark is not None:
+            try:
+                src = path.read_text(encoding="utf-8").splitlines()
+                if 0 <= mark.line < len(src):
+                    msg.append("")
+                    msg.append(f"       line {mark.line + 1}:  {src[mark.line].rstrip()}")
+                    msg.append("       " + " " * (len(f"line {mark.line + 1}:  ") + mark.column) + "^")
+            except Exception:
+                pass
+        msg += ["",
+                "       Usually this is an indentation slip, or a missing quote around a value",
+                "       that contains a colon."]
+        sys.exit("\n".join(msg))
 
 
 class Report:

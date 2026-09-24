@@ -30,7 +30,12 @@ done
 if [ -z "$PY" ]; then
   echo
   echo "  Python 3 was not found on this computer."
-  echo "  Install it from https://www.python.org/downloads/ , then open this file again."
+  echo
+  echo "  To fix it, copy the line below, paste it into Terminal, and press Return. It"
+  echo "  downloads the official installer and opens it; click through it, then open this"
+  echo "  file again. No administrator password is needed to download it."
+  echo
+  echo "    curl -L -o ~/Downloads/python-3.12.10.pkg https://www.python.org/ftp/python/3.12.10/python-3.12.10-macos11.pkg && open ~/Downloads/python-3.12.10.pkg"
   echo
   read -n 1 -s -r -p "Press any key to close."
   exit 2

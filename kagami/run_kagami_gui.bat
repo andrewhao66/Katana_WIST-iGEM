@@ -23,20 +23,55 @@ if not exist "kagami_gui.py" (
 
 REM Find a Python. pythonw / pyw give a clean window with no console behind it; py / python
 REM still work but leave a console open. If none is found, say so instead of failing silently.
+REM
+REM Windows ships a PLACEHOLDER python.exe in %LOCALAPPDATA%\Microsoft\WindowsApps (the "App
+REM Execution Alias"). It is NOT Python: "where python" finds it, so a naive check thinks Python
+REM is installed, but running it just opens the Microsoft Store and nothing else happens. That is
+REM the most common reason this file appears to do nothing at all, so :findpy skips any candidate
+REM living in WindowsApps and remembers that it saw one.
 set "PY="
-where pythonw >nul 2>&1 && set "PY=pythonw"
-if not defined PY ( where pyw    >nul 2>&1 && set "PY=pyw" )
-if not defined PY ( where py     >nul 2>&1 && set "PY=py" )
-if not defined PY ( where python >nul 2>&1 && set "PY=python" )
+set "STUB="
+for %%C in (pythonw pyw py python) do if not defined PY call :findpy %%C
 
 if not defined PY (
   echo(
-  echo   Python 3 was not found on this computer.
-  echo   Install it from https://www.python.org/downloads/ , tick "Add Python to PATH"
-  echo   during setup, then double-click this file again.
+  if defined STUB (
+    echo   The only "python" on this computer is the Microsoft Store placeholder, which is
+    echo   not Python - running it just opens the Store. Real Python is not installed yet.
+  ) else (
+    echo   Python 3 was not found on this computer.
+  )
+  echo(
+  echo   To fix it, copy the line below, paste it into Terminal or PowerShell, press Enter:
+  echo(
+  echo     winget install --id Python.Python.3.12 -e --source winget --accept-package-agreements --accept-source-agreements
+  echo(
+  echo   Then CLOSE that window, open a NEW one, and double-click this file again.
+  echo   No administrator rights are needed.
+  echo(
+  echo   If winget is blocked on your computer, install from https://www.python.org/downloads/
+  echo   and tick "Add Python to PATH" during setup.
   echo(
   pause
   goto :eof
 )
 
-start "" %PY% kagami_gui.py %*
+start "" "%PY%" kagami_gui.py %*
+goto :eof
+
+:findpy
+REM %1 = command to look for. Sets PY to the first hit that is NOT the Store placeholder.
+for /f "delims=" %%P in ('where %1 2^>nul') do (
+  set "CAND=%%~fP"
+  call :checkcand
+  if defined PY goto :eof
+)
+goto :eof
+
+:checkcand
+REM Deliberately no "find"/"findstr" here: on a machine with Git Bash (or any other POSIX
+REM toolkit) earlier on PATH, "find" is GNU find, which fails on these arguments and would make
+REM the test pass open - accepting the placeholder as if it were Python. This substring trick is
+REM pure cmd: deleting \WindowsApps\ changes the string only if it was actually in it.
+if /i "%CAND:\WindowsApps\=%"=="%CAND%" ( set "PY=%CAND%" ) else ( set "STUB=1" )
+goto :eof

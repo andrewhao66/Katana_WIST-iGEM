@@ -102,14 +102,22 @@ def draft_spec(record, blocks, findings, vendor="Twist"):
             note = ""
             if b.claim_label and b.claim_label.replace("BBa_", "").upper() != b.ident_id.upper():
                 note = f"   # NOTE: input labelled '{b.claim_label}' — corrected to {b.ident_id}"
-            lines.append(f"  - id: {pid:<16} role: {role:<10} class: reference   "
-                         f"pin: TBD@v1@TBD")
+            # One key per line. These used to be column-aligned onto a single line, which reads
+            # nicely and is not YAML: `- id: X  role: Y  class: reference` is one scalar, not
+            # three keys. Handing the emitted Spec to forward Katana died on a scanner error, so
+            # the documented recovery path did not work. Alignment is not worth that.
+            lines.append(f"  - id: {pid}")
+            lines.append(f"    role: {role}")
+            lines.append("    class: reference")
+            lines.append("    pin: TBD@v1@TBD")
             lines.append(f"    source: {src}{note}")
             order.append(pid)
         else:
             pid = f"UNRESOLVED_{b.start}_{b.end}"
-            lines.append(f"  - id: {pid:<16} role: {role:<10} class: unresolved  # "
-                         f"{b.note or 'needs a primary source before it can be sealed'}")
+            lines.append(f"  - id: {pid}")
+            lines.append(f"    role: {role}")
+            lines.append("    class: unresolved")
+            lines.append(f"    # {b.note or 'needs a primary source before it can be sealed'}")
             order.append(pid)
     lines.append("")
     lines.append("architecture:")

@@ -22,6 +22,15 @@
 # Source files normalise to LF, in the repository and in the working tree, on every OS.
 * text=auto eol=lf
 
+# ...except Windows batch files, which are the one thing here that LF actively breaks.
+# cmd.exe reads a .bat by seeking through it, and on a GOTO or CALL it resumes at a byte
+# offset computed as if every line ended CRLF. In a flat script the drift is harmless, so
+# these launchers were LF for a long time without anyone noticing. They now contain labels
+# (:findpy, :checkcand) and a GOTO inside a FOR block, which is exactly the construct that
+# mis-resumes — and it fails by running the WRONG LINE, not by reporting an error. The
+# counterpart of the *.command eol=lf rule: each launcher gets the endings its shell needs.
+*.bat text eol=crlf
+
 # Hashed artifacts are treated as binary. Byte-for-byte, no exceptions, no conversion.
 *.gb      -text
 *.gbk     -text

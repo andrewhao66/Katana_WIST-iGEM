@@ -426,5 +426,100 @@ check("plan: a part already in your library is reused, not re-fetched",
 check("find_engine returns None when no engine sits beside Kagami",
       kg_rebuild.find_engine(os.path.join(HERE, "no_such_dir")) is None)
 
+# 18. Identification must never fail SILENTLY (2026-09-24). Found by Andrew Hao's independent
+#      test of the published wiki walkthrough: with BLAST+ absent, Kagami reported the demo
+#      construct — which carries a PLANTED MISLABEL on purpose — as "PASS, clean to order",
+#      exit 0, saying nothing about a skipped step. Two paths in identify() set the identity
+#      result to an empty list and continued: BLAST+ missing, and BLAST+ raising. Downstream,
+#      blocks read "unidentified", which is ALSO the honest word for a genuine no-match, so the
+#      two were indistinguishable. The suite had zero tests mentioning blast in any casing,
+#      which is why it survived. These tests fail if that silence ever comes back.
+_ident_seq = N(R["J23116"]["seq"]) + N(R["sfGFP"]["seq"]) + N(R["B0015"]["seq"])
+
+
+def _identify_with(gb_text, have_blast):
+    """Run identify() with _have_blast forced, and return (blocks, status)."""
+    _real = kg_identify._have_blast
+    kg_identify._have_blast = lambda: have_blast
+    try:
+        with tempfile.TemporaryDirectory() as wd:
+            p = os.path.join(wd, "c.gb")
+            open(p, "w", encoding="utf-8").write(gb_text)
+            rec = kg_parse.parse(p)
+            st = {}
+            blocks = kg_identify.identify(rec, wd, status=st)
+            return rec, blocks, st
+    finally:
+        kg_identify._have_blast = _real
+
+
+_gb_text = _gb(_ident_seq, [("misc_feature", "B0032", 1, 35)])
+_r_no, _b_no, _st_no = _identify_with(_gb_text, False)
+check("identify() reports ran=False when BLAST+ is absent", _st_no.get("ran") is False)
+check("identify() names BLAST+ as the reason", "BLAST" in (_st_no.get("reason") or ""))
+
+_r_yes, _b_yes, _st_yes = _identify_with(_gb_text, True)
+check("identify() reports ran=True when BLAST+ is present", _st_yes.get("ran") is True)
+
+# The audit must raise it, and it must be a FLAG — not a SKIP. SKIP is for a check the user
+# OPTED OUT of (no host chosen); this is a check they asked for and silently did not get.
+# The Registry precedent already grades "could not reach" as FLAG, and identification is the
+# more important of the two, so it cannot grade softer.
+_f_no = kg_audit.audit(_r_no, _b_no, identify_status=_st_no)
+_idf = [f for f in _f_no if f.category == "identification"]
+check("audit raises a finding when identification did not run", len(_idf) == 1)
+check("that finding is a FLAG, not a SKIP or NOTE", bool(_idf) and _idf[0].status == "FLAG")
+check("the finding tells the user how to fix it", bool(_idf) and "BLAST" in _idf[0].fix)
+
+# The verdict is the whole point: it must NOT read clean-to-order.
+check("a construct whose identification never ran cannot be PASS",
+      kg_audit.verdict_kind(_f_no) == "REVIEW")
+check("the CLI exit code for that construct is 5 (REVIEW), not 0",
+      {"PASS": 0, "REVIEW": 5, "FAIL": 1}[kg_audit.verdict_kind(_f_no)] == 5)
+
+# A BLAST+ that IS installed but blows up is the same hole, and harder to notice.
+_broken = kg_identify._write_ref_db
+kg_identify._write_ref_db = lambda wd: (_ for _ in ()).throw(RuntimeError("simulated blast failure"))
+try:
+    _r_br, _b_br, _st_br = _identify_with(_gb_text, True)
+finally:
+    kg_identify._write_ref_db = _broken
+check("identify() reports ran=False when BLAST+ is present but raises",
+      _st_br.get("ran") is False)
+check("a raising BLAST+ also cannot produce a PASS",
+      kg_audit.verdict_kind(kg_audit.audit(_r_br, _b_br, identify_status=_st_br)) == "REVIEW")
+
+# Callers that pass no status keep the old signature and must not be penalised.
+_f_legacy = kg_audit.audit(_r_yes, _b_yes)
+check("audit without identify_status raises no identification finding",
+      not any(f.category == "identification" for f in _f_legacy))
+
+# 19. The emitted Spec must be valid YAML (2026-09-24, same report). It previously wrote four
+#      keys on one aligned line with no separators — `- id: X  role: Y  class: reference` is a
+#      single scalar, not three keys — so handing the emitted Spec to forward Katana died on a
+#      scanner error and the DOCUMENTED recovery path did not work.
+_spec_text = kg_bridge.draft_spec(_r_yes, _b_yes, _f_legacy, vendor="Twist")
+try:
+    import yaml as _yaml
+except ImportError:
+    _yaml = None
+if _yaml is None:
+    check("emitted Spec is valid YAML (SKIPPED — PyYAML not installed)", True)
+else:
+    try:
+        _spec = _yaml.safe_load(_spec_text)
+        _ok = True
+    except Exception:
+        _spec, _ok = None, False
+    check("the emitted draft Spec parses as YAML", _ok)
+    check("the emitted Spec's parts are real mappings with id/role/class",
+          _ok and isinstance(_spec.get("parts"), list) and bool(_spec["parts"])
+          and all(isinstance(p, dict) and {"id", "role", "class"} <= set(p)
+                  for p in _spec["parts"]))
+    check("the emitted Spec carries no raw bases (INTENT only)",
+          _ok and not any(isinstance(v, str) and len(v) > 40
+                          and set(v.upper()) <= set("ACGTN")
+                          for p in _spec["parts"] for v in p.values()))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
