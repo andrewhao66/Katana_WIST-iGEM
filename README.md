@@ -114,8 +114,41 @@ filename you want, and `YourHost` **must equal the `host` field in your Design S
 the check finds it. Genomes are fingerprinted and their accession and date recorded, exactly like a
 part, so you can still prove a year from now which sequence a check ran against.
 
-The check itself needs BLAST+ installed and on your `PATH`. Without it the gate warns and is not
-enforced - it never silently passes.
+### Installing BLAST+
+
+The check shells out to BLAST+. Without it the gate warns and is not enforced - it never silently
+passes. Pick the row for your machine, then **close the terminal and open a new one**: a terminal
+only learns about newly installed programs when it starts.
+
+**Windows, with an administrator password.** The official installer offers to add BLAST+ to your
+`PATH` for you:
+
+```
+curl.exe -L -o "$env:TEMPlast.exe" https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-win64.exe; Start-Process "$env:TEMPlast.exe"
+```
+
+**Windows, without one.** On a school machine you usually cannot supply that password, and the
+installer stops at the prompt. This route needs no admin rights - it unpacks the same programs into
+your own user folder and puts that folder on your personal `PATH`. One line, in PowerShell:
+
+```
+$d="$env:LOCALAPPDATAlast"; mkdir $d -Force | Out-Null; curl.exe -L -o "$d.tar.gz" https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-win64.tar.gz; tar -xf "$d.tar.gz" -C $d; [Environment]::SetEnvironmentVariable("Path",[Environment]::GetEnvironmentVariable("Path","User")+";$d
+cbi-blast-2.17.0+in","User")
+```
+
+It is a 136 MB download, so give it a minute on a slow connection.
+
+**macOS.** With [Homebrew](https://brew.sh): `brew install blast`. Without it:
+
+```
+curl -L -o ~/Downloads/blast.dmg https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-universal.dmg && open ~/Downloads/blast.dmg
+```
+
+**Linux.**
+
+```
+sudo apt update && sudo apt install -y ncbi-blast+
+```
 
 ---
 
