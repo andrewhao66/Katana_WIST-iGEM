@@ -77,6 +77,121 @@ says so rather than letting it pass quietly.
 
 ---
 
+## Turning on the off-target check
+
+A build prints this until you give it a genome:
+
+```
+WARN  Stage-4b: OFF-TARGET SKIPPED - no genome for host 'E_coli_MG1655'. NOT enforced this run.
+```
+
+That check compares your construct against the whole genome of the organism you are putting it
+into, looking for long high-identity stretches no intended part explains - a misassembly, the wrong
+part, or a recoded gene drifting back toward the natural one. It needs a genome, and none ships
+here. Genomes are large (*E. coli* ~4.6 MB, yeast ~12 MB) and, more to the point, there is no
+correct set to bundle: whichever handful we picked would be the wrong one for the team working in
+*Vibrio*, or cyanobacteria, or something we never thought of. So fetch the one you actually use:
+
+```
+python get_genome.py
+```
+
+A menu of 23 organisms with download sizes; type one letter. The list follows the **iGEM White
+List** - the Risk Group 1 bacteria, the two permitted fungi, disarmed *Agrobacterium*, and all
+seven named bacteriophages. Check the White List yourself before relying on it: it changes, and a
+genome being downloadable here says nothing about what your division or institution permits.
+
+Not on the list, or want to scan against a plasmid rather than a chromosome? Any NCBI accession
+works. Replace all three capitalised words - pasted unchanged it refuses rather than downloading
+something you did not choose:
+
+```
+python get_genome.py --accession YOUR_ACCESSION --name a_name --key YourHost
+```
+
+`YOUR_ACCESSION` is the identifier on the NCBI record (pUC19 is `M77789.2`), `a_name` is the
+filename you want, and `YourHost` **must equal the `host` field in your Design Spec** - that is how
+the check finds it. Genomes are fingerprinted and their accession and date recorded, exactly like a
+part, so you can still prove a year from now which sequence a check ran against.
+
+The check itself needs BLAST+ installed and on your `PATH`. Without it the gate warns and is not
+enforced - it never silently passes.
+
+---
+
+## Using it for your own project
+
+**Your library is yours.** You never add parts to the one in this repository; it stays sealed so it
+can go on being the reference you verified.
+
+**1. Make your own library.**
+
+```
+python katana_init.py my-project
+```
+
+An empty manifest with a correct starting fingerprint, a folder for your host genome, and a
+commented Spec template.
+
+**2. Find the part you want.** You rarely have an accession in your head. You have a decision - "I
+need the lactate-responsive repressor from *E. coli*" - and turning that into coordinates is dull,
+mechanical work where mistakes are easy and invisible:
+
+```
+python find_part.py lldR
+```
+
+It checks your own library first and stops if the part is already there. Otherwise it searches NCBI
+and prints each candidate with organism, coordinates, strand and length, followed by the exact
+`add_part.py` command. When several strains match a common gene name it says so and explains why
+that matters - a part from the wrong strain survives all the way to a synthesis order. When only
+one matched, it does not warn you about ambiguity that did not happen.
+
+`--seal` prints the block to paste into a Spec for a part you already hold. `--search-anyway`
+searches NCBI even when you have the part, which is how you find out the public record changed
+since you sealed your copy. `python find_part.py --have` lists the thirty parts already here.
+
+**3. Put it in your library.** A part enters one way: from its primary source, checked, written
+once, fingerprinted, recorded with where it came from.
+
+Already sealed here (`B0015`, `B0032`, `J23116`, `sfGFP`, `P_hrpL`, `p15A`, `cat`, `KanR` and
+more)? Copy it rather than fetching a second, slightly different version:
+
+```
+python add_part.py --library my-project/parts-library --from parts-library/ref_parts --id B0015
+```
+
+The copy re-reads and re-hashes the file rather than trusting the row it came from, and refuses if
+the source library disagrees with itself.
+
+From NCBI:
+
+```
+python add_part.py --library my-project/parts-library --id lacZ --accession NC_000913.3 --range 363231..366305 --strand -
+```
+
+Designed yourself, or saved from a Registry page - point it at a local file:
+
+```
+python add_part.py --library my-project/parts-library --id my_rbs --file my_rbs.fasta --class designed
+```
+
+From the iGEM Registry, which needs no account:
+
+```
+python add_part.py --library my-project/parts-library --registry BBa_B0015
+```
+
+That records the part's **uuid** alongside its sequence - an identity check independent of the
+fingerprint, saying the Registry means *that record*, not merely something with the same bases -
+and the Sequence Ontology term, so `BBa_B0015` arrives noted as `SO:0000141 Terminator`.
+
+Each command prints the exact `seal:` block to paste into your Spec, so you never copy a
+fingerprint by hand. Add `--expect-length` when you know how long the part should be and want a
+wrong accession refused rather than sealed.
+
+---
+
 ## The rule worth stealing
 
 **A part enters the library only from its primary source.**
