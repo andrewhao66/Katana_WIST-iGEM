@@ -12,6 +12,8 @@
 #   determinism   every Design Spec still rebuilds to its recorded sealed hash,
 #                 and a wrong library pin / edited manifest is still refused
 #   minimal       the engine works with ONLY its required dependency installed
+#   kagami        the auditor a stranger is invited to run still works on a bare machine
+#                 (no blastn: an annotated file is still checked by exact match)
 #
 # `minimal` exists because the other two install everything. Optional extras are
 # supposed to degrade to a loud warning, never a crash — and the only way to know
@@ -53,3 +55,16 @@ minimal-deps:
   script:
     - pip install --no-cache-dir "PyYAML==6.0.2"
     - python test_determinism.py
+
+# Kagami is the tool the wiki invites a visitor to download and run, and until this job
+# existed the pipeline said nothing about it: the three jobs above never import it. This
+# image has no blastn, which is the point - it is the machine a stranger actually has. The
+# suite skips the handful of assertions that need the binary to search UNANNOTATED sequence
+# and runs everything else, including the one that matters here: a GenBank whose feature is
+# labelled B0032 while its bases are B0034 is still caught, by exact comparison against the
+# bundled reference set.
+kagami:
+  stage: test
+  script:
+    - cd kagami
+    - python tests.py

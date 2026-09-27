@@ -186,6 +186,78 @@ def _find_orfs(seq, min_aa=50):
     return found
 
 
+_EXACT_MIN = 8
+
+
+def _exact_index():
+    """Map every reference sequence to the ids that carry it, forward strand only.
+
+    Built from the same refs/ set blastn searches, so this path introduces no second
+    catalogue and no new provenance question. Identical re-deposits are common - fifteen
+    references can share one sequence - so the value is a sorted LIST of ids, never one id.
+    """
+    idx = {}
+    for r in kg_refs.by_id().values():
+        seq = kg_refs.normalise(r.get("seq") or "")
+        if len(seq) < _EXACT_MIN:
+            continue
+        idx.setdefault(seq, set()).add(r["id"])
+    return {k: sorted(v) for k, v in idx.items()}
+
+
+def _exact_hits_from_features(record):
+    """Identify annotated features by exact sequence match, without blastn.
+
+    Only for a record that names its own parts. An annotated file is a CLAIM to be
+    checked, which is an exact comparison; an unannotated one is a SEARCH, which is what
+    blastn is for. This path therefore cannot see truncations, point mutations or
+    fragments, and a feature it cannot match exactly is left unidentified rather than
+    called clean.
+
+    Returns hits in the same shape _blast() produces, so everything downstream - block
+    construction, the claim-versus-identity comparison, the verdict - is unchanged.
+    """
+    idx = _exact_index()
+    if not idx:
+        return []
+
+    seq = kg_refs.normalise(record.seq)
+    hits = []
+    for feat in record.features:
+        if feat.kind in ("source",):
+            continue
+        start, end = feat.start, feat.end
+        if not start or not end or end < start or end > len(seq):
+            continue
+        bases = seq[start - 1:end]
+        if len(bases) < _EXACT_MIN:
+            continue
+
+        ids, strand = idx.get(bases), 1
+        if not ids:
+            ids, strand = idx.get(kg_refs.normalise(revcomp(bases))), -1
+        if not ids:
+            continue
+
+        # If the construct's own claim is among the exact matches, report THAT id: the
+        # feature is confirmed, and naming a synonym instead would invent a mismatch.
+        # Otherwise the first id is reported and the rest ride along as alternatives, so
+        # no true name is dropped on the way to a FAIL.
+        claim = (feat.label or "").strip()
+        primary = claim if claim in ids else ids[0]
+        hits.append({
+            "sid": primary,
+            "qstart": start,
+            "qend": end,
+            "strand": strand,
+            "pident": 100.0,
+            "cov": 1.0,
+            "length": len(bases),
+            "alternatives": [i for i in ids if i != primary],
+        })
+    return hits
+
+
 def identify(record, workdir, status=None):
     """Return an ordered list[Block] covering the construct, with claim + identity.
 
@@ -213,8 +285,21 @@ def identify(record, workdir, status=None):
         # produce an alarming "identification did not run" on top of its real findings.
         pass
     elif not _have_blast():
-        _not_run("NCBI BLAST+ was not found on this computer "
-                 "(blastn/makeblastdb are not on PATH)")
+        # No blastn. If the record annotates its own parts we can still check those claims
+        # by exact comparison against the same reference set - which is enough to catch a
+        # label that names one part while the bases are another. It is NOT enough to find a
+        # truncation, a point mutation or a fragment, so `ran` stays False and the reason
+        # says what was and was not done. A file with no features gets the old behaviour.
+        id_hits = _exact_hits_from_features(record)
+        if id_hits:
+            _not_run("NCBI BLAST+ was not found on this computer "
+                     "(blastn/makeblastdb are not on PATH). "
+                     "Annotated features were checked by EXACT match against the bundled "
+                     "reference set instead: a label naming a different part is still caught, "
+                     "but a truncation, a single-base difference or a fragment would not be.")
+        else:
+            _not_run("NCBI BLAST+ was not found on this computer "
+                     "(blastn/makeblastdb are not on PATH)")
     else:
         try:
             db = _write_ref_db(workdir)
