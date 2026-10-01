@@ -278,8 +278,20 @@ def main() -> int:
         accs = [a.strip() for a in args.accession.split(",") if a.strip()]
         key = args.key or (args.name or accs[0])
         stem = args.name or accs[0].replace(".", "_")
+        # No expected-organism string, because a bare accession carries no claim about what
+        # organism it should be — the tool genuinely cannot know. That is defensible, but it
+        # means the header check below does NOT run on this path, and silence about it is not:
+        # an independent tester asked for the cloning vector pUC19 while declaring a yeast host
+        # key, and the file was accepted and registered without a word. Say so, because a reader
+        # who has read the menu path's guarantee will otherwise assume it is protecting them here.
         expect = ""
         check_accessions(accs)
+        print("\n  NOTE: you gave an accession directly, so the organism check is NOT run.")
+        print("        On the menu path a download whose headers do not name the organism you")
+        print("        asked for is refused. Here there is nothing to compare against, so"
+              " whatever")
+        print("        that accession turns out to be is what gets saved and used for the")
+        print("        off-target scan. Check you pasted the right one.")
         print(f"\n  Fetching {len(accs)} record(s) from NCBI ...")
     else:
         key = resolve(args.host) if args.host else ""
