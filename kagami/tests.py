@@ -3,7 +3,6 @@ tests.py — self-contained checks for Kagami. Run: python tests.py
 No pytest dependency; plain asserts, exits non-zero on failure.
 """
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,16 +15,6 @@ import kg_identify
 import kg_audit
 import kg_refs
 import kg_bridge
-
-# Does the blastn BINARY actually exist on this machine?
-#
-# Kagami identifies an ANNOTATED file by exact comparison against the bundled reference set, which
-# needs nothing but Python - that is the path a judge runs, and it is covered below. Identifying
-# UNANNOTATED sequence is a search, and a search needs blastn. The handful of assertions that feed
-# the identifier a record with no usable features therefore cannot run on a bare image, and they
-# are skipped there rather than deleted: when the binary is present they are the only checks that
-# the search path still tiles blocks correctly.
-_HAS_BLAST = bool(shutil.which("blastn") and shutil.which("makeblastdb"))
 
 N = kg_refs.normalise
 # Pin the references these tests identify against. The suite tests KAGAMI, not the catalogue:
@@ -113,11 +102,7 @@ check("EcoRI flagged", any("EcoRI" in f.summary for f in finds if f.category == 
 rec, blocks, finds = _audit_seq(_gb(prom + rbs + term,
                                     [("RBS", "TotallyWrongLabel", len(prom) + 1, len(prom) + len(rbs))]))
 ids = {b.ident_id for b in blocks if b.ident_id}
-if _HAS_BLAST:
-    # J23116 is NOT annotated in this record, so naming it is a search, not a claim check.
-    check("identity from sequence not label", "B0034" in ids and "J23116" in ids)
-else:
-    print("  SKIP  identity from sequence not label (needs blastn: the promoter is unannotated)")
+check("identity from sequence not label", "B0034" in ids and "J23116" in ids)
 
 # 6. bridge never seals from the construct; unmatched -> unresolved
 reqs = kg_bridge.intake_requests(blocks)
@@ -152,15 +137,10 @@ mystery = "ACAAAGGACAAATACTAG"              # 18 bp, unknown to the seed set, en
 tail_term = N(R["B0015"]["seq"])
 rec, blocks, finds = _audit_seq(_gb(orf + mystery + tail_term, []))
 cds_blocks = [b for b in blocks if b.ident_role == "cds"]
-if _HAS_BLAST:
-    # This record carries NO features at all, so every block here comes from the search path.
-    check("CDS block stops at the ORF, not at the end of the gap",
-          len(cds_blocks) == 1 and cds_blocks[0].start == 1 and cds_blocks[0].end == len(orf))
-    check("the unrecognised neighbour becomes its own block",
-          any(b.start == len(orf) + 1 and b.end == len(orf) + len(mystery) for b in blocks))
-else:
-    print("  SKIP  CDS block stops at the ORF, not at the end of the gap (needs blastn: no features)")
-    print("  SKIP  the unrecognised neighbour becomes its own block (needs blastn: no features)")
+check("CDS block stops at the ORF, not at the end of the gap",
+      len(cds_blocks) == 1 and cds_blocks[0].start == 1 and cds_blocks[0].end == len(orf))
+check("the unrecognised neighbour becomes its own block",
+      any(b.start == len(orf) + 1 and b.end == len(orf) + len(mystery) for b in blocks))
 check("absorbed neighbour no longer causes a false internal stop",
       not any(f.status == "FAIL" and f.category == "orf" for f in finds))
 
@@ -479,19 +459,7 @@ check("identify() reports ran=False when BLAST+ is absent", _st_no.get("ran") is
 check("identify() names BLAST+ as the reason", "BLAST" in (_st_no.get("reason") or ""))
 
 _r_yes, _b_yes, _st_yes = _identify_with(_gb_text, True)
-
-# This is the only assertion in this file that needs the blastn BINARY rather than a mock.
-# _identify_with(..., True) forces _have_blast() true and then calls the real identifier, so on a
-# machine without blastn the call raises, identify() correctly records ran=False, and the assertion
-# below would fail for a reason that says nothing about the code. It is SKIPPED when the binary is
-# genuinely absent and KEPT when it is present, because when blastn exists this is the only check
-# that the present-path still sets ran=True. Everything else here runs BLAST-free, which is what
-# lets this file be wired into CI on a bare python image.
-if _HAS_BLAST:
-    check("identify() reports ran=True when BLAST+ is present", _st_yes.get("ran") is True)
-else:
-    print("  SKIP  identify() reports ran=True when BLAST+ is present "
-          "(blastn not on PATH; this assertion needs the real binary)")
+check("identify() reports ran=True when BLAST+ is present", _st_yes.get("ran") is True)
 
 # The audit must raise it, and it must be a FLAG — not a SKIP. SKIP is for a check the user
 # OPTED OUT of (no host chosen); this is a check they asked for and silently did not get.
@@ -552,6 +520,62 @@ else:
           _ok and not any(isinstance(v, str) and len(v) > 40
                           and set(v.upper()) <= set("ACGTN")
                           for p in _spec["parts"] for v in p.values()))
+
+# 20. The install link must not rot (2026-10-01). A WIST student hit the missing-BLAST+ message,
+#      copied the URL out of it, and landed on a 404: the link added on 2026-09-24 pointed at
+#      blast.ncbi.nlm.nih.gov/doc/blast-help/downloadblast.html, which NCBI had retired. The
+#      message is only as useful as the one thing the reader copies out of it, so a dead link
+#      wastes the entire finding. These checks are OFFLINE on purpose — this suite ships with no
+#      dependencies and must pass on a machine with no network — so they guard the shape of the
+#      link and the return of the known-dead one, not its live status.
+_DEAD_URLS = ("doc/blast-help/downloadblast.html",)
+# This file is excluded: it has to name the dead URL in order to test for it, and a scanner
+# that trips over its own pattern reports a failure that is not there.
+_src_files = [f for f in os.listdir(HERE) if f.endswith(".py") and f != "tests.py"]
+_offenders = []
+for _fn in _src_files:
+    try:
+        _txt = open(os.path.join(HERE, _fn), encoding="utf-8").read()
+    except Exception:
+        continue
+    for _d in _DEAD_URLS:
+        if _d in _txt:
+            _offenders.append(f"{_fn}:{_d}")
+check("no source file carries a known-dead BLAST+ URL", not _offenders)
+
+_fix_text = (_idf[0].fix if _idf else "")
+check("the missing-BLAST+ finding still hands the reader a URL", "http" in _fix_text)
+check("that URL is the NCBI installer directory",
+      "ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST" in _fix_text)
+# A student with no terminal cannot act on "add it to PATH" or "re-run". The fix line is the
+# instruction they follow, so it must name a file to click, not a shell concept.
+check("the fix names which installer file to take, not a PATH edit",
+      "win64.exe" in _fix_text and "PATH" not in _fix_text)
+
+# 21. The not-run wording must match what actually happened (2026-10-01). Without blastn an
+#      ANNOTATED record still gets its own claims checked by exact match, so blocks can carry an
+#      identity even though identification did not fully run. The flat summary then printed
+#      "this audit cannot catch a mislabel" directly above a caught mislabel on demo.gb — a
+#      self-contradiction that teaches a reader to stop trusting the tool.
+_ann_summary = (_idf[0].summary if _idf else "")
+_ann_partial = any(b.ident_id for b in _b_no)
+check("the annotated no-BLAST case does identify something by exact match", _ann_partial)
+check("its summary does NOT claim a mislabel cannot be caught",
+      "cannot catch a mislabel" not in _ann_summary)
+check("its summary names the real gap (unlabelled regions)",
+      "unlabelled" in _ann_summary)
+
+# The unannotated case must keep the blunt wording, because there nothing was checked at all.
+_bare = _gb(_ident_seq, [])          # same bases, no features to check claims against
+_r_bare, _b_bare, _st_bare = _identify_with(_bare, False)
+_f_bare = kg_audit.audit(_r_bare, _b_bare, identify_status=_st_bare)
+_idf_bare = [f for f in _f_bare if f.category == "identification"]
+check("an unannotated file identifies nothing without BLAST+",
+      not any(b.ident_id for b in _b_bare))
+check("and it keeps the blunt 'cannot catch a mislabel' wording",
+      bool(_idf_bare) and "cannot catch a mislabel" in _idf_bare[0].summary)
+check("both wordings still hold the verdict at REVIEW",
+      kg_audit.verdict_kind(_f_bare) == "REVIEW" and kg_audit.verdict_kind(_f_no) == "REVIEW")
 
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

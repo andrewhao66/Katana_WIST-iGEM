@@ -165,18 +165,44 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
     # First, because every finding below that depends on naming a part is weaker if it did not,
     # and because the reader must meet this before they meet a verdict.
     _ident_ran = not (identify_status is not None and identify_status.get("ran") is False)
+    # Without blastn, an ANNOTATED record can still have its own claims checked by exact match,
+    # so some blocks may carry an identity even though identification did not fully run. When
+    # that happened, "this audit cannot catch a mislabel" is simply false — and it printed
+    # directly above a caught mislabel on demo.gb, which is the kind of self-contradiction that
+    # teaches a reader to stop trusting the tool. Say which of the two situations this is.
+    _partial = (not _ident_ran) and any(b.ident_id for b in blocks)
     if not _ident_ran:
         findings.append(Finding(
             "identification", FLAG,
+            "Only annotated parts were checked — an unlabelled region could hide a mislabel"
+            if _partial else
             "Part identification did NOT run — this audit cannot catch a mislabel",
             detail=(identify_status.get("reason") or "NCBI BLAST+ unavailable") +
                    ". Everything that does not depend on naming a part still ran (reading frame, "
-                   "restriction sites, GC, repeats, size), and those results stand. But no block "
-                   "was compared against a reference, so a part whose label disagrees with its "
-                   "bases would NOT have been reported. Blocks shown as \"unidentified\" below "
-                   "mean 'not checked', not 'checked and unmatched'.",
-            fix="Install NCBI BLAST+ (https://blast.ncbi.nlm.nih.gov/doc/blast-help/"
-                "downloadblast.html) so blastn and makeblastdb are on PATH, then re-run."))
+                   "restriction sites, GC, repeats, size), and those results stand. " +
+                   ("Annotated features WERE compared against the reference set, so a label "
+                    "naming a different part has been caught. What was not done is the search "
+                    "of the unlabelled sequence between them, and a truncated or single-base-"
+                    "changed part does not match exactly and so reads as unidentified rather "
+                    "than as altered."
+                    if _partial else
+                    "But no block was compared against a reference, so a part whose label "
+                    "disagrees with its bases would NOT have been reported.") +
+                   " Blocks shown as \"unidentified\" below mean 'not checked', not 'checked "
+                   "and unmatched'.",
+            # The URL here is load-bearing: it is the one thing a reader copies out of this
+            # message, so a dead one wastes the whole finding. The previous link was to an NCBI
+            # blast-help doc page that NCBI retired, and it returned 404 — a WIST student copied
+            # it on 2026-10-01 and landed on a missing page. (The exact dead path is not spelled
+            # out here: tests.py scans these sources for it, and a comment quoting it would trip
+            # that scanner forever.) Point at the
+            # installer directory itself, which is a plain file listing rather than a doc page
+            # that can be reorganised, and name the file to pick so the reader does not have to
+            # interpret thirteen entries. Re-check this link if it is ever edited.
+            fix="Install NCBI BLAST+, then open Kagami again. Download it from "
+                "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ — on Windows take "
+                "the file ending win64.exe, on a Mac take the one ending .dmg — and run the "
+                "installer with its default settings."))
     if not blocks:
         findings.append(Finding("invariant", FLAG,
                                 "No blocks identified against the reference seed set",

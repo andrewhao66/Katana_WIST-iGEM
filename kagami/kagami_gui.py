@@ -174,11 +174,31 @@ class App:
 
         self._say("Choose a sequence file and press Audit.\n", "dim")
         if not (shutil.which("blastn") and shutil.which("makeblastdb")):
-            self._say("\nNCBI BLAST+ was not found on this computer.\n", "FAIL")
-            self._say("Kagami will still check the things that do not need references "
-                      "(reading frame, GC, repeats, restriction sites), but it cannot identify "
-                      "which parts are present. Install BLAST+ and reopen to get the full report.\n",
-                      "dim")
+            # NOT the "FAIL" tag. That tag is red — the same red as a construct with an internal
+            # stop codon — and a missing optional add-on rendered in it reads as "the program
+            # broke". A WIST student hit exactly that on 2026-10-01 and reported Kagami as
+            # erroring. Nothing has gone wrong here and nothing the student did caused it, so the
+            # headline is plain bold and the words say so.
+            self._say("\nOne feature needs a free add-on (nothing is broken)\n", "head")
+            self._say("Kagami can check reading frame, GC, repeats, restriction sites and size "
+                      "right now. To also name the parts inside your sequence — which is how it "
+                      "catches a label that disagrees with its DNA — it needs a free program "
+                      "from the NCBI called BLAST+.\n", "dim")
+            self._say("Download: https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/\n",
+                      "fix")
+            # No PATH talk and no "re-run". A student using this window has no terminal open and
+            # may not have one available at all; "re-run" is a terminal instruction wearing a
+            # GUI's clothes. Tell them which file to click and what to do with this window.
+            self._say("On Windows take the file ending win64.exe, on a Mac the one ending .dmg. "
+                      "Run the installer, keep its default settings, then close this window and "
+                      "open Kagami again. You do not need the terminal for any of this.\n", "dim")
+            # The one failure that will otherwise send a student back to a teacher. A program is
+            # only findable after the installer has updated the system's program list, and an
+            # already-running session keeps the old one. Restarting is the fix a student can
+            # actually carry out; "add it to PATH" is not.
+            self._say("If Kagami still shows this message after installing, restart the computer "
+                      "and open Kagami once more — a newly installed program is often not "
+                      "visible to anything that was already running.\n", "dim")
         self.root.after(120, self._drain)
 
     # ---- pickers ---------------------------------------------------------
