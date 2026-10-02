@@ -199,10 +199,11 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
             # installer directory itself, which is a plain file listing rather than a doc page
             # that can be reorganised, and name the file to pick so the reader does not have to
             # interpret thirteen entries. Re-check this link if it is ever edited.
-            fix="Install NCBI BLAST+, then open Kagami again. Download it from "
-                "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ — on Windows take "
-                "the file ending win64.exe, on a Mac take the one ending .dmg — and run the "
-                "installer with its default settings."))
+            fix="Install NCBI BLAST+, then open Kagami again. Open "
+                "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ (a plain list of "
+                "files, ignore all of it but one line), click the file ending -win64.exe on "
+                "Windows or the one ending -universal.dmg on a Mac, then run the downloaded file "
+                "with its default settings."))
     if not blocks:
         findings.append(Finding("invariant", FLAG,
                                 "No blocks identified against the reference seed set",

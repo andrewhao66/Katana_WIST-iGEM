@@ -577,5 +577,35 @@ check("and it keeps the blunt 'cannot catch a mislabel' wording",
 check("both wordings still hold the verdict at REVIEW",
       kg_audit.verdict_kind(_f_bare) == "REVIEW" and kg_audit.verdict_kind(_f_no) == "REVIEW")
 
+# ---- engine tabs: how a run is worded (kg_katana_tabs.classify) ------------------------------
+# The Build tab must never call a run PASS when the engine said a gate did not run. classify is a
+# pure function, so this needs no window; tkinter is imported at module level, so skip if absent.
+print("\nengine tabs: verdict wording")
+try:
+    import kg_katana_tabs as _kt
+except ImportError:
+    _kt = None
+    print("  skip tkinter not available")
+if _kt:
+    _sealed = "── Stage 5: Seal ──\n  SEALED: abc123def4567890\n"
+    _warn = "  WARN Stage-4b: OFF-TARGET SKIPPED - no genome. NOT enforced this run.\n"
+    check("a clean seal reads SEALED / PASS",
+          _kt.classify(0, _sealed, False)[:2] == ("PASS", "SEALED"))
+    check("a seal with a gate that did not run is REVIEW, not PASS",
+          _kt.classify(0, _warn + _sealed, False)[0] == "REVIEW")
+    check("...and the headline says so in words",
+          "gate did not run" in _kt.classify(0, _warn + _sealed, False)[1])
+    check("a dry run with an unenforced gate is REVIEW",
+          _kt.classify(0, _warn, True)[0] == "REVIEW")
+    check("a clean dry run says nothing was written",
+          "nothing was written" in _kt.classify(0, "ok\n", True)[2])
+    check("exit 0 with no SEALED line is not called sealed",
+          _kt.classify(0, "ok\n", False)[0] == "REVIEW")
+    check("a non-zero exit is BLOCKED and quotes the BLOCK line",
+          _kt.classify(1, "x\nBLOCK: spec file not found\n", False)
+          == ("FAIL", "BLOCKED", "BLOCK: spec file not found"))
+    check("a crash with no BLOCK line still fails, quoting the last line",
+          _kt.classify(1, "Traceback\nValueError: boom\n", False)[::2] == ("FAIL", "ValueError: boom"))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)

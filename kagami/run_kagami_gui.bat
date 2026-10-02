@@ -42,20 +42,23 @@ if not defined PY (
     echo   Python 3 was not found on this computer.
   )
   echo(
-  echo   To fix it, copy the line below, paste it into Terminal or PowerShell, press Enter:
+  where winget >nul 2>nul
+  if errorlevel 1 goto :manual
+  echo   Kagami needs Python, which is free. This window can install it for you now.
+  echo   It takes a minute or two, needs no administrator rights, and asks nothing else.
   echo(
-  echo     winget install --id Python.Python.3.12 -e --source winget --accept-package-agreements --accept-source-agreements
+  choice /c YN /m "  Install Python now"
+  if errorlevel 2 goto :manual
   echo(
-  echo   Then CLOSE that window, open a NEW one, and double-click this file again.
-  echo   No administrator rights are needed.
+  winget install --id Python.Python.3.12 -e --source winget --accept-package-agreements --accept-source-agreements
+  REM The new Python is not on THIS window's PATH yet, so look where the installer puts it.
+  call :findnew
+  if not defined PY goto :manual
   echo(
-  echo   If winget is blocked on your computer, install from https://www.python.org/downloads/
-  echo   and tick "Add Python to PATH" during setup.
-  echo(
-  pause
-  goto :eof
+  echo   Python is installed. Starting Kagami...
 )
 
+:run
 start "" "%PY%" kagami_gui.py %*
 goto :eof
 
@@ -74,4 +77,24 @@ REM toolkit) earlier on PATH, "find" is GNU find, which fails on these arguments
 REM the test pass open - accepting the placeholder as if it were Python. This substring trick is
 REM pure cmd: deleting \WindowsApps\ changes the string only if it was actually in it.
 if /i "%CAND:\WindowsApps\=%"=="%CAND%" ( set "PY=%CAND%" ) else ( set "STUB=1" )
+goto :eof
+
+:manual
+echo(
+echo   To install Python yourself, copy the line below, paste it into Terminal or PowerShell,
+echo   press Enter:
+echo(
+echo     winget install --id Python.Python.3.12 -e --source winget --accept-package-agreements --accept-source-agreements
+echo(
+echo   Then CLOSE that window, open a NEW one, and double-click this file again.
+echo   No administrator rights are needed.
+echo(
+echo   If winget is blocked on your computer, install from https://www.python.org/downloads/
+echo   and tick "Add Python to PATH" during setup.
+echo(
+pause
+goto :eof
+
+:findnew
+for %%V in (313 312 311 310 39) do if not defined PY if exist "%LOCALAPPDATA%\Programs\Python\Python%%V\pythonw.exe" set "PY=%LOCALAPPDATA%\Programs\Python\Python%%V\pythonw.exe"
 goto :eof

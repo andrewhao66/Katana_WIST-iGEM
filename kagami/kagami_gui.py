@@ -44,6 +44,7 @@ import kg_identify       # noqa: E402
 import kg_parse          # noqa: E402
 import kg_refs           # noqa: E402
 import kg_rebuild        # noqa: E402
+import kg_katana_tabs    # noqa: E402
 
 # The big verdict is coloured by KIND (PASS / REVIEW / FAIL), never by the display line, which now
 # carries a count ("PASS — 2 notes"). Colour never carries the meaning alone: the word is always
@@ -82,8 +83,12 @@ class App:
         root.title("Kagami — sequence audit")
         root.minsize(760, 560)
 
-        outer = ttk.Frame(root, padding=12)
-        outer.pack(fill="both", expand=True)
+        # The Audit page is the first tab. The engine tabs (Build, Library) are added at the end of
+        # __init__, and only when the forward Katana engine is actually next to Kagami.
+        self.nb = ttk.Notebook(root)
+        self.nb.pack(fill="both", expand=True)
+        outer = ttk.Frame(self.nb, padding=12)
+        self.nb.add(outer, text="Audit")
 
         # ---- input -------------------------------------------------------
         box = ttk.LabelFrame(outer, text="Sequence to check", padding=10)
@@ -189,9 +194,19 @@ class App:
             # No PATH talk and no "re-run". A student using this window has no terminal open and
             # may not have one available at all; "re-run" is a terminal instruction wearing a
             # GUI's clothes. Tell them which file to click and what to do with this window.
-            self._say("On Windows take the file ending win64.exe, on a Mac the one ending .dmg. "
-                      "Run the installer, keep its default settings, then close this window and "
-                      "open Kagami again. You do not need the terminal for any of this.\n", "dim")
+            # NCBI's folder is a bare file listing, which reads as broken to someone expecting a
+            # download page. Say what it will look like and which one line to click. The names are
+            # given by their ENDING, not the version number, so this does not go stale at 2.18; the
+            # leading "-" matters, it rules out the x64-win64.tar.gz archive that also ends win64.
+            self._say("The link opens a plain list of files. That is normal. Ignore all of it "
+                      "except one line, and click that line:\n"
+                      "  Windows: the file ending -win64.exe (not the ones ending .md5, .tar.gz "
+                      "or .rpm)\n"
+                      "  Mac: the file ending -universal.dmg (it works on every Mac)\n"
+                      "Your browser downloads it (130 to 400 MB, so it can take a few minutes). "
+                      "Open the downloaded file, click Next or Continue until it finishes, and "
+                      "keep the default settings. Then close this window and open Kagami again. "
+                      "You do not need the terminal for any of this.\n", "dim")
             # The one failure that will otherwise send a student back to a teacher. A program is
             # only findable after the installer has updated the system's program list, and an
             # already-running session keeps the old one. Restarting is the fix a student can
@@ -199,6 +214,12 @@ class App:
             self._say("If Kagami still shows this message after installing, restart the computer "
                       "and open Kagami once more — a newly installed program is often not "
                       "visible to anything that was already running.\n", "dim")
+
+        # Engine tabs: Build and Library. Skipped (not greyed out) when the engine is absent, since
+        # Kagami on its own is a complete auditor; the Rebuild button already explains the gap.
+        engine = kg_rebuild.find_engine(HERE)
+        if engine:
+            kg_katana_tabs.add_tabs(self.nb, engine)
         self.root.after(120, self._drain)
 
     # ---- pickers ---------------------------------------------------------

@@ -67,7 +67,7 @@ parts:                                  # DISTINCT parts; architecture.order giv
     parent: null
     design_record: { tool: design-rbs, engine: OSTIR, target_TIR: 13485, host: E_coli, version: 2 }
     pin:    "RBS_hrpS@v2@d0e539d22e8f"
-    seal:   { status: SEALED, lib: "designed/acoustic/RBS_hrpS__v2__d0e539d22e8f.gb", seq_sha256_12: d0e539d22e8f, length: 39, note: "v2: NdeI-clean spacer AACATAA, TIR 13441, fold_vs_hrpR=1.13." }
+    seal:   { status: SEALED, lib: "designed/acoustic/RBS_hrpS__v2__d0e539d22e8f.gb", seq_sha256_12: d0e539d22e8f, length: 39, note: "v2: NdeI-clean spacer AACATAA, TIR 13441, fold_vs_hrpR_v2=1.04 (13441/12936). CORRECTED 2026-09-26: previously read fold_vs_hrpR=1.13, which is 13441/11942 against RBS_hrpR *v1* and was correct when written; it went stale when RBS_hrpR v2 (12936) superseded v1, and was never a typo. Annotation only -- sequence, seq_sha256 and the pin are unaffected." }
   - id: HrpS.Ec-opt
     role: cds
     class: designed
