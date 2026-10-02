@@ -3,6 +3,7 @@ tests.py — self-contained checks for Kagami. Run: python tests.py
 No pytest dependency; plain asserts, exits non-zero on failure.
 """
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -33,6 +34,21 @@ if hasattr(kg_refs, "tier"):
 
 R = kg_refs.by_id()
 PASS = FLAG = FAIL = 0
+
+# Is blastn actually installed on THIS machine? A handful of assertions below search sequence
+# rather than check a claim, and searching is what BLAST+ does; they cannot pass without it. The
+# CI image deliberately has no blastn - that is the machine a stranger actually has - so those
+# assertions must skip there rather than fail, while everything that does not need the binary
+# still runs. Guarding on this rather than on an import is the point: the binary is external.
+HAVE_BLAST = bool(shutil.which("blastn") and shutil.which("makeblastdb"))
+
+
+def check_blast(name, cond):
+    """A check that cannot run without blastn installed. Skipped, never failed, when it is absent."""
+    if not HAVE_BLAST:
+        print(f"  skip {name} (needs BLAST+)")
+        return
+    check(name, cond)
 
 
 def _audit_seq(gb_text):
@@ -102,7 +118,7 @@ check("EcoRI flagged", any("EcoRI" in f.summary for f in finds if f.category == 
 rec, blocks, finds = _audit_seq(_gb(prom + rbs + term,
                                     [("RBS", "TotallyWrongLabel", len(prom) + 1, len(prom) + len(rbs))]))
 ids = {b.ident_id for b in blocks if b.ident_id}
-check("identity from sequence not label", "B0034" in ids and "J23116" in ids)
+check_blast("identity from sequence not label", "B0034" in ids and "J23116" in ids)
 
 # 6. bridge never seals from the construct; unmatched -> unresolved
 reqs = kg_bridge.intake_requests(blocks)
@@ -137,10 +153,10 @@ mystery = "ACAAAGGACAAATACTAG"              # 18 bp, unknown to the seed set, en
 tail_term = N(R["B0015"]["seq"])
 rec, blocks, finds = _audit_seq(_gb(orf + mystery + tail_term, []))
 cds_blocks = [b for b in blocks if b.ident_role == "cds"]
-check("CDS block stops at the ORF, not at the end of the gap",
-      len(cds_blocks) == 1 and cds_blocks[0].start == 1 and cds_blocks[0].end == len(orf))
-check("the unrecognised neighbour becomes its own block",
-      any(b.start == len(orf) + 1 and b.end == len(orf) + len(mystery) for b in blocks))
+check_blast("CDS block stops at the ORF, not at the end of the gap",
+            len(cds_blocks) == 1 and cds_blocks[0].start == 1 and cds_blocks[0].end == len(orf))
+check_blast("the unrecognised neighbour becomes its own block",
+            any(b.start == len(orf) + 1 and b.end == len(orf) + len(mystery) for b in blocks))
 check("absorbed neighbour no longer causes a false internal stop",
       not any(f.status == "FAIL" and f.category == "orf" for f in finds))
 
@@ -458,8 +474,11 @@ _r_no, _b_no, _st_no = _identify_with(_gb_text, False)
 check("identify() reports ran=False when BLAST+ is absent", _st_no.get("ran") is False)
 check("identify() names BLAST+ as the reason", "BLAST" in (_st_no.get("reason") or ""))
 
+# Forcing _have_blast True only tells identify() it MAY search; the search then really shells out
+# to blastn. On a machine without the binary that is a lie to the function, so the assertion only
+# means anything where blastn is actually installed.
 _r_yes, _b_yes, _st_yes = _identify_with(_gb_text, True)
-check("identify() reports ran=True when BLAST+ is present", _st_yes.get("ran") is True)
+check_blast("identify() reports ran=True when BLAST+ is present", _st_yes.get("ran") is True)
 
 # The audit must raise it, and it must be a FLAG — not a SKIP. SKIP is for a check the user
 # OPTED OUT of (no host chosen); this is a check they asked for and silently did not get.
