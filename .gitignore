@@ -26,3 +26,5 @@ Thumbs.db
 
 katana.zip
 _site/
+tests/node_modules/
+node_modules/

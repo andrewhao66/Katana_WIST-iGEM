@@ -7,9 +7,10 @@ for and nothing else; the page's own Python block, extracted from index.js verba
 and produces the JSON shape the JavaScript reads; the module list the page loads matches
 the one tests/test_web_importable.py pins; and the deploy manifest covers everything.
 
-What it CANNOT check: that Pyodide loads and renders in a real browser. That needs a
-browser, and it is the one part of this front end a terminal cannot verify. It is stated
-here rather than left for someone to assume.
+What it does not check, because other suites do: that the modules work compiled to
+WebAssembly (tests/test_web_pyodide.py loads them into a real Pyodide) and that the
+rendering is honest (tests/test_web_render.py calls render() under node). What nothing
+here covers is pixels in a real Chrome, and that is stated rather than assumed.
 """
 import json
 import os
@@ -230,7 +231,8 @@ check("deploy stages by default and only publishes with --push",
 shutil.rmtree(_stage_dir, ignore_errors=True)
 
 print()
-print("  NOT CHECKED HERE: that Pyodide loads and renders in a real browser. That needs")
-print("  a browser, and it is the one part of this front end a terminal cannot verify.")
+print("  Covered elsewhere: tests/test_web_pyodide.py runs these same modules in a real")
+print("  Pyodide, and tests/test_web_render.py calls the page's render() for real. What")
+print("  no suite here covers is pixels in Chrome.")
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
