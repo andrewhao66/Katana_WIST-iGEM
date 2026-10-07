@@ -208,7 +208,7 @@ def verify_lock_root(lock_path: Path, lock_root_path: Path, pinned=None):
 
 # ── Stage 1+2: resolve + verify parts ──────────────────────────────────────
 
-def resolve_parts(spec: dict, lock: dict) -> dict:
+def resolve_parts(spec: dict, lock: dict, notes=None) -> dict:
     """Resolve each part in spec.parts from LOCK, verify pins, load sequences.
     Returns {part_id: {seq, length, sha256, lib_path, ...}}"""
     resolved = {}
@@ -250,7 +250,13 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       Copy one we ship:       python3 add_part.py --library <yours> "
                      f"--from parts-library/ref_parts --id {pid}")
         try:
-            lock_row = _lock.resolve(lock, pid, pin=expected_sha12, lib=lib_file)
+            # notes collects disagreements that do not stop the build but must not be
+            # resolved in silence -- a Spec whose seal names a file the library does not
+            # hold, for instance. The fingerprint is the authority, so the part itself is
+            # right; the fact that the Spec and the library disagree is still
+            # information, and rule 4 says to report it rather than quietly pick one.
+            lock_row = _lock.resolve(lock, pid, pin=expected_sha12, lib=lib_file,
+                                     notes=notes)
         except _lock.LockError as exc:
             _block("source", f"BLOCK Stage-1: {exc}\n"
                      f"       This is the check doing its job, not a bug.\n"
@@ -809,7 +815,11 @@ def _run_pipeline_inner(args, res):
     # ── Stage 1+2: resolve and verify parts ─────────────────────────────────
     print("── Stage 1+2: Source + Verify ──")
     lock = load_lock(LOCK_PATH)
-    resolved = resolve_parts(spec, lock)
+    # Disagreements that do not stop the build but must not be resolved in silence.
+    seal_notes = []
+    resolved = resolve_parts(spec, lock, notes=seal_notes)
+    for _n in seal_notes:
+        print(f"  NOTE: {_n}")
     print(f"  All {len(resolved)} distinct parts resolved and verified.")
     res.add(_result.StageResult("source", True,
                                 data={"parts": sorted(resolved)}))

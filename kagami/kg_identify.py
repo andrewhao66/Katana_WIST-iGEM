@@ -216,6 +216,35 @@ def _find_orfs(seq, min_aa=50):
 # later and then disagrees with the live one, which is this project's cardinal sin.
 
 
+def _nested_claim(feat, sub):
+    """Identify `sub` on its own and return what the claim at those coordinates really is.
+
+    Used for a claimed feature that sits wholly inside an identified block. Returning None
+    means the bases could not be identified, which is not the same as the claim being
+    wrong and is left to the audit to phrase.
+    """
+    if len(sub) < 8:
+        return None
+    try:
+        hits = kg_seedmatch.identify_hits(sub, kg_refs.REFERENCE_PARTS)
+    except Exception:
+        return None
+    if not hits:
+        return dict(claim=feat.label or feat.kind, role=feat.kind,
+                    start=feat.start, end=feat.end, strand=feat.strand,
+                    ident_id=None, pident=None, coverage=None, alternatives=[])
+    best = max(hits, key=lambda h: (h["cov"], h["pident"]))
+    # Everything that fits these bases equally well, so a correct claim naming a
+    # re-deposit of the same sequence is not called a mislabel.
+    alts = sorted({h["sid"] for h in hits
+                   if abs(h["pident"] - best["pident"]) < 0.05
+                   and abs(h["cov"] - best["cov"]) < 0.02})
+    return dict(claim=feat.label or feat.kind, role=feat.kind,
+                start=feat.start, end=feat.end, strand=feat.strand,
+                ident_id=best["sid"], pident=round(best["pident"], 1),
+                coverage=round(best["cov"], 2), alternatives=alts)
+
+
 def identify(record, workdir, status=None, deep=False):
     """Return an ordered list[Block] covering the construct, with claim + identity.
 
@@ -321,9 +350,24 @@ def identify(record, workdir, status=None, deep=False):
     for fi, feat in enumerate(record.features):
         if fi in used_features or feat.kind in ("source", "misc"):
             continue
-        # skip a claim-only feature fully covered by an identity block
+        # A feature fully inside an identified block does not become a block of its own:
+        # the blocks table is "what this construct is made of", and two rows covering the
+        # same bases makes it unreadable. But its CLAIM is still a claim, and skipping it
+        # here -- three lines under a comment promising such features are still audited --
+        # meant it vanished. A file annotating B0015 correctly AND its inner eighty bases
+        # as "B0034", a flat falsehood, reported no identity findings at all and a verdict
+        # of PASS.
+        #
+        # Greedy decomposition must not decide WHICH of the submitter's claims get
+        # verified. So the claim is identified on its own coordinates and handed to the
+        # audit through status, which checks it exactly as it checks a block's.
         covered = any(b.start <= feat.start and b.end >= feat.end for b in blocks)
         if covered:
+            if status is not None:
+                sub = seq[feat.start - 1:feat.end]
+                nested = _nested_claim(feat, sub)
+                if nested is not None:
+                    status.setdefault("nested_claims", []).append(nested)
             continue
         b = Block(feat.start, feat.end, feat.strand)
         b.claim_label = feat.label or feat.kind

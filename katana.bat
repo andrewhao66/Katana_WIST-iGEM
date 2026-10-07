@@ -20,21 +20,54 @@ if not exist "ui_menu.py" (
   exit /b 2
 )
 
-REM Windows ships a PLACEHOLDER python.exe that opens the Microsoft Store instead of
-REM running anything. `py` is the real launcher when Python is properly installed.
-where /q py.exe && (py ui_menu.py %* & goto :done)
-where /q python.exe && (python ui_menu.py %* & goto :done)
-echo(
-echo   Python 3 was not found. Install it from https://www.python.org/downloads/
-echo   and tick "Add python.exe to PATH" in the installer, then run this again.
-echo(
-pause
-exit /b 2
+REM Was this double-clicked? When cmd is started by Explorer it is invoked as
+REM   cmd /c ""C:\path\katana.bat" "
+REM so this file's name appears in %cmdcmdline%. Run from a terminal, it does not.
+REM The difference matters at the end: a double-clicked window must be held open or the
+REM report scrolls past and vanishes, and a terminal run must NOT pause or
+REM `katana.bat check my.gb` in a script waits forever for a keypress.
+set KATANA_HOLD=
+echo %cmdcmdline% | find /i "%~nx0" >nul 2>&1 && set KATANA_HOLD=1
 
-:done
-REM Hand the tool's own exit code back. cmd usually preserves ERRORLEVEL across
-REM goto and endlocal, but "usually" is not a guarantee, and the whole verdict
-REM model rests on it: 0 means PASS, 5 means REVIEW, 1 means FAIL. A wrapper that
-REM loses that turns every verdict into success for anything that checks.
+REM Windows ships a PLACEHOLDER python.exe -- an App Execution Alias that opens the
+REM Microsoft Store instead of running anything -- and `where` finds it happily. So each
+REM candidate is PROBED: it has to actually execute Python before it is used. Without
+REM this, a student with the placeholder and no real Python got the Store page, no
+REM explanation, and a script that carried on as though Python had run.
+REM `py` first: it is the real launcher when Python is properly installed.
+set KATANA_PY=
+py -c "import sys" >nul 2>&1 && set KATANA_PY=py
+if not defined KATANA_PY (
+  python3 -c "import sys" >nul 2>&1 && set KATANA_PY=python3
+)
+if not defined KATANA_PY (
+  python -c "import sys" >nul 2>&1 && set KATANA_PY=python
+)
+
+if not defined KATANA_PY (
+  echo(
+  echo   Python 3 was not found on this computer.
+  echo(
+  echo   Install it from  https://www.python.org/downloads/
+  echo   and tick "Add python.exe to PATH" in the installer, then run this again.
+  echo(
+  echo   If a Microsoft Store page opened when you tried `python`, that is a
+  echo   placeholder, not Python. The installer above is the real thing.
+  echo(
+  pause
+  exit /b 2
+)
+
+REM ui_menu.py checks the version itself and says so clearly; a .bat file cannot.
+%KATANA_PY% ui_menu.py %*
+
+REM Hand the tool's own exit code back. The whole verdict model rests on it: 0 means
+REM PASS, 5 means REVIEW, 1 means FAIL. A wrapper that loses it turns every verdict into
+REM success for anything that checks.
 set RC=%ERRORLEVEL%
+if defined KATANA_HOLD (
+  echo(
+  echo   Finished. Press any key to close this window.
+  pause >nul
+)
 endlocal & exit /b %RC%

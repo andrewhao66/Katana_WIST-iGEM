@@ -337,6 +337,44 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                 fix=f"Re-label to {b.ident_id}, or swap in the real {claim} sequence "
                     f"from the Registry via katana-parts-library."))
 
+    # ---- NESTED CLAIMS: a claim inside an identified block is still a claim ----
+    # These do not appear as blocks, because the blocks table is a decomposition and two
+    # rows over the same bases makes it unreadable. They are checked here instead, with
+    # the same rules the block claims get: a synonym is correct, a different sequence is
+    # a mislabel, and an unidentifiable region is a SKIP rather than silence.
+    for nc in ((identify_status or {}).get("nested_claims") or []):
+        claim = str(nc.get("claim") or "").strip()
+        if not claim:
+            continue
+        claim_norm = claim.replace("BBa_", "").upper()
+        loc = f"{nc['start']}-{nc['end']}"
+        ident = (nc.get("ident_id") or "").upper()
+        syns = {str(a).replace("BBa_", "").upper()
+                for a in (nc.get("alternatives") or [])}
+
+        if not ident:
+            findings.append(Finding(
+                "identity-nested", SKIP,
+                f'The region labelled "{claim}" inside a larger part was not identified',
+                loc=loc,
+                detail="Nothing in the reference set matches those bases well enough to "
+                       "compare the label against. Not checked -- which is not the same "
+                       "as checked and fine."))
+            continue
+
+        if claim_norm == ident or ident in claim_norm or claim_norm in syns:
+            continue                      # named correctly, including by a synonym
+
+        findings.append(Finding(
+            "identity-mislabel", FLAG,
+            f'Block labelled "{claim}" is actually {nc["ident_id"]}',
+            loc=loc,
+            detail=(f"This region sits inside a larger identified part, and its own "
+                    f"label was checked separately. Its bases match {nc['ident_id']} at "
+                    f"{nc['pident']}% identity over {int((nc['coverage'] or 0) * 100)}% "
+                    f"of that reference."),
+            fix=f"Re-label it {nc['ident_id']}, or put the real {claim} sequence there."))
+
     # ---- FULL-LENGTH: truncated reference parts ----
     for b in blocks:
         if b.ident_id and b.coverage is not None and b.coverage < 0.95:

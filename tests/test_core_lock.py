@@ -168,5 +168,33 @@ for _fn in sorted(os.listdir(_core_dir)):
 check("core/ imports nothing Pyodide cannot run (%s)" % (", ".join(_bad) or "clean"),
       not _bad)
 
+# ---- a Spec whose seal names a file the library does not hold ----
+# resolve() deliberately treats a non-matching `lib` as a hint rather than a command: the
+# fingerprint is the authority, and refusing would reject a Spec carrying a stale filename
+# beside a correct pin. But not refusing is not the same as not SAYING. Preferring the pin
+# in silence resolves a discrepancy between two things the Spec asserts, and resolving a
+# discrepancy silently destroys the information that there was one. That is rule 4.
+_rows = lock.read(os.path.join(ROOT, "parts-library", "ref_parts", "LOCK.tsv"))[1]
+_notes = []
+_row = lock.resolve(_rows, "B0015", lib="B0015__v1__ffffffffffff.gb", notes=_notes)
+check("a seal filename the library does not hold still resolves by fingerprint",
+      _row and _row.get("outfile", "").startswith("B0015__v1__"),
+      str(_row.get("outfile") if _row else None))
+check("and the disagreement is REPORTED, not resolved in silence", len(_notes) == 1,
+      str(_notes))
+if _notes:
+    check("  and the note names both the Spec's filename and the library's",
+          "ffffffffffff" in _notes[0] and _row["outfile"] in _notes[0], _notes[0])
+    check("  and says the fingerprint was the authority",
+          "fingerprint" in _notes[0], _notes[0])
+
+_notes2 = []
+_row2 = lock.resolve(_rows, "B0015", lib=_row["outfile"], notes=_notes2)
+check("a seal filename that DOES match reports nothing", not _notes2, str(_notes2))
+
+_notes3 = []
+lock.resolve(_rows, "B0015", notes=_notes3)
+check("and no seal filename at all reports nothing", not _notes3, str(_notes3))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

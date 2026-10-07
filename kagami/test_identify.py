@@ -309,7 +309,10 @@ for r in kg_refs.REFERENCE_PARTS:
         long_ref = r
         break
 if long_ref is None:
-    check("a >5 kb reference exists to test against (SKIPPED)", True)
+    # NOT `check(..., True)`. An assertion that cannot fail printed "ok" for something
+    # this suite never checked, which is the exact confusion the project's SKIP tier
+    # exists to prevent -- and a reviewer found it here, in the test file, of all places.
+    print("  ---- no reference over 5 kb in the set: THIS CHECK MEASURED NOTHING")
 else:
     piece = N(long_ref["seq"])[1000:1300]
     hits = kg_seedmatch.identify_hits(piece, kg_refs.REFERENCE_PARTS)

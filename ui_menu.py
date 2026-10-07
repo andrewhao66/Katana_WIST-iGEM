@@ -18,6 +18,21 @@ tests pin rather than something a user discovers.
 import os
 import sys
 
+
+# The floor the README promises, checked in Python rather than in the launchers. A .bat
+# file cannot say this clearly and a shell script would have to parse a version string;
+# here it is three lines. It runs before anything else imports, because a 3.9-only
+# message is useless if the interpreter has already failed on newer syntax elsewhere.
+if sys.version_info < (3, 9):
+    sys.stderr.write(
+        "\n  Katana needs Python 3.9 or newer. This is Python %d.%d.\n\n"
+        "  macOS:          install from https://www.python.org/downloads/\n"
+        "  Windows:        install from https://www.python.org/downloads/ and tick\n"
+        "                  \"Add python.exe to PATH\" in the installer\n"
+        "  Debian/Ubuntu:  sudo apt install python3 python3-tk\n\n"
+        % sys.version_info[:2])
+    raise SystemExit(2)
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 COMMANDS = [

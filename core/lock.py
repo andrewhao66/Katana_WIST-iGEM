@@ -115,7 +115,7 @@ def filename_sha12(outfile):
     return ""
 
 
-def resolve(rows, part_id, pin=None, version=None, lib=None):
+def resolve(rows, part_id, pin=None, version=None, lib=None, notes=None):
     """Select exactly one manifest row for `part_id`. Raises LockError otherwise.
 
     Selection is by what the CALLER asked for -- the Spec's `pin`, an explicit
@@ -142,8 +142,24 @@ def resolve(rows, part_id, pin=None, version=None, lib=None):
         # A lib filename that names nothing is a hint, not a command: the pin below is
         # the authority. Narrowing to nothing here would refuse a Spec whose seal block
         # carries a stale filename alongside a correct fingerprint.
+        #
+        # But not refusing is not the same as not SAYING. Preferring the pin in silence
+        # resolves a discrepancy between two things the Spec asserts, and resolving a
+        # discrepancy silently destroys the information that there was one -- which is
+        # this project's fourth rule. So the disagreement is reported, and the build
+        # continues: a stale filename is a documentation error, not a wrong part, and the
+        # fingerprint is what binds the bases.
         if narrowed:
             candidates = narrowed
+        elif notes is not None:
+            notes.append(
+                "%s: the Spec's seal names the file %s, which this library does not "
+                "hold. The library has %s. The build used the fingerprint, which is the "
+                "authority, so the part itself is right -- but the two disagree and one "
+                "of them is out of date."
+                % (part_id, want,
+                   ", ".join(sorted(os.path.basename(r.get("outfile", ""))
+                                    for r in candidates)) or "no file for this part"))
 
     if version is not None:
         want = str(version)

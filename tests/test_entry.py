@@ -151,8 +151,12 @@ check("the Windows launcher exists", os.path.isfile(_bat))
 _bsrc = open(_bat, "rb").read()
 check("and is CRLF, which cmd.exe needs for GOTO to resume on the right line",
       b"\r\n" in _bsrc)
-check("and prefers the py launcher over the Store placeholder python.exe",
-      b"py.exe" in _bsrc)
+# The property, not the spelling: `py` is tried before bare `python`, because bare
+# python on Windows is the Store placeholder when Python is not properly installed.
+# (This used to grep for the literal "py.exe", which stopped matching when the launcher
+# started probing interpreters instead of asking `where` about them.)
+check("and prefers the py launcher over bare python",
+      b"py -c" in _bsrc and _bsrc.index(b"py -c") < _bsrc.index(b"python -c"))
 
 # No HTML entities. The first error message a Windows user could meet read
 # "Katana&apos;s own files are not in this folder" -- an escaped apostrophe that reached
@@ -188,6 +192,43 @@ _cands = _ssrc.decode().split("for c in ", 1)[1].split(";")[0].split()
 check("the interpreter search tries python3 first and bare python last (%s)"
       % " ".join(_cands), _cands and _cands[0] == "python3" and _cands[-1] == "python",
       " ".join(_cands))
+
+# ---- Windows: the two things that make it unusable there ----
+# NOT VERIFIED ON WINDOWS. Nobody on this team runs it, and this session has no Windows
+# machine, so these pin the SHAPE of the launcher rather than its behaviour. That is
+# weaker than a run, and it is said here rather than left to be assumed.
+#
+# 1. A double-clicked window closed as soon as the report finished. `pause` was only on
+#    the two error paths, so the one case that WORKED was the one you could not read --
+#    and double-clicking is how somebody who is not comfortable with a terminal runs it.
+check("the Windows launcher detects a double-click", b"cmdcmdline" in _bsrc)
+check("and holds the window open only in that case",
+      b"KATANA_HOLD" in _bsrc and b"if defined KATANA_HOLD" in _bsrc)
+check("so a terminal run does not wait for a keypress -- `pause` is inside the guard",
+      _bsrc.count(b"pause") >= 2
+      and _bsrc.index(b"if defined KATANA_HOLD") < _bsrc.rindex(b"pause"))
+
+# 2. Windows ships a PLACEHOLDER python.exe -- an App Execution Alias that opens the
+#    Microsoft Store -- and `where python.exe` finds it. The launcher used `where`, so a
+#    student with the placeholder and no real Python got a Store page, no explanation,
+#    and a script that carried on as though Python had run.
+check("it PROBES each interpreter instead of trusting `where`",
+      b'-c "import sys"' in _bsrc)
+check("and no longer decides on `where` alone", b"where /q" not in _bsrc)
+check("and it tries py first, which is the real launcher when Python is installed",
+      _bsrc.index(b"py -c") < _bsrc.index(b"python3 -c")
+      < _bsrc.index(b"python -c"))
+check("and its not-found message names the Store placeholder, since that is what the "
+      "student will have seen", b"placeholder" in _bsrc)
+
+# The version floor is checked in Python, where it can be said clearly, not in the .bat.
+_menu = open(os.path.join(ROOT, "ui_menu.py"), encoding="utf-8").read()
+check("the front door refuses an interpreter below the promised floor",
+      "sys.version_info < (3, 9)" in _menu)
+check("and its message says which version was found",
+      "This is Python %d.%d" in _menu)
+check("and the guard runs before anything that could need a newer Python",
+      _menu.index("sys.version_info < (3, 9)") < _menu.index("def "))
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
