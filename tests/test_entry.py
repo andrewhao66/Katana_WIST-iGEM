@@ -154,5 +154,40 @@ check("and is CRLF, which cmd.exe needs for GOTO to resume on the right line",
 check("and prefers the py launcher over the Store placeholder python.exe",
       b"py.exe" in _bsrc)
 
+# No HTML entities. The first error message a Windows user could meet read
+# "Katana&apos;s own files are not in this folder" -- an escaped apostrophe that reached
+# a batch file, where there is no HTML to escape it for. It is the kind of thing nobody
+# reads twice, and nobody on this team runs Windows to notice.
+_entities = [e for e in (b"&apos;", b"&quot;", b"&amp;", b"&lt;", b"&gt;", b"&#")
+             if e in _bsrc]
+check("the Windows launcher has no HTML entities in its text (%s)"
+      % (b", ".join(_entities).decode() or "none"), not _entities)
+
+# It must hand the tool's exit code back. The whole verdict model rests on it: 0 means
+# PASS, 5 means REVIEW, 1 means FAIL. cmd usually preserves ERRORLEVEL across goto and
+# endlocal, but a wrapper that loses it turns every verdict into success for anything
+# that checks -- and "usually" is not something to rest a verdict on.
+check("it hands the tool's exit code back explicitly",
+      b"exit /b %RC%" in _bsrc and b"set RC=%ERRORLEVEL%" in _bsrc)
+
+# ASCII only. A batch file is read in the console's code page, and a stray non-ASCII byte
+# in cp950 or cp1252 renders as mojibake in the one message somebody needs to read.
+_high = sorted({x for x in _bsrc if x > 127})
+check("and it is pure ASCII, so no code page can mangle it (%s)"
+      % (", ".join(hex(x) for x in _high) or "ascii"), not _high)
+
+# The POSIX launcher, for the same reasons.
+_ssrc = open(os.path.join(ROOT, "katana"), "rb").read()
+check("the POSIX launcher has no HTML entities",
+      not any(e in _ssrc for e in (b"&apos;", b"&quot;", b"&#")))
+check("it execs rather than forking, so the exit code is the tool's own",
+      b"exec " in _ssrc)
+# `python` is Python 2 on an older Mac and a Store placeholder on Windows, so bare
+# `python` must be the LAST candidate, never the first.
+_cands = _ssrc.decode().split("for c in ", 1)[1].split(";")[0].split()
+check("the interpreter search tries python3 first and bare python last (%s)"
+      % " ".join(_cands), _cands and _cands[0] == "python3" and _cands[-1] == "python",
+      " ".join(_cands))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

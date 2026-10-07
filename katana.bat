@@ -12,7 +12,7 @@ cd /d "%~dp0"
 
 if not exist "ui_menu.py" (
   echo(
-  echo   Katana^&apos;s own files are not in this folder, so it cannot run.
+  echo   Katana's own files are not in this folder, so it cannot run.
   echo   You probably ran this from INSIDE the downloaded .zip. Right-click the .zip,
   echo   choose "Extract All...", then run this from the extracted folder.
   echo(
@@ -32,4 +32,9 @@ pause
 exit /b 2
 
 :done
-endlocal
+REM Hand the tool's own exit code back. cmd usually preserves ERRORLEVEL across
+REM goto and endlocal, but "usually" is not a guarantee, and the whole verdict
+REM model rests on it: 0 means PASS, 5 means REVIEW, 1 means FAIL. A wrapper that
+REM loses that turns every verdict into success for anything that checks.
+set RC=%ERRORLEVEL%
+endlocal & exit /b %RC%
