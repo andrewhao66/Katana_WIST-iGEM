@@ -61,7 +61,19 @@ def lock_path(library):
 
 
 def read_lock(lock):
-    """LOCK.tsv -> list of dict rows. Returns [] if unreadable."""
+    """LOCK.tsv -> list of dict rows, for the Library tab's table.
+
+    Through core.lock when the bundle is present. Still returns [] rather than raising
+    when a manifest is unreadable: a tab that cannot list parts must not take the window
+    down with it.
+    """
+    import kg_refs
+    _h, core_lock, _p = kg_refs._import_core()
+    if core_lock is not None:
+        try:
+            return core_lock.read(lock)[1]
+        except Exception:
+            return []
     try:
         with open(lock, encoding="utf-8", newline="") as fh:
             return list(csv.DictReader(fh, delimiter="\t"))
