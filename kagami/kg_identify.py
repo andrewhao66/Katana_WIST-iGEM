@@ -41,7 +41,9 @@ class Block:
         self.ident_role = None
         self.ident_variant = None
         self.ident_registry = None
-        self.pident = None            # % identity of the match
+        self.pident = None            # % identity over the reference's own span
+        self.core_pident = None       # % identity over the best-supported segment only
+        self.ref_in_query = None      # did the whole reference fit inside this sequence?
         self.coverage = None          # matched_len / reference_len
         self.ref_len = None
         self.matched_len = None
@@ -274,6 +276,10 @@ def identify(record, workdir, status=None, deep=False):
         b.ident_id = r["id"]; b.ident_name = r["name"]; b.ident_role = r["role"]
         b.ident_variant = r.get("variant"); b.ident_registry = r.get("registry")
         b.pident = round(h["pident"], 1); b.coverage = round(h["cov"], 2)
+        # Both identity measures, and whether the reference even fit, so the audit
+        # can describe a shortfall instead of guessing at its cause.
+        b.core_pident = h.get("core_pident")
+        b.ref_in_query = h.get("ref_in_query")
         b.alternatives = h.get("alternatives") or []
         b.ref_len = len(kg_refs.normalise(r["seq"])); b.matched_len = h["length"]
         b.provenance = r.get("provenance")

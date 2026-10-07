@@ -310,13 +310,37 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
     # ---- FULL-LENGTH: truncated reference parts ----
     for b in blocks:
         if b.ident_id and b.coverage is not None and b.coverage < 0.95:
-            findings.append(Finding(
-                "truncation", FLAG,
-                f"{b.ident_id} appears truncated ({int(b.coverage*100)}% of reference)",
-                loc=f"{b.start}-{b.end}",
-                detail=f"Only {b.matched_len}/{b.ref_len} bp of {b.ident_id} present.",
-                fix="Confirm the full-length part; a truncated promoter/terminator/RBS "
-                    "often loses function."))
+            # "Only N/M bp present" was a claim about the construct, and for a part whose
+            # END has diverged it is a false one: those bases ARE present, they just
+            # differ. Sequence alone cannot tell a substitution from a replacement -- they
+            # are the same observation -- so this reports the shape of the disagreement
+            # and names both readings instead of picking one.
+            short = (b.ref_len - b.matched_len) if (b.ref_len and b.matched_len) else None
+            present = getattr(b, "ref_in_query", None)
+            if present and short:
+                head = (f"{b.ident_id}: {b.matched_len} of its {b.ref_len} bases match "
+                        f"here, {short} do not")
+                detail = (f"The other {short} base(s) are present in your sequence but "
+                          f"differ from the reference. Over the whole part that is "
+                          f"{b.pident}% identity; over the matching stretch alone it is "
+                          f"{getattr(b, 'core_pident', None)}%. Two things look like "
+                          f"this: the part was truncated and something else sits in the "
+                          f"gap, or the part is full length with a diverged end -- a "
+                          f"cloning scar or a primer tail does exactly that. Which one "
+                          f"it is cannot be told from the sequence.")
+                fix = (f"Compare those {short} bases against the Registry entry for "
+                       f"{b.ident_id}. If they are a scar you added deliberately, say so "
+                       f"in the design; if not, the part is not the one you think it is.")
+            else:
+                head = (f"{b.ident_id} is incomplete here "
+                        f"({int(b.coverage * 100)}% of the reference)")
+                detail = (f"Only {b.matched_len} of {b.ref_len} bases of {b.ident_id} "
+                          f"are in this sequence at all -- the rest runs past its end.")
+                fix = ("Confirm the full-length part; a truncated "
+                       "promoter/terminator/RBS often loses function.")
+            findings.append(Finding("truncation", FLAG, head,
+                                    loc=f"{b.start}-{b.end}",
+                                    detail=detail, fix=fix))
 
     # ---- ORF CLEAN: CDS-like blocks translate without internal stop ----
     for b in blocks:

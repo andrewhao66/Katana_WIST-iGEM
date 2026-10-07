@@ -198,12 +198,26 @@ def _extend(sid, q, s, d, L, n, strand):
         return None
     matches = sum(1 for a, b in zip(qseg[best_lo:best_hi], sseg[best_lo:best_hi])
                   if a == b)
-    pident = 100.0 * matches / span
-    if pident < MIN_IDENT:
+    core_pident = 100.0 * matches / span
+    # Acceptance is judged on the clipped segment, so a genuinely truncated part still
+    # clears the floor and gets reported with low coverage instead of disappearing --
+    # which is what happened before Phase 1, at 77 of 129 bases.
+    if core_pident < MIN_IDENT:
         return None
-    return dict(sid=sid, pident=round(pident, 1), length=span,
-                qstart=cs + best_lo + 1, qend=cs + best_hi, strand=strand,
-                cov=span / float(L), bit=2.0 * matches)
+
+    # Identity over the reference's own span, as far as the query holds it. This is the
+    # number a person reads, so it is the one that must not hide a diverged end.
+    window = len(qseg)
+    window_matches = sum(1 for a, b in zip(qseg, sseg) if a == b)
+    pident = 100.0 * window_matches / window if window else 0.0
+    # Did the WHOLE reference fit inside the query? It decides what a shortfall means.
+    # Bases that are present but different is a diverged end; bases that run off the end
+    # of the sequence are genuinely absent. Reporting "only 121/129 present" for the
+    # first is a false statement about the construct.
+    return dict(sid=sid, pident=round(pident, 1), core_pident=round(core_pident, 1),
+                length=span, qstart=cs + best_lo + 1, qend=cs + best_hi, strand=strand,
+                cov=span / float(L), bit=2.0 * matches,
+                ref_in_query=(ws >= 0 and we <= n))
 
 
 def identify_hits(query, refs, k=K):
