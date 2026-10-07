@@ -187,76 +187,12 @@ def _find_orfs(seq, min_aa=50):
     return found
 
 
-_EXACT_MIN = 8
-
-
-def _exact_index():
-    """Map every reference sequence to the ids that carry it, forward strand only.
-
-    Built from the same refs/ set blastn searches, so this path introduces no second
-    catalogue and no new provenance question. Identical re-deposits are common - fifteen
-    references can share one sequence - so the value is a sorted LIST of ids, never one id.
-    """
-    idx = {}
-    for r in kg_refs.by_id().values():
-        seq = kg_refs.normalise(r.get("seq") or "")
-        if len(seq) < _EXACT_MIN:
-            continue
-        idx.setdefault(seq, set()).add(r["id"])
-    return {k: sorted(v) for k, v in idx.items()}
-
-
-def _exact_hits_from_features(record):
-    """Identify annotated features by exact sequence match, without blastn.
-
-    Only for a record that names its own parts. An annotated file is a CLAIM to be
-    checked, which is an exact comparison; an unannotated one is a SEARCH, which is what
-    blastn is for. This path therefore cannot see truncations, point mutations or
-    fragments, and a feature it cannot match exactly is left unidentified rather than
-    called clean.
-
-    Returns hits in the same shape _blast() produces, so everything downstream - block
-    construction, the claim-versus-identity comparison, the verdict - is unchanged.
-    """
-    idx = _exact_index()
-    if not idx:
-        return []
-
-    seq = kg_refs.normalise(record.seq)
-    hits = []
-    for feat in record.features:
-        if feat.kind in ("source",):
-            continue
-        start, end = feat.start, feat.end
-        if not start or not end or end < start or end > len(seq):
-            continue
-        bases = seq[start - 1:end]
-        if len(bases) < _EXACT_MIN:
-            continue
-
-        ids, strand = idx.get(bases), 1
-        if not ids:
-            ids, strand = idx.get(kg_refs.normalise(revcomp(bases))), -1
-        if not ids:
-            continue
-
-        # If the construct's own claim is among the exact matches, report THAT id: the
-        # feature is confirmed, and naming a synonym instead would invent a mismatch.
-        # Otherwise the first id is reported and the rest ride along as alternatives, so
-        # no true name is dropped on the way to a FAIL.
-        claim = (feat.label or "").strip()
-        primary = claim if claim in ids else ids[0]
-        hits.append({
-            "sid": primary,
-            "qstart": start,
-            "qend": end,
-            "strand": strand,
-            "pident": 100.0,
-            "cov": 1.0,
-            "length": len(bases),
-            "alternatives": [i for i in ids if i != primary],
-        })
-    return hits
+# The no-blastn fallback that used to live here -- _exact_index() and
+# _exact_hits_from_features(), which checked an annotated record's own claims by exact
+# comparison -- was deleted on 2026-10-07. kg_seedmatch supersedes it: it searches
+# unannotated sequence as well as it verifies annotated claims, and needs no binary. An
+# unreachable ALTERNATIVE identification path is exactly the thing that gets rewired
+# later and then disagrees with the live one, which is this project's cardinal sin.
 
 
 def identify(record, workdir, status=None, deep=False):
@@ -289,23 +225,28 @@ def identify(record, workdir, status=None, deep=False):
         # Not a failure: there is nothing to identify. Left as ran=True so a 4 bp input does not
         # produce an alarming "identification did not run" on top of its real findings.
         pass
-    elif deep and _have_blast():
-        # Opt-in deep search. blastn does gapped local alignment, so it can find
-        # distant homologs the seeded path cannot. It is NOT the default.
-        try:
-            db = _write_ref_db(workdir)
-            id_hits = _tile(_blast(seq, db, workdir))
-        except Exception as exc:
-            id_hits = _tile(kg_seedmatch.identify_hits(seq, kg_refs.REFERENCE_PARTS))
-            _deep_failed("--deep was requested but BLAST+ failed to run (%s: %s); the "
-                         "built-in identifier ran instead."
-                         % (exc.__class__.__name__, exc))
     else:
-        if deep and not _have_blast():
-            _deep_failed("--deep was requested but NCBI BLAST+ is not installed "
-                         "(blastn/makeblastdb are not on PATH); the built-in "
-                         "identifier ran instead.")
-        id_hits = _tile(kg_seedmatch.identify_hits(seq, kg_refs.REFERENCE_PARTS))
+        # The built-in identifier ALWAYS runs. --deep adds blastn's gapped alignment on
+        # top; it does not replace this. An earlier version ran only blastn when --deep
+        # succeeded, which made a built-in hit that blastn did not report DISAPPEAR when
+        # a user asked for a deeper search -- the opposite of what the flag promises.
+        raw = kg_seedmatch.identify_hits(seq, kg_refs.REFERENCE_PARTS)
+        if deep:
+            if not _have_blast():
+                _deep_failed("--deep was requested but NCBI BLAST+ is not installed "
+                             "(blastn/makeblastdb are not on PATH). The built-in "
+                             "identifier ran, so the audit is complete for everything "
+                             "except distant homologs.")
+            else:
+                try:
+                    db = _write_ref_db(workdir)
+                    raw = raw + _blast(seq, db, workdir)
+                except Exception as exc:
+                    _deep_failed("--deep was requested but BLAST+ failed to run "
+                                 "(%s: %s). The built-in identifier ran, so the audit "
+                                 "is complete for everything except distant homologs."
+                                 % (exc.__class__.__name__, exc))
+        id_hits = _tile(raw)
 
     refs = kg_refs.by_id()
 

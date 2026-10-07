@@ -54,15 +54,23 @@ command in this README is written to be run in a terminal rather than clicked.
 
 ## Install, run, reproduce
 
-**Install.** Python 3.9 or newer. The engine core needs exactly one thing, a YAML parser:
+**Install.** Python 3.9 or newer. **There is nothing to install beyond that** — no `pip`, no
+NCBI BLAST+. The YAML parser the engine needs is vendored in `_vendor/yaml/`, and part
+identification is pure Python.
+
+That was not always true, and the change is the reason this section is three lines instead of
+thirty. The old instructions opened with `pip install -r requirements.txt`, which pulled fifteen
+packages including an OWL reasoner, and then asked for a 400 MB BLAST+ download and a `PATH` edit.
+Every member of this team who tried to follow it failed.
+
+Two **optional** extras remain, and the engine runs without them — it just tells you, loudly, which
+checks it therefore did not run, because a silent skip would be worse than no check at all. Install
+them in a virtual environment if you want the codon-quality gate and SBOL export:
 
 ```
-pip install -r requirements.txt
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements-optional.txt
 ```
-
-That file also pins two optional extras — codon tables for the dry-lab gate, and `sbol3` for SBOL
-export. The engine runs fine without either; it just tells you, loudly, which checks it therefore
-did **not** run. A silent skip would be worse than no check at all.
 
 **Build a construct.** A Design Spec plus the sealed library produce an annotated GenBank file, an
 order-ready FASTA, and a sequence hash:

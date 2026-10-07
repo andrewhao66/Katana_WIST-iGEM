@@ -532,6 +532,40 @@ check("a raising --deep still cannot produce a PASS",
       kg_audit.verdict_kind(kg_audit.audit(_rec_br, _b_br,
                                            identify_status=_st_br)) == "REVIEW")
 
+# --deep must ADD sensitivity, never REPLACE the built-in identifier. The CLI help says
+# "the built-in identifier runs either way; this only adds sensitivity", and that has to
+# be true: a built-in hit that blastn does not report must not disappear when a user asks
+# for a deeper search.
+_st_both = {}
+with tempfile.TemporaryDirectory() as _wd:
+    _p = os.path.join(_wd, "c.gb")
+    open(_p, "w", encoding="utf-8").write(_gb_text)
+    _rec_b = kg_parse.parse(_p)
+    _real_hb = kg_identify._have_blast
+    _real_blast = kg_identify._blast
+    # blastn present, but it finds nothing. The built-in results must survive.
+    kg_identify._have_blast = lambda: True
+    kg_identify._blast = lambda seq, db, wd: []
+    try:
+        _b_both = kg_identify.identify(_rec_b, _wd, status=_st_both, deep=True)
+    finally:
+        kg_identify._have_blast = _real_hb
+        kg_identify._blast = _real_blast
+check("--deep adds to the built-in identifier rather than replacing it",
+      any(b.ident_id for b in _b_both))
+
+# A requested deep search that could not run must reach the FINDINGS, not just stdout.
+# Printing it to the terminal leaves the JSON and HTML reports and the exit code saying
+# PASS for a run whose requested check did not happen -- which is the exact failure this
+# project refuses, reintroduced on the new opt-in path.
+_f_deep = kg_audit.audit(_rec_d, _b_deep, identify_status=_st_deep)
+_deepf = [f for f in _f_deep if f.category == "deep-search"]
+check("an unfulfilled --deep raises a finding, not just a printed line", len(_deepf) == 1)
+check("that finding names BLAST+ as what was unavailable",
+      bool(_deepf) and "BLAST" in (_deepf[0].detail or ""))
+check("an unfulfilled --deep does not hold the verdict at PASS",
+      kg_audit.verdict_kind(_f_deep) != "PASS")
+
 # Callers that pass no status keep the old signature and must not be penalised.
 _f_legacy = kg_audit.audit(_r_yes, _b_yes)
 check("audit without identify_status raises no identification finding",

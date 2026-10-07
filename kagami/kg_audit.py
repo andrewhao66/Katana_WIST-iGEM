@@ -185,6 +185,25 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                    "mean 'not checked', not 'checked and unmatched'.",
             fix="Re-run the audit. Identification needs nothing installed, so this should not "
                 "happen; if it persists, report it."))
+    # A requested --deep search that could not run is a check the user ASKED FOR and did
+    # not get. Printing it to the terminal is not enough: the JSON and HTML reports and
+    # the exit code would still read PASS, which is "we did not check" reading as
+    # "checked and fine" -- the exact failure this project refuses, on the new opt-in
+    # path. FLAG, matching the Registry precedent, not SKIP: SKIP is for a check the
+    # user opted OUT of.
+    _deep_failed = (identify_status or {}).get("deep_failed")
+    if _deep_failed:
+        findings.append(Finding(
+            "deep-search", FLAG,
+            "The deeper homology search you asked for did not run",
+            detail=_deep_failed + " Everything the built-in identifier covers was still "
+                                  "checked, and those results stand; what was not done "
+                                  "is the gapped search for homologs below about 90% "
+                                  "identity.",
+            fix="Install NCBI BLAST+ if you need distant-homology search, or drop "
+                "--deep: the audit is complete without it for parts that match a "
+                "reference closely."))
+
     if not blocks:
         findings.append(Finding("invariant", FLAG,
                                 "No blocks identified against the reference seed set",
@@ -193,7 +212,8 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                                         "Sequence parsed but nothing matched the public "
                                         "seed parts. Expand the reference set (fetch from "
                                         "the Registry) or supply an annotated GenBank."),
-                                fix=("Install NCBI BLAST+ and re-run." if not _ident_ran else
+                                fix=("Re-run the audit; identification needs nothing installed."
+                                     if not _ident_ran else
                                      "Add the relevant parts to the seed set via "
                                      "katana-parts-library intake, then re-run.")))
 

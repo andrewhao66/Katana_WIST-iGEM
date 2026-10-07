@@ -164,6 +164,62 @@ _ids = set(x["sid"] for x in
 check("every short-path match is the reference or its reverse complement",
       _ids and all(N(R[i]["seq"]) in (B0034, _b34_rc) for i in _ids if i in R))
 
+# ---- an INTERNAL truncation must report the truncation, not 100% coverage ----
+# Found by the Codex review pass, 2026-10-07, and it is the project's cardinal failure:
+# a truncated part reported as full-length. Every truncation case above puts the
+# truncated part at the END of the query, where the alignment window clamps against the
+# query boundary and coverage comes out right by accident. Put unrelated sequence after
+# it instead and the window spans the reference's full length regardless, so coverage
+# read 1.000 for a part that was 80% present -- and the truncation FLAG (cov < 0.95)
+# never fired.
+_unrelated = "CGTACGTACGTTGCAACGATCAGTTGCAACGTACGATCAGT" * 2      # 82 bp, not a part
+for _keep in (103, 77):
+    _want_cov = _keep / 129.0
+    hits = kg_seedmatch.identify_hits(LEAD + B0015[:_keep] + _unrelated,
+                                      kg_refs.REFERENCE_PARTS)
+    h = best(hits, "B0015")
+    check("an internal B0015 truncated to %d bp is still found" % _keep, h is not None)
+    check("an internal truncation to %d bp reports cov %.2f, not 1.0" % (_keep, _want_cov),
+          h is not None and abs(h["cov"] - _want_cov) < 0.06,
+          "got %.3f" % h["cov"] if h else "no hit")
+    check("an internal truncation to %d bp is below the 0.95 truncation threshold" % _keep,
+          h is not None and h["cov"] < 0.95,
+          "got %.3f" % h["cov"] if h else "no hit")
+
+# The guard on the above: clipping unrelated flanks must NOT clip a genuinely
+# full-length part whose bases are merely mutated. If it did, every mutated part would
+# be reported as truncated -- the opposite error, and just as wrong.
+for _part, _seq, _nmut in (("B0015", B0015, 3), ("sfGFP", SFGFP, 40)):
+    hits = kg_seedmatch.identify_hits(
+        LEAD + mutate(_seq, _nmut, seed=_nmut) + _unrelated, kg_refs.REFERENCE_PARTS)
+    h = best(hits, _part)
+    check("a mutated full-length %s followed by unrelated sequence keeps cov 1.0 (+%d mut)"
+          % (_part, _nmut),
+          h is not None and abs(h["cov"] - 1.0) < 0.02,
+          "got %.3f" % h["cov"] if h else "no hit")
+
+# ---- a part used TWICE must be identified twice ----
+# architecture.order explicitly permits a repeated id, and pAP-Logic's own version
+# history is about a repeated RBS that formed a 43 bp direct repeat. Reporting the
+# second occurrence as an unidentified block means a mislabel on it is never checked:
+# the identity comparison skips blocks with no ident_id.
+_pad2 = "CGTACGTTGCAACGATCAGTTGCAACGTACGATCAGT" * 3          # 111 bp, not a part
+hits = kg_seedmatch.identify_hits(B0015 + _pad2 + B0015, kg_refs.REFERENCE_PARTS)
+# Forward strand, full coverage only. B0015 is a terminator, so its hairpin is partly
+# self-complementary and the reverse strand yields a partial match at a third position;
+# counting that would let this assertion pass for the wrong reason.
+_b15 = sorted((h for h in hits
+               if h["sid"] == "B0015" and h["strand"] == 1 and h["cov"] > 0.95),
+              key=lambda h: h["qstart"])
+check("a reference used twice is reported twice on the forward strand", len(_b15) == 2,
+      "reported %d full forward hit(s): %s"
+      % (len(_b15), ", ".join("%d-%d cov %.2f" % (h["qstart"], h["qend"], h["cov"])
+                              for h in hits if h["sid"] == "B0015")))
+check("the two occurrences are at the two expected positions",
+      len(_b15) == 2 and _b15[0]["qstart"] == 1
+      and _b15[1]["qstart"] == len(B0015) + len(_pad2) + 1,
+      ", ".join(str(h["qstart"]) for h in _b15))
+
 # ---- Review Focus 1: a query shorter than the seed length ----
 for tiny in ("", "A", "ATGC", "ATGCATGCA"):
     try:

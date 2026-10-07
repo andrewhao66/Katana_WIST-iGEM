@@ -62,7 +62,12 @@ determinism:
 no-deps:
   stage: test
   script:
-    - python3 -c "import yaml" && exit 1 || echo "confirmed: no PyYAML installed"
+    # Block scalar: the inline form became a YAML MAPPING, because an unquoted
+    # scalar containing ": " is a key/value pair no matter what shell quotes are
+    # inside it -- GitLab then refuses the pipeline, so the job that proves this
+    # phase's whole claim would never have run.
+    - |
+      python3 -c "import yaml" && exit 1 || echo "confirmed - no PyYAML installed"
     - python3 verify.py
     - python3 test_determinism.py
     - cd kagami && python3 tests.py && python3 test_identify.py
