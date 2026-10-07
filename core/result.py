@@ -120,6 +120,16 @@ class BuildResult(object):
     @property
     def verdict(self):
         """PASS / REVIEW / FAIL, by the same rules the reverse auditor uses."""
+        # A result with no stages has not been computed. It used to read PASS with exit
+        # code 0 -- "we ran nothing" presented as "we ran everything and it was fine",
+        # which is the exact confusion the SKIP tier exists to prevent, one level up.
+        #
+        # Nothing reaches it today: build() records a stage for a refusal and for a
+        # SystemExit before anything else can happen. But a default that is safe only
+        # because no caller has hit it yet is a defect waiting for one, and the cost of
+        # closing it is this comment and two lines.
+        if not self.stages:
+            return FAIL
         for f in self.findings:
             if f.status == FAIL:
                 return FAIL

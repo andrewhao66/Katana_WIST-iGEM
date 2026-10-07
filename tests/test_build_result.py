@@ -28,9 +28,16 @@ check("the five status tokens exist and are the audit's own",
       (R.PASS, R.FLAG, R.FAIL, R.NOTE, R.SKIP) ==
       ("PASS", "FLAG", "FAIL", "NOTE", "SKIP"))
 
+# This assertion used to read `check("an empty result is PASS", ...)`. It recorded what
+# the code did and gave no reason, which is the shape of a test that pins an
+# implementation rather than a guarantee -- and the behaviour it pinned was wrong: a
+# result with no stages has not been computed, and reading it as a pass is "we ran
+# nothing" presented as "we ran everything and it was fine". Changed deliberately, with
+# the reasoning at the foot of this file where the replacement assertions live.
 _r = R.BuildResult()
-check("an empty result is PASS", _r.verdict == "PASS", _r.verdict)
-check("and exits 0", _r.exit_code == 0, str(_r.exit_code))
+check("an empty result is not a pass, because nothing was computed",
+      _r.verdict == "FAIL", _r.verdict)
+check("and its exit code says so too", _r.exit_code == 1, str(_r.exit_code))
 
 _r.add(R.StageResult("validate", True, [R.Finding("gc", R.PASS, "GC 51.2%")]))
 check("a PASS finding keeps the verdict PASS", _r.verdict == "PASS", _r.verdict)
@@ -141,6 +148,31 @@ _r6 = katana_build.build(os.path.join(_d, "nope.spec.yaml"), dry_run=True)
 check("a missing spec file returns a result too", isinstance(_r6, R.BuildResult))
 check("and it reads FAIL", _r6.verdict == "FAIL", _r6.verdict)
 shutil.rmtree(_d, ignore_errors=True)
+
+# ---- a result with no stages has not been computed, and must not read as a pass ----
+# Found by exhaustively testing the verdict model: every combination of up to three
+# findings behaves correctly, and 156 of them were checked. The one hole was the empty
+# case -- a BuildResult with no stages at all reported verdict PASS and exit code 0.
+#
+# Nothing reaches it today: build() records a stage for a refusal and for a SystemExit
+# before anything else. But "we ran nothing" reading as "we ran everything and it was
+# fine" is the exact confusion the SKIP tier exists to prevent, one level up, and a
+# default that is only safe because no caller has hit it yet is a defect waiting for one.
+_empty = R.BuildResult()
+check("a BuildResult with no stages does not report PASS", _empty.verdict != "PASS",
+      _empty.verdict)
+check("and its exit code is non-zero", _empty.exit_code != 0, _empty.exit_code)
+check("and it says so, rather than naming a stage that refused",
+      _empty.blocked_stage() is None, _empty.blocked_stage())
+check("and to_dict() carries the same verdict the object reports",
+      _empty.to_dict().get("verdict") == _empty.verdict,
+      "%s vs %s" % (_empty.to_dict().get("verdict"), _empty.verdict))
+
+# One clean stage is enough to be a pass: this must not become a trap for a short build.
+_one = R.BuildResult()
+_one.add(R.StageResult("library", True, []))
+check("but a single clean stage DOES report PASS", _one.verdict == "PASS", _one.verdict)
+check("and exits 0", _one.exit_code == 0, _one.exit_code)
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
