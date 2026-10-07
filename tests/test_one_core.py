@@ -13,6 +13,7 @@ construct.
 A convention cannot be enforced by a comment. This enforces it.
 """
 import os
+import re
 import subprocess
 import sys
 
@@ -112,6 +113,55 @@ for f in sorted(os.listdir(os.path.join(ROOT, "core"))):
                 _up.append("%s imports %s" % (f, mod))
 check("core/ imports none of its own consumers (%s)" % (", ".join(_up) or "clean"),
       not _up)
+
+# ---- every test suite in the repository is actually run by CI ----
+# test_seal_gaps.py -- the adversarial self-test that reproduces eight sealing exploits
+# and asserts each is blocked -- was in the repository and in NO CI job. A test nobody
+# runs is a test that rots, and this one had: its default library path was ".", so a bare
+# run failed at its first assertion and crashed on a missing LOCK.tsv. That is confusing
+# enough to explain why it was quietly left out, which is how an adversarial self-test
+# stops being run at all.
+#
+# So the coverage is checked rather than remembered. A suite added later and forgotten
+# here fails this assertion instead of going unnoticed for months.
+sys.path.append(os.path.join(ROOT, "_vendor"))
+import yaml as _yaml
+
+_ci = _yaml.safe_load(open(os.path.join(ROOT, ".gitlab-ci.yml"), encoding="utf-8"))
+_cwd = ""
+_run = set()
+for _job, _cfg in _ci.items():
+    if not isinstance(_cfg, dict) or "script" not in _cfg:
+        continue
+    _cwd = ""
+    for _line in _cfg["script"]:
+        _s = str(_line).strip()
+        if _s.startswith("cd "):
+            _cwd = _s[3:].strip().strip("/") + "/"
+            continue
+        for _m in re.findall(r"python3?\s+(\S+\.py)", _s):
+            _run.add(_cwd + _m if not _m.startswith(("tests/", "kagami/")) else _m)
+
+_suites = set()
+for _f in sorted(os.listdir(os.path.join(ROOT, "tests"))):
+    if _f.startswith("test_") and _f.endswith(".py"):
+        _suites.add("tests/" + _f)
+for _f in ("verify.py", "test_determinism.py", "test_seal_gaps.py"):
+    if os.path.isfile(os.path.join(ROOT, _f)):
+        _suites.add(_f)
+for _f in ("tests.py", "test_identify.py"):
+    if os.path.isfile(os.path.join(ROOT, "kagami", _f)):
+        _suites.add("kagami/" + _f)
+
+_unrun = sorted(_suites - _run)
+check("every test suite in the repository is run by CI (%s)"
+      % (", ".join(_unrun) or "all %d of them" % len(_suites)), not _unrun)
+
+_phantom = sorted(n for n in _run
+                  if n.endswith(".py") and n.startswith(("tests/", "kagami/"))
+                  and not os.path.isfile(os.path.join(ROOT, n)))
+check("and CI names no suite that does not exist (%s)"
+      % (", ".join(_phantom) or "none"), not _phantom)
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

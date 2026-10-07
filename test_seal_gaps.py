@@ -4,7 +4,13 @@ Runs each case on a throwaway copy of the (already migrated) library dir."""
 import os, sys, shutil, subprocess, tempfile
 import katana_lock as K
 
-BASE=sys.argv[1] if len(sys.argv)>1 else "."
+# Default to the library this bundle ships, so `python3 test_seal_gaps.py` just works.
+# It used to default to ".", which made a bare run fail at its first assertion and then
+# crash on a missing LOCK.tsv -- confusing enough that the suite was quietly left out of
+# CI, which is how an adversarial self-test stops being run at all.
+_DEFAULT = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                        "parts-library", "ref_parts")
+BASE = sys.argv[1] if len(sys.argv) > 1 else _DEFAULT
 BASE=os.path.abspath(BASE)
 VER=os.path.join(os.path.dirname(os.path.abspath(__file__)),"verify_library_v2.py")
 

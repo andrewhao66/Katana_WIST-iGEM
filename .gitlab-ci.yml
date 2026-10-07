@@ -71,6 +71,7 @@ determinism:
     # Oracle (every Spec -> its recorded hash), repeatability, wrong-pin refused,
     # tampered-manifest refused, and the SBOL export round-tripping to the same hash.
     - python3 test_determinism.py
+    - python3 test_seal_gaps.py
 
 # NOTHING installed. This is the claim that matters now, and it is the whole point of
 # phase 1: the engine must build a construct and the auditor must audit a sequence on a
