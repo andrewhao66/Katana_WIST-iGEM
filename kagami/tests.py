@@ -117,9 +117,29 @@ spec_txt = kg_bridge.draft_spec(rec, blocks, finds)
 check("draft spec holds no raw sequence",
       "ATGGCT" not in spec_txt and N(R["B0034"]["seq"]) not in spec_txt)
 
-# 7. empty input -> FAIL invariant
-rec, blocks, finds = _audit_seq("LOCUS t 0 bp DNA linear SYN\nORIGIN\n//\n")
-check("empty sequence -> FAIL", any(f.status == "FAIL" for f in finds))
+# 7. empty input is REFUSED AT PARSE, and the auditor's invariant still holds behind it.
+#    As of 2026-10-07 an empty or unreadable file never reaches the auditor: kg_parse
+#    raises NotASequenceFile, because handing an empty Record to an auditor produced a
+#    formal report headed "sequence audit . 0 bp . linear" with "[FAIL] Empty sequence" --
+#    a claim about DNA that was never read, which sent a person to debug their sequence
+#    when what they needed to debug was which file they picked.
+#    Both halves are pinned. The parse refusal is what a person meets; the auditor's
+#    invariant is defence in depth for any caller that builds a Record directly.
+_empty_gb = "LOCUS t 0 bp DNA linear SYN\nORIGIN\n//\n"
+_refused = None
+try:
+    with tempfile.TemporaryDirectory() as _wd:
+        _ep = os.path.join(_wd, "c.gb")
+        open(_ep, "w").write(_empty_gb)
+        kg_parse.parse(_ep)
+except kg_parse.NotASequenceFile as _exc:
+    _refused = str(_exc)
+check("empty sequence is refused at parse, not audited as 0 bp", _refused is not None)
+check("and the refusal says the file has no bases, not that the sequence is empty",
+      _refused and "No DNA was found" in _refused)
+_bare = kg_parse.Record("t", "", "linear", [])
+check("the auditor's empty-sequence invariant still holds for a Record built directly",
+      any(f.status == "FAIL" for f in kg_audit.audit(_bare, [])))
 
 # 8. tandem stop codons are terminal, not internal.
 #    From Caleb's submission, 2026-09-15: sfGFP ends ...CTG TAC AAA TGA TGA. Two stops in a row is

@@ -68,7 +68,16 @@ def run(args):
         if not added:
             print("  (nothing loaded - auditing against the shipped reference set only)")
 
-    record = kg_parse.parse(args.input)
+    try:
+        record = kg_parse.parse(args.input)
+    except kg_parse.NotASequenceFile as exc:
+        # Not an audit result, so it must not be printed as one. A header reading
+        # "sequence audit . 0 bp . linear" over a photo is a claim about DNA that was
+        # never read, and "Empty sequence" sends a person to debug their sequence when
+        # what they need to debug is which file they picked.
+        print("Katana could not read that file.\n", file=sys.stderr)
+        print("  " + str(exc), file=sys.stderr)
+        return 2
     _joined = getattr(record, "assembled_from", None)
     if _joined:
         print(f"input    : {len(_joined)} DNA fragment(s) found and joined IN FILE ORDER "
@@ -435,7 +444,16 @@ def run_rebuild(args):
               "       run this from the unzipped bundle, or pass --engine <dir>.", file=sys.stderr)
         return 2
 
-    record = kg_parse.parse(args.input)
+    try:
+        record = kg_parse.parse(args.input)
+    except kg_parse.NotASequenceFile as exc:
+        # Not an audit result, so it must not be printed as one. A header reading
+        # "sequence audit . 0 bp . linear" over a photo is a claim about DNA that was
+        # never read, and "Empty sequence" sends a person to debug their sequence when
+        # what they need to debug is which file they picked.
+        print("Katana could not read that file.\n", file=sys.stderr)
+        print("  " + str(exc), file=sys.stderr)
+        return 2
     if getattr(args, "library", None):
         added, replaced, problems = kg_refs.add_library(args.library)
         print(f"library  : {added} of your part(s) loaded for identification"

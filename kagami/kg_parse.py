@@ -118,6 +118,84 @@ def _xlsx_cells(path):
     return cells
 
 
+class NotASequenceFile(Exception):
+    """This file could not be read as DNA, and saying so is the only honest answer.
+
+    Returning an empty Record instead is the fourth rule's failure in miniature: it
+    resolves "I cannot read this" into "this is empty", silently, and destroys the
+    information that there was a discrepancy. A report headed
+
+        KAGAMI . sequence audit  .  photo  .  0 bp  . linear
+          [FAIL] invariant    Empty sequence
+
+    is a claim that this is a sequence, that it is 0 bp, and that it is linear. None of
+    that was read from the file. And it sends a student to debug their sequence when what
+    they need to debug is which file they picked -- which, for somebody dropping a photo
+    or a Word document, is the whole of the problem.
+    """
+
+
+# Magic numbers of the files people actually drop by mistake. Only used to say WHICH kind
+# of wrong file it was, which is the difference between a person fixing it and giving up.
+_MAGIC = (
+    (b"\x89PNG\r\n\x1a\n", "a PNG image"),
+    (b"%PDF", "a PDF"),
+    (b"\xff\xd8\xff", "a JPEG image"),
+    (b"GIF8", "a GIF image"),
+    (b"\x1f\x8b", "a gzip archive"),
+    (b"BM", "a BMP image"),
+    (b"\x00\x01\x00\x00", "a font"),
+    (b"RIFF", "a media file"),
+    (b"\xd0\xcf\x11\xe0", "an old Office document (.doc/.xls)"),
+)
+
+_ZIP_KINDS = {".docx": "a Word document", ".pptx": "a PowerPoint file",
+              ".odt": "an OpenDocument file", ".zip": "a zip archive",
+              ".jar": "a Java archive", ".epub": "an EPUB book"}
+
+
+def _diagnose(path):
+    """Why this file holds no DNA, in words that name the next thing to do."""
+    try:
+        size = os.path.getsize(path)
+    except OSError:
+        size = -1
+    if size == 0:
+        return ("%s is empty -- it has no bytes in it at all. Check you saved the file, "
+                "and that you are pointing at the one you meant."
+                % os.path.basename(str(path)))
+
+    try:
+        with open(path, "rb") as f:
+            head = f.read(4096)
+    except OSError:
+        head = b""
+
+    what = None
+    for magic, name in _MAGIC:
+        if head.startswith(magic):
+            what = name
+            break
+    if what is None and head.startswith(b"PK\x03\x04"):
+        # .xlsx and .xlsm are zips too, and they are genuinely supported -- so a zip is
+        # only the wrong kind of file once the spreadsheet reader has found nothing.
+        ext = os.path.splitext(str(path).lower())[1]
+        what = _ZIP_KINDS.get(ext, "a zip-based document (.docx, .pptx or similar)")
+    if what is None and b"\x00" in head:
+        what = "a binary file of some kind"
+
+    base = os.path.basename(str(path))
+    if what:
+        return ("%s is %s, not a sequence file. Katana reads FASTA (.fasta, .fa), "
+                "GenBank (.gb, .gbk), a spreadsheet (.xlsx, .csv), or a plain text file "
+                "with the bases in it. If your sequence is inside this document, export "
+                "or copy it out first." % (base, what))
+    return ("No DNA was found in %s. Katana reads FASTA (.fasta, .fa), GenBank "
+            "(.gb, .gbk), a spreadsheet (.xlsx, .csv), or a plain text file with the "
+            "bases in it -- A, C, G and T. If the bases are in there, check they are not "
+            "split across a column the reader did not look in." % base)
+
+
 def _parse_loose(path, text=None) -> Record:
     """Last resort: find the DNA in whatever this file is."""
     if str(path).lower().endswith((".xlsx", ".xlsm")):
@@ -143,6 +221,17 @@ def parse(path: str) -> Record:
     Dispatch is on CONTENT, not on the extension, because a file called .txt is as likely to hold
     GenBank as anything else - and a beginner's ".csv" is often a sequence pasted into one cell.
     """
+    record = _parse_any(path)
+    # A record with no bases is not a sequence; it is a file we could not read. Say which,
+    # rather than handing an empty Record to an auditor that will dutifully report
+    # "0 bp, linear" and "Empty sequence" as though those were findings about DNA.
+    if not record.seq:
+        raise NotASequenceFile(_diagnose(path))
+    return record
+
+
+def _parse_any(path):
+    """Dispatch to a reader. May return a record with no bases; parse() judges that."""
     if str(path).lower().endswith((".xlsx", ".xlsm")):
         return _parse_loose(path)                      # binary; do not read it as text
     with open(path, "r", encoding="utf-8", errors="replace") as f:

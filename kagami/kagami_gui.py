@@ -297,7 +297,14 @@ class App:
             if lib:
                 added, replaced, problems = kg_refs.add_library(lib)
                 self.q.put(("lib", (added, replaced, problems)))
-            record = kg_parse.parse(path)
+            try:
+                record = kg_parse.parse(path)
+            except kg_parse.NotASequenceFile as exc:
+                # Goes through the same queue as every other failure: the worker thread
+                # must not touch a Tk object. The message already names the file and the
+                # next thing to do, so it is passed through whole rather than summarised.
+                self.q.put(("error", "Katana could not read that file.\n\n" + str(exc)))
+                return
             joined = getattr(record, "assembled_from", None)
             if joined:
                 self.q.put(("joined", joined))

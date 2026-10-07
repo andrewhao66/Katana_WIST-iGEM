@@ -249,7 +249,13 @@ json.dumps(dict(
 `);
   } catch (err) {
     progress(0);
-    say("The audit could not run: " + err.message);
+    // A file that is not a sequence is not an engine failure, and must not read like
+    // one. kg_parse raises NotASequenceFile with a message that already names the file
+    // and the next thing to do, so pass it through whole.
+    const m = String(err && err.message || err);
+    const notSeq = m.match(/NotASequenceFile:\s*([\s\S]*?)(?:\n\n|$)/);
+    say(notSeq ? "Katana could not read that file.\n\n" + notSeq[1].trim()
+               : "The audit could not run: " + m);
     return;
   }
 
