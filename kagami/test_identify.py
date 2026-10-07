@@ -142,5 +142,27 @@ check("B0015 on the reverse strand is marked strand -1",
 check("B0015 on the reverse strand is 100%/100%",
       h is not None and h["pident"] == 100.0 and abs(h["cov"] - 1.0) < 0.005)
 
+# ---- Review Focus 4: GenBank ORIGIN blocks are lowercase ----
+# Two vehicles on purpose: a 12 bp reference exercises the exact path and a 129 bp one
+# exercises the seeded path, and case handling lives in different code in each.
+_lc_short = set(x["sid"] for x in kg_seedmatch.identify_hits(
+    ("TTTT" + B0034 + "TTTT").lower(), kg_refs.REFERENCE_PARTS))
+check("a lowercase query is identified on the exact path",
+      "B0034" in _lc_short or any(N(R[i]["seq"]) == B0034 for i in _lc_short if i in R))
+
+hits = kg_seedmatch.identify_hits((LEAD + B0015).lower(), kg_refs.REFERENCE_PARTS)
+h = best(hits, "B0015")
+check("a lowercase query is identified on the seeded path",
+      h is not None and h["pident"] == 100.0 and abs(h["cov"] - 1.0) < 0.005)
+
+# A short reference matches when its sequence OR its reverse complement occurs, so the
+# set of ids reported for a 12 bp RBS is the identical re-deposits plus their revcomp
+# twins. Naming one of them silently would claim more certainty than the evidence has.
+_b34_rc = kg_seedmatch.revcomp(B0034)
+_ids = set(x["sid"] for x in
+           kg_seedmatch.identify_hits("TTTT" + B0034 + "TTTT", kg_refs.REFERENCE_PARTS))
+check("every short-path match is the reference or its reverse complement",
+      _ids and all(N(R[i]["seq"]) in (B0034, _b34_rc) for i in _ids if i in R))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
