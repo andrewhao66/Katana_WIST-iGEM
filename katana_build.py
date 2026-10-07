@@ -595,7 +595,14 @@ def write_genbank(insert_seq: str, features: list, spec: dict, seal_hash: str,
     lines.append("//")
     lines.append("")  # trailing newline
 
-    output_path.write_text("\n".join(lines), encoding="utf-8", newline="\n")
+    # Path.write_text() gained `newline` in Python 3.10. The README promises 3.9,
+    # and macOS ships 3.9 with the Xcode command line tools -- where a REAL build
+    # (not a dry run) raised TypeError here, at the sealing step. open() takes
+    # newline on every version, and the LF is not optional: a sealed artifact
+    # whose line endings depend on the platform has a different file_sha256 on
+    # Windows, so the library would report itself as tampered.
+    with open(output_path, "w", encoding="utf-8", newline="\n") as _fh:
+        _fh.write("\n".join(lines))
 
 def write_fasta(insert_seq: str, spec: dict, seal_hash: str, output_path: Path):
     """Write order-ready FASTA for the insert."""
@@ -603,7 +610,14 @@ def write_fasta(insert_seq: str, spec: dict, seal_hash: str, output_path: Path):
     version = spec.get("version", 1)
     header = f">{sid}_insert_v{version} {len(insert_seq)}bp seq_sha256={seal_hash[:16]}"
     wrapped = "\n".join(insert_seq[i:i+80] for i in range(0, len(insert_seq), 80))
-    output_path.write_text(f"{header}\n{wrapped}\n", encoding="utf-8", newline="\n")
+    # Path.write_text() gained `newline` in Python 3.10. The README promises 3.9,
+    # and macOS ships 3.9 with the Xcode command line tools -- where a REAL build
+    # (not a dry run) raised TypeError here, at the sealing step. open() takes
+    # newline on every version, and the LF is not optional: a sealed artifact
+    # whose line endings depend on the platform has a different file_sha256 on
+    # Windows, so the library would report itself as tampered.
+    with open(output_path, "w", encoding="utf-8", newline="\n") as _fh:
+        _fh.write(f"{header}\n{wrapped}\n")
 
 def gibson_split(insert_seq: str, features: list, spec: dict, overlap: int = 30) -> list:
     """Split an insert into Gibson fragments with overlaps.
@@ -696,7 +710,57 @@ def _parse_args(argv=None):
     return args
 
 
+def _resolve_library(requested):
+    """Resolve a library directory to (lib, lock_path, lock_root_path).
+
+    `--library` is read from sys.argv at import time, because LOCK_PATH is a module
+    global resolved then. That works for the command line and not at all for
+    build(library=...), which arrives long after import -- so the Python argument was
+    silently IGNORED. build(spec, library="/definitely/nonexistent") assembled 1,013
+    bases from the shipped library, reported PASS, and recorded the nonexistent path as
+    the library it had used.
+
+    The GUI passes the user's chosen parts library through exactly that argument. So
+    somebody could select their own library, be handed a construct built from a different
+    one, and be told it passed. That is a name and a fact drifting apart at the point this
+    whole project exists to protect.
+    """
+    r = Path(requested).expanduser().resolve()
+    lib = next((c for c in (r / "ref_parts", r / "parts-library" / "ref_parts", r)
+                if (c / "LOCK.tsv").exists()), None)
+    if lib is None:
+        raise _Refused("library",
+                       "library %s has no ref_parts/LOCK.tsv, so there is nothing to "
+                       "build from.\n"
+                       "       Create one with:  python3 katana_init.py %s"
+                       % (requested, requested))
+    return lib, lib / "LOCK.tsv", lib / "LOCK.root"
+
+
 def _run_pipeline(args, res):
+    """Resolve the library for THIS build, then run the pipeline against it.
+
+    The globals are rebound rather than threaded through, because resolve_parts and the
+    GenBank reader read LIB directly and threading it would touch every stage for no
+    behavioural gain. They are restored in `finally`, so one process can run builds
+    against different libraries in sequence -- not concurrently, which nothing does: the
+    GUI runs one build at a time in one worker thread, and Pyodide is single-threaded.
+    """
+    global LIB, LOCK_PATH, LOCK_ROOT_PATH
+    _saved = (LIB, LOCK_PATH, LOCK_ROOT_PATH)
+    requested = getattr(args, "library", None)
+    if requested:
+        LIB, LOCK_PATH, LOCK_ROOT_PATH = _resolve_library(requested)
+    # Record the library actually used, not the one asked for. The two were allowed to
+    # differ, and the recorded value was the fiction.
+    res.library = str(LIB)
+    try:
+        return _run_pipeline_inner(args, res)
+    finally:
+        LIB, LOCK_PATH, LOCK_ROOT_PATH = _saved
+
+
+def _run_pipeline_inner(args, res):
     """The pipeline. Prints as it goes, and records what happened into `res`.
 
     ONE implementation. main() renders the printing; build() captures it and reads the
@@ -926,7 +990,14 @@ def _run_pipeline(args, res):
             fpath = outdir / f"{fname}_TWIST.fasta"
             header = f">{fname} {len(fseq)}bp pos {fstart}-{fend} overlap={args.gibson_overlap}"
             wrapped = "\n".join(fseq[i:i+80] for i in range(0, len(fseq), 80))
-            fpath.write_text(f"{header}\n{wrapped}\n", encoding="utf-8", newline="\n")
+            # Path.write_text() gained `newline` in Python 3.10. The README promises 3.9,
+            # and macOS ships 3.9 with the Xcode command line tools -- where a REAL build
+            # (not a dry run) raised TypeError here, at the sealing step. open() takes
+            # newline on every version, and the LF is not optional: a sealed artifact
+            # whose line endings depend on the platform has a different file_sha256 on
+            # Windows, so the library would report itself as tampered.
+            with open(fpath, "w", encoding="utf-8", newline="\n") as _fh:
+                _fh.write(f"{header}\n{wrapped}\n")
             print(f"  {fname}: {len(fseq)} bp → {fpath}")
 
             order_records.append({
@@ -1057,4 +1128,8 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    main()
+    # sys.exit, not a bare call. main() RETURNS the exit code -- that is the whole
+    # point of it returning one -- and discarding it made `--json` exit 0 while its
+    # own JSON said verdict FAIL, exit_code 1. --json is the machine-readable path,
+    # so a LOCK.root mismatch reported success to every script that checked.
+    sys.exit(main())

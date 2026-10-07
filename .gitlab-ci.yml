@@ -48,6 +48,7 @@ verify:
     - python3 tests/test_engine_gates.py
     - python3 tests/test_one_core.py
     - python3 tests/test_build_result.py
+    - python3 tests/test_build_api.py
     - python3 tests/test_entry.py
     - python3 tests/test_readme.py
     - python3 tests/test_web_importable.py
@@ -87,6 +88,7 @@ no-deps:
     - python3 tests/test_engine_gates.py
     - python3 tests/test_one_core.py
     - python3 tests/test_build_result.py
+    - python3 tests/test_build_api.py
     - python3 tests/test_entry.py
     - python3 tests/test_readme.py
     - python3 tests/test_web_importable.py
