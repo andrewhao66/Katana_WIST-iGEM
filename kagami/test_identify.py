@@ -164,5 +164,55 @@ _ids = set(x["sid"] for x in
 check("every short-path match is the reference or its reverse complement",
       _ids and all(N(R[i]["seq"]) in (B0034, _b34_rc) for i in _ids if i in R))
 
+# ---- Review Focus 1: a query shorter than the seed length ----
+for tiny in ("", "A", "ATGC", "ATGCATGCA"):
+    try:
+        got = kg_seedmatch.identify_hits(tiny, kg_refs.REFERENCE_PARTS)
+        ok = got == []
+        why = "returned %d hits" % len(got)
+    except Exception as exc:
+        ok = False
+        why = "raised %s: %s" % (type(exc).__name__, exc)
+    check("a %d bp query returns no hits without raising" % len(tiny), ok, why)
+
+# ---- Review Focus 2: N and IUPAC ambiguity codes ----
+# add_part.py admits ACGTNRYKMSWBDHV, so a sealed part can legitimately carry them.
+# An ambiguity code must reduce identity, never crash and never be scored as a match.
+ambiguous = B0015[:40] + "N" + B0015[41:]
+try:
+    hits = kg_seedmatch.identify_hits(LEAD + ambiguous, kg_refs.REFERENCE_PARTS)
+    h = best(hits, "B0015")
+    ok = h is not None and h["pident"] < 100.0 and abs(h["cov"] - 1.0) < 0.02
+    why = ("id %.1f cov %.3f" % (h["pident"], h["cov"])) if h else "no hit"
+except Exception as exc:
+    ok, why = False, "raised %s: %s" % (type(exc).__name__, exc)
+check("one N reduces identity but not coverage, without raising", ok, why)
+
+try:
+    kg_seedmatch.identify_hits("ACGTRYKMSWBDHVN" * 4, kg_refs.REFERENCE_PARTS)
+    ok, why = True, ""
+except Exception as exc:
+    ok, why = False, "raised %s: %s" % (type(exc).__name__, exc)
+check("an all-IUPAC query does not raise", ok, why)
+
+# ---- Review Focus 3: a reference much longer than the query ----
+# bARGSer_operon is 16,474 bp. A 300 bp query containing part of it must report the
+# small fraction of the reference it covers, never 1.0.
+long_ref = None
+for r in kg_refs.REFERENCE_PARTS:
+    if len(N(r["seq"])) > 5000:
+        long_ref = r
+        break
+if long_ref is None:
+    check("a >5 kb reference exists to test against (SKIPPED)", True)
+else:
+    piece = N(long_ref["seq"])[1000:1300]
+    hits = kg_seedmatch.identify_hits(piece, kg_refs.REFERENCE_PARTS)
+    h = best(hits, long_ref["id"])
+    check("a 300 bp slice of a long reference is found", h is not None)
+    check("its coverage is the covered fraction, not 1.0",
+          h is not None and h["cov"] < 0.1,
+          "got %.3f" % h["cov"] if h else "no hit")
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
