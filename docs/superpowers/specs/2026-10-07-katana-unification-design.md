@@ -639,3 +639,22 @@ Stated rather than left to be assumed:
   none delivered a report. The gate ran as self-review plus Codex; the third pass is
   missing, and that is a gap against §10's three-pass requirement rather than a pass that
   found nothing.
+
+### 13.6 Published
+
+The web part is published to `https://github.com/andrewhao66/iGEM-katana-webtest.git`,
+branch `main`, commit `2ef71d8`. Nineteen files: `index.html`, `index.js`, the engine's own
+`core/` and audit-half `kagami/` modules, the reference set and the bundled genome, plus
+`.nojekyll` and a generated README.
+
+Verified from the remote afterwards rather than trusting the push: `parts-library/` and
+`specs/` are not there, and deploy's own `.katana-staging` marker is excluded by the
+`.gitignore` it writes.
+
+**The iGEM GitLab was not touched.** `origin/main` is still `8a8dfe4`, this branch's
+merge-base, and every commit on `unify` is unpushed. `web_deploy.py` now refuses
+`gitlab.igem.org` structurally — including the `git@` form, mixed case, and a URL carrying
+credentials — rather than promising it in a docstring.
+
+One manual step remains, which no script can do: **Settings → Pages → Deploy from a branch
+→ main** in that repository, to make GitHub Pages serve it.
