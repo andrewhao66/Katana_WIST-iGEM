@@ -100,3 +100,93 @@ def verify_root(lock_path, root_path, pinned=None):
 
     return True, ("self-consistent (%s...); NO EXTERNAL PIN -- pass --expect-root to bind"
                   % disk_root[:16])
+
+
+def filename_sha12(outfile):
+    """The 12-hex fingerprint embedded in a sealed part's filename.
+
+    Sealed parts are named <id>__v<N>__<first 12 of seq_sha256>.<ext>. Returns "" when
+    the name does not carry one, so a caller can tell "absent" from "wrong".
+    """
+    base = os.path.basename(str(outfile)).rsplit(".", 1)[0]
+    tail = base.split("__")[-1]
+    if len(tail) == 12 and all(c in "0123456789abcdefABCDEF" for c in tail):
+        return tail.lower()
+    return ""
+
+
+def resolve(rows, part_id, pin=None, version=None, lib=None):
+    """Select exactly one manifest row for `part_id`. Raises LockError otherwise.
+
+    Selection is by what the CALLER asked for -- the Spec's `pin`, an explicit
+    `version`, or the seal's `lib` filename -- and NOT by the highest version number.
+    That difference is CODE-REPORT finding B. resolve_parts() used to take max(version)
+    and compare the pin against only that row, so a Spec pinned to an older sealed
+    version was refused even though its row and its file were both still present, with
+    a message advising the reader to update the Spec to match the library. Following
+    that advice changes the construct, and it contradicts the append-only history the
+    architecture promises: HrpS.Ec-opt has v1, v2 and v3 sealed, and pAP-Logic v5 pinned
+    v2.
+
+    A bare id with no pin resolves only when the library holds exactly one version of
+    it. Guessing is what this function exists not to do.
+    """
+    candidates = [r for r in rows if r.get("id") == part_id]
+    if not candidates:
+        raise LockError("no sealed row for '%s'" % part_id)
+
+    if lib is not None:
+        want = os.path.basename(str(lib))
+        narrowed = [r for r in candidates
+                    if os.path.basename(r.get("outfile", "")) == want]
+        # A lib filename that names nothing is a hint, not a command: the pin below is
+        # the authority. Narrowing to nothing here would refuse a Spec whose seal block
+        # carries a stale filename alongside a correct fingerprint.
+        if narrowed:
+            candidates = narrowed
+
+    if version is not None:
+        want = str(version)
+        candidates = [r for r in candidates if str(r.get("version", "")) == want]
+        if not candidates:
+            raise LockError("no sealed row for %s v%s" % (part_id, want))
+
+    if pin:
+        pin = pin.lower()
+        matched = [r for r in candidates
+                   if r.get("seq_sha256", "").lower().startswith(pin)]
+        if not matched:
+            held = ", ".join("v%s=%s" % (r.get("version", "?"),
+                                         r.get("seq_sha256", "")[:12])
+                             for r in rows if r.get("id") == part_id)
+            raise LockError(
+                "'%s': no sealed version matches the pin %s. The library holds %s. "
+                "One of the two has moved on; this is the check working, not a bug."
+                % (part_id, pin, held or "nothing"))
+        candidates = matched
+
+    if len(candidates) > 1:
+        seen = sorted(str(r.get("version", "?")) for r in candidates)
+        raise LockError(
+            "'%s' is ambiguous: %d rows match (versions %s). Pin it in the Spec's seal "
+            "block, or give a version." % (part_id, len(candidates), ", ".join(seen)))
+
+    row = candidates[0]
+
+    # Numeric versions are a convention the rest of the code relies on; an int() three
+    # stages away would raise ValueError instead of saying what is wrong.
+    if not str(row.get("version", "")).isdigit():
+        raise LockError("'%s': version %r is not a number"
+                        % (part_id, row.get("version")))
+
+    # The filename carries the sequence hash. A disagreement here IS failure 5 from the
+    # README: a part file named ...__47c4687cca62.gb whose sequence hashed to 3c840d2b,
+    # same length and different bases, with a prepared manifest row claiming the name.
+    fn12 = filename_sha12(row.get("outfile", ""))
+    if fn12 and fn12 != row.get("seq_sha256", "")[:12].lower():
+        raise LockError(
+            "%s v%s: the filename says %s but the row's seq_sha256 is %s. Two sources "
+            "disagree about which sequence this is -- report it, do not pick one."
+            % (part_id, row.get("version"), fn12, row.get("seq_sha256", "")[:12]))
+
+    return row
