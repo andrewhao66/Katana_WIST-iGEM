@@ -236,9 +236,37 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         # sitting in the block's own alternatives list at the time. A student who sees
         # that on every correct RBS learns that mislabel FLAGs are noise, and the one
         # real mislabel goes past them too.
+        # ORIENTATION. The direction is part of the claim, and it is checked before the
+        # name, because a part pointed the wrong way is wrong whatever it is called. An
+        # RBS annotated on the reverse strand does not initiate translation of the CDS
+        # after it; a promoter annotated backwards does not drive it.
+        #
+        # There was no orientation check here at all, so this went unreported for any
+        # label. Accepting identical-sequence synonyms then made the worst case worse:
+        # B0034 and K1045010 are reverse complements of each other, so forward B0034
+        # bases annotated complement(1..12) were told 'Block labelled "B0034" is correct'.
+        claimed_strand = getattr(b, "claim_strand", None)
+        wrong_way = (claimed_strand is not None and b.strand is not None
+                     and claimed_strand != b.strand)
+        if wrong_way:
+            said = "reverse" if claimed_strand == -1 else "forward"
+            found = "reverse" if b.strand == -1 else "forward"
+            findings.append(Finding(
+                "identity-orientation", FLAG,
+                f'Block labelled "{claim}" is annotated on the {said} strand, but its '
+                f"bases read as {found}",
+                loc=f"{b.start}-{b.end}",
+                detail=f"The sequence matches {b.ident_id} on the {found} strand at "
+                       f"{b.pident}% identity. The annotation claims {said}. One of the "
+                       f"two is wrong, and which one matters: a part pointed the wrong "
+                       f"way does not do its job -- an RBS on the reverse strand will not "
+                       f"initiate translation of the CDS after it.",
+                fix=f"Either correct the feature's orientation to {found}, or reverse-"
+                    f"complement those bases if {said} is what you meant."))
+
         synonyms = {str(a).replace("BBa_", "").upper()
                     for a in (getattr(b, "alternatives", None) or [])}
-        if claim_norm and claim_norm in synonyms:
+        if claim_norm and claim_norm in synonyms and not wrong_way:
             others = sorted(s for s in synonyms if s != claim_norm)
             findings.append(Finding(
                 "identity-synonym", NOTE,
@@ -249,6 +277,12 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                        f"{', '.join([claim_norm] + others[:8])}"
                        f"{' and more' if len(others) > 8 else ''}. The identifier "
                        f"reported {b.ident_id}; naming any of them is right."))
+            continue
+
+        if claim_norm and claim_norm in synonyms:
+            # Named correctly, pointed the wrong way. The orientation FLAG above already
+            # says what is wrong; naming it a mislabel on top of that would be a second,
+            # false accusation about the identity, which is the thing that IS right.
             continue
 
         if claim_norm and claim_norm != ident and ident not in claim_norm:

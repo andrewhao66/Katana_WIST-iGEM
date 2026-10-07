@@ -28,6 +28,13 @@ class Block:
         # claim (from the construct's own annotation) — may be None
         self.claim_label = None
         self.claim_role = None
+        # The orientation the ANNOTATION claimed, which is not the same thing as
+        # self.strand above: that one is where the sequence actually matched. Keeping
+        # both is what lets the audit notice they disagree. Before this field existed
+        # there was no orientation check anywhere, so a part whose label was right and
+        # whose strand was wrong went unreported -- and once identical-sequence synonyms
+        # were accepted, a forward part annotated complement was told it "is correct".
+        self.claim_strand = None
         # identity (what blastn says the sequence really is) — may be None
         self.ident_id = None
         self.ident_name = None
@@ -289,6 +296,7 @@ def identify(record, workdir, status=None, deep=False):
             feat = record.features[best_f]
             b.claim_label = feat.label or feat.kind
             b.claim_role = feat.kind
+            b.claim_strand = feat.strand
             used_features.add(best_f)
         blocks.append(b)
 
@@ -304,6 +312,7 @@ def identify(record, workdir, status=None, deep=False):
         b = Block(feat.start, feat.end, feat.strand)
         b.claim_label = feat.label or feat.kind
         b.claim_role = feat.kind
+        b.claim_strand = feat.strand
         blocks.append(b)
 
     blocks.sort(key=lambda b: b.start)
