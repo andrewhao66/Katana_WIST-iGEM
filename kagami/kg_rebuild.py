@@ -90,11 +90,31 @@ def _lock_path(library):
 
 
 def _lock_rows(library):
-    """Read the library's LOCK.tsv → {id: {version, seq_sha256, length, outfile}}."""
+    """The target library's rows, keyed by id.
+
+    Reads through core.lock when the bundle is present, so a manifest missing a column
+    the row hashes are taken over is refused here rather than producing a half-built
+    Spec. Falls back to inline parsing when Kagami was unzipped on its own.
+    """
     lock = _lock_path(library)
-    rows = {}
     if not lock:
-        return rows
+        return {}
+    import kg_refs
+    _h, core_lock, _p = kg_refs._import_core()
+    if core_lock is not None:
+        try:
+            rows = core_lock.read(lock)[1]
+        except Exception:
+            return {}
+        return {r["id"]: {"version": r["version"], "seq_sha256": r["seq_sha256"],
+                          "length": r["length"], "outfile": r["outfile"]}
+                for r in rows if r.get("id")}
+    return _lock_rows_inline(lock)
+
+
+def _lock_rows_inline(lock):
+    """The pre-core reader, kept for a standalone Kagami with no bundle beside it."""
+    rows = {}
     with open(lock, "r", encoding="utf-8") as f:
         header = f.readline().rstrip("\n").split("\t")
         idx = {h: i for i, h in enumerate(header)}
