@@ -8,11 +8,11 @@ manifest with where it came from and when. Nothing is ever edited in place after
 corrected part becomes a new version with a new fingerprint, and the old row stays.
 
     # a reference part, straight from NCBI, by accession and coordinates
-    python add_part.py --library my-project/parts-library --id lacZ \\
+    python3 add_part.py --library my-project/parts-library --id lacZ \\
         --accession NC_000913.3 --range 363231..366305 --strand -
 
     # a part you designed, or one you saved from the iGEM Registry page
-    python add_part.py --library my-project/parts-library --id my_rbs \\
+    python3 add_part.py --library my-project/parts-library --id my_rbs \\
         --file my_rbs.fasta --class designed --source "designed: OSTIR TIR 12000"
 
 The iGEM Registry, corrected. An earlier version of this file said the Registry could not be
@@ -22,7 +22,7 @@ the whole Registry. api.registry.igem.org/v1 is public, needs no account, and re
 sequence along with a uuid and an SO role accession. A negative result about one route is not a
 result about the destination.
 
-    python add_part.py --library my-project/parts-library --registry BBa_B0015
+    python3 add_part.py --library my-project/parts-library --registry BBa_B0015
 
 Why the round-trip check at the end. It would be easy to compute a hash over the sequence in
 memory, write a file, and record that hash — and be wrong, because the thing the engine will
@@ -318,7 +318,7 @@ def copy_from_library(src: Path, pid: str) -> tuple[str, str, str]:
         names = ", ".join(sorted({r["id"] for r in rows})[:12])
         raise SystemExit(f"BLOCK: no part called {pid!r} in {lock}.\n"
                          f"       That library holds: {names} ...\n"
-                         f"       List them all with:  python find_part.py --have")
+                         f"       List them all with:  python3 find_part.py --have")
     row = hits[-1]   # the newest version of that id
 
     part_file = lock.parent / row["outfile"]
@@ -378,7 +378,7 @@ def resolve_library(arg: Path) -> Path:
             return cand
     raise SystemExit(
         f"BLOCK: no ref_parts/LOCK.tsv under {root}.\n"
-        f"       Create a library first:  python katana_init.py {arg}")
+        f"       Create a library first:  python3 katana_init.py {arg}")
 
 
 def main() -> int:
@@ -526,7 +526,7 @@ def main() -> int:
     print()
     print("  Then add its id to architecture.order, and build:")
     print()
-    print(f"      python katana_build.py <your.spec.yaml> --library {a.library}")
+    print(f"      python3 katana_build.py <your.spec.yaml> --library {a.library}")
     print()
     return 0
 

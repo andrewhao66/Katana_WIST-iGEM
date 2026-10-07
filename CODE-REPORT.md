@@ -105,7 +105,7 @@ Stage 2 還是要重讀檔案、重算雜湊。這不是冗餘：
 | `katana_lock.py` | 91 | 完整性核心：`row_sha256` / `lock_root` / `resolve()`。無第三方依賴 |
 | `verify_library_v2.py` | 72 | 部件庫稽核：逐列檢查檔案存在、file hash、seq hash、檔名 sha12、row manifest、孤兒檔、root |
 | `test_seal_gaps.py` | 67 | **對抗性測試**：在拋棄式副本上實際執行破壞，斷言每種都被抓到 |
-| `verify.py` | 103 | 上面兩者的零依賴包裝（`python verify.py` 即可） |
+| `verify.py` | 103 | 上面兩者的零依賴包裝（`python3 verify.py` 即可） |
 | `test_determinism.py` | 290 | 核心主張的可執行證明：oracle / 可重複 / pin / 竄改 / SBOL 五路 |
 | `add_part.py` | 540 | **入庫閘門**。NCBI / iGEM Registry / 本地檔 / 他庫複製四種來源 |
 | `find_part.py` | 392 | 把「我要大腸桿菌的乳酸感應抑制子」變成 accession + 座標 |
@@ -221,9 +221,9 @@ Design Spec ─┐
 
 ```
 BLOCK Stage-1: part 'lldR' is not in your Parts Library yet.
-       See what you have:      python find_part.py --have
-       Find it on NCBI:        python find_part.py lldR
-       Copy one we ship:       python add_part.py --library <yours> --from ... --id lldR
+       See what you have:      python3 find_part.py --have
+       Find it on NCBI:        python3 find_part.py lldR
+       Copy one we ship:       python3 add_part.py --library <yours> --from ... --id lldR
 ```
 
 ### Stage 2 — VERIFY（同函式內）
@@ -503,8 +503,8 @@ ORACLE 那些雜湊**不是為測試編出來的**，而是這支隊伍實際向
 
 | 執行 | 結果 |
 |---|---|
-| `python verify.py` | **OK** — 30 parts verified，8/8 對抗性檢查通過 |
-| `python test_determinism.py` | **ALL PASSED — 11 checks**。7 份 Spec 全部重現記錄雜湊；`pAP-Output` SKIP（Spec 不在此 bundle） |
+| `python3 verify.py` | **OK** — 30 parts verified，8/8 對抗性檢查通過 |
+| `python3 test_determinism.py` | **ALL PASSED — 11 checks**。7 份 Spec 全部重現記錄雜湊；`pAP-Output` SKIP（Spec 不在此 bundle） |
 | `kagami/tests.py` | **88 passed, 0 failed** |
 | `katana_build.py specs/pSense-Nit.spec.yaml` | SEALED `796e94a0ea2452ed…`，與 oracle 相符；.gb round-trip 雜湊驗證通過；SBOL 3 已驗證寫出 |
 | `katana_build.py specs/pAP-Logic.spec.yaml` | SEALED `1d99b7be2c513b19…`；CAI：HrpR 0.809、HrpS 0.964（與 Spec 註解的 0.963 相符） |
@@ -680,7 +680,7 @@ genome = (ref_parts.parent / "ref_genomes" / gfile) if (ref_parts and gfile) els
 
 ```
 WARN Stage-4b: OFF-TARGET SKIPPED - no genome here for host E_coli_MG1655.
-               NOT enforced this run. Fetch one with: python get_genome.py
+               NOT enforced this run. Fetch one with: python3 get_genome.py
 ```
 
 使用者被要求去下載一個 4.6 MB 的基因組，而**同一個 bundle 裡已經有同一個 accession 的同一個檔案**。

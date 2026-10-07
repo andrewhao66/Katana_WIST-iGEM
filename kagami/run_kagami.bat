@@ -1,7 +1,7 @@
 @echo off
 REM Kagami — reverse-Katana sequence auditor (Windows double-click wrapper).
 REM Drag a .gb / .fasta onto this file, or:  run_kagami.bat mysequence.gb
-REM Requires: Python 3.9+ and NCBI BLAST+ (blastn, makeblastdb) on PATH.
+REM Requires: Python 3.9+. Nothing else -- identification is pure Python.
 REM
 REM It only works from an EXTRACTED folder, not from inside a .zip (the check below explains).
 setlocal

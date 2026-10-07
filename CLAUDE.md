@@ -63,7 +63,7 @@ independently. Before a part is used for anything that matters, **recompute the 
 to the manifest row.** Do not trust a previous check, including one you did earlier in the same
 session. Re-read the file at the point of use.
 
-`python verify.py` does this for the whole library and then tries to break itself eight ways to show
+`python3 verify.py` does this for the whole library and then tries to break itself eight ways to show
 the check is real. Run it after any change to the library, and run it before you believe anything.
 
 A hash check is cheap. A wrong part is a synthesis order, a month, and a result you cannot interpret.

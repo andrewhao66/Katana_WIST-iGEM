@@ -28,7 +28,7 @@ This is what we did about it.
 ## Try it first, read second
 
 ```
-python verify.py
+python3 verify.py
 ```
 
 No arguments, no install, no dependencies beyond Python 3.9+. It checks every part in this library
@@ -38,6 +38,19 @@ would have caught it.**
 The second half is the point. Anyone can print "verified".
 
 ---
+
+### On a Mac, run it from Terminal — do not double-click
+
+macOS refuses to open a downloaded script that is not code-signed, and these are not. Every
+browser marks a downloaded file as quarantined, and Gatekeeper then blocks it; the
+"Right-click → Open" trick that used to get past that was removed in macOS 15.
+
+That block applies to **double-clicking only**. A script a shell runs is unaffected, because
+what the system actually launches is the signed `/bin/bash`. So open Terminal, type `bash `
+(with the trailing space), drag the file onto the window, and press Return.
+
+Nothing is wrong when you see that dialog, and nothing you did caused it. It is also why every
+command in this README is written to be run in a terminal rather than clicked.
 
 ## Install, run, reproduce
 
@@ -55,7 +68,7 @@ did **not** run. A silent skip would be worse than no check at all.
 order-ready FASTA, and a sequence hash:
 
 ```
-python katana_build.py specs/pSense-Nit.spec.yaml
+python3 katana_build.py specs/pSense-Nit.spec.yaml
 ```
 
 Add `--sbol out.ttl` for SBOL 3, `--dry-run` to check without writing, and
@@ -64,7 +77,7 @@ Add `--sbol out.ttl` for SBOL 3, `--dry-run` to check without writing, and
 **Reproduce the main results.** This is the claim worth checking, so check it:
 
 ```
-python test_determinism.py
+python3 test_determinism.py
 ```
 
 It rebuilds every Spec in `specs/` and asserts each one reproduces a **recorded hash of a construct
@@ -93,7 +106,7 @@ correct set to bundle: whichever handful we picked would be the wrong one for th
 *Vibrio*, or cyanobacteria, or something we never thought of. So fetch the one you actually use:
 
 ```
-python get_genome.py
+python3 get_genome.py
 ```
 
 A menu of 23 organisms with download sizes; type one letter. The list follows the **iGEM White
@@ -101,56 +114,24 @@ List** - the Risk Group 1 bacteria, the two permitted fungi, disarmed *Agrobacte
 seven named bacteriophages. Check the White List yourself before relying on it: it changes, and a
 genome being downloadable here says nothing about what your division or institution permits.
 
+The check itself is pure Python and needs nothing installed. It is a seed-and-extend scan,
+good enough to catch a long high-identity host match that no intended part explains — which is
+the misassembly signal it is there for — and not a substitute for a real alignment tool in a
+publication. If you happen to have NCBI BLAST+ on your `PATH`, `kagami.py audit --deep` will
+also use it for gapped, distant-homology search; nothing requires it.
+
 Not on the list, or want to scan against a plasmid rather than a chromosome? Any NCBI accession
 works. Replace all three capitalised words - pasted unchanged it refuses rather than downloading
 something you did not choose:
 
 ```
-python get_genome.py --accession YOUR_ACCESSION --name a_name --key YourHost
+python3 get_genome.py --accession YOUR_ACCESSION --name a_name --key YourHost
 ```
 
 `YOUR_ACCESSION` is the identifier on the NCBI record (pUC19 is `M77789.2`), `a_name` is the
 filename you want, and `YourHost` **must equal the `host` field in your Design Spec** - that is how
 the check finds it. Genomes are fingerprinted and their accession and date recorded, exactly like a
 part, so you can still prove a year from now which sequence a check ran against.
-
-### Installing BLAST+
-
-The check shells out to BLAST+. Without it the gate warns and is not enforced - it never silently
-passes. Pick the row for your machine, then **close the terminal and open a new one**: a terminal
-only learns about newly installed programs when it starts.
-
-**Windows, with an administrator password.** The official installer offers to add BLAST+ to your
-`PATH` for you:
-
-```
-curl.exe -L -o "$env:TEMPlast.exe" https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-win64.exe; Start-Process "$env:TEMPlast.exe"
-```
-
-**Windows, without one.** On a school machine you usually cannot supply that password, and the
-installer stops at the prompt. This route needs no admin rights - it unpacks the same programs into
-your own user folder and puts that folder on your personal `PATH`. One line, in PowerShell:
-
-```
-$d="$env:LOCALAPPDATAlast"; mkdir $d -Force | Out-Null; curl.exe -L -o "$d.tar.gz" https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-x64-win64.tar.gz; tar -xf "$d.tar.gz" -C $d; [Environment]::SetEnvironmentVariable("Path",[Environment]::GetEnvironmentVariable("Path","User")+";$d
-cbi-blast-2.17.0+in","User")
-```
-
-It is a 136 MB download, so give it a minute on a slow connection.
-
-**macOS.** With [Homebrew](https://brew.sh): `brew install blast`. Without it:
-
-```
-curl -L -o ~/Downloads/blast.dmg https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/2.17.0/ncbi-blast-2.17.0+-universal.dmg && open ~/Downloads/blast.dmg
-```
-
-**Linux.**
-
-```
-sudo apt update && sudo apt install -y ncbi-blast+
-```
-
----
 
 ## Using it for your own project
 
@@ -160,7 +141,7 @@ can go on being the reference you verified.
 **1. Make your own library.**
 
 ```
-python katana_init.py my-project
+python3 katana_init.py my-project
 ```
 
 An empty manifest with a correct starting fingerprint, a folder for your host genome, and a
@@ -171,7 +152,7 @@ need the lactate-responsive repressor from *E. coli*" - and turning that into co
 mechanical work where mistakes are easy and invisible:
 
 ```
-python find_part.py lldR
+python3 find_part.py lldR
 ```
 
 It checks your own library first and stops if the part is already there. Otherwise it searches NCBI
@@ -182,7 +163,7 @@ one matched, it does not warn you about ambiguity that did not happen.
 
 `--seal` prints the block to paste into a Spec for a part you already hold. `--search-anyway`
 searches NCBI even when you have the part, which is how you find out the public record changed
-since you sealed your copy. `python find_part.py --have` lists the thirty parts already here.
+since you sealed your copy. `python3 find_part.py --have` lists the thirty parts already here.
 
 **3. Put it in your library.** A part enters one way: from its primary source, checked, written
 once, fingerprinted, recorded with where it came from.
@@ -191,7 +172,7 @@ Already sealed here (`B0015`, `B0032`, `J23116`, `sfGFP`, `P_hrpL`, `p15A`, `cat
 more)? Copy it rather than fetching a second, slightly different version:
 
 ```
-python add_part.py --library my-project/parts-library --from parts-library/ref_parts --id B0015
+python3 add_part.py --library my-project/parts-library --from parts-library/ref_parts --id B0015
 ```
 
 The copy re-reads and re-hashes the file rather than trusting the row it came from, and refuses if
@@ -200,19 +181,19 @@ the source library disagrees with itself.
 From NCBI:
 
 ```
-python add_part.py --library my-project/parts-library --id lacZ --accession NC_000913.3 --range 363231..366305 --strand -
+python3 add_part.py --library my-project/parts-library --id lacZ --accession NC_000913.3 --range 363231..366305 --strand -
 ```
 
 Designed yourself, or saved from a Registry page - point it at a local file:
 
 ```
-python add_part.py --library my-project/parts-library --id my_rbs --file my_rbs.fasta --class designed
+python3 add_part.py --library my-project/parts-library --id my_rbs --file my_rbs.fasta --class designed
 ```
 
 From the iGEM Registry, which needs no account:
 
 ```
-python add_part.py --library my-project/parts-library --registry BBa_B0015
+python3 add_part.py --library my-project/parts-library --registry BBa_B0015
 ```
 
 That records the part's **uuid** alongside its sequence - an identity check independent of the

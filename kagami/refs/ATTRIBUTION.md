@@ -50,13 +50,18 @@ The `provenance` column distinguishes them, strongest first:
 
 ## Rebuilding it
 
-Nothing here is hand-edited. To reproduce:
+The library-derived and live-Registry rows regenerate from the sealed parts library:
 
 ```
-python build_synbiohub_refs.py     # harvest via SPARQL into a local cache (needs a SynBioHub login)
-python convert_synbiohub_refs.py   # apply the filters above and write the reference set
-python build_refs.py --registry-bulk   # refresh the library-derived and live-Registry parts
+python3 build_refs.py --registry-bulk
 ```
 
-`convert_synbiohub_refs.py --report` prints the role vocabulary and the filter counts without
-writing anything, so the filtering can be checked against the data before it is trusted.
+The SynBioHub mirror does **not** regenerate from anything in this repository. It was harvested
+once — on 2017-04-03, as the collection itself is dated — by two scripts
+(`build_synbiohub_refs.py` and `convert_synbiohub_refs.py`) that are **not** published here: they
+needed a SynBioHub login and are not part of this bundle. The mirror is therefore a fixed input,
+and the `provenance` column on every row records the exact per-part URI, so any sequence here can
+be traced to its source record and re-checked independently.
+
+Saying so plainly rather than listing commands that do not exist: an instruction you cannot
+follow is worse than an acknowledged gap.

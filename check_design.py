@@ -11,7 +11,7 @@ what you SAID - not whether what you said makes biological sense.
 This is the other half. It reads the Spec before you build and says, for each thing it finds:
 what it saw, why it matters, and what to do about it.
 
-    python check_design.py my-project/specs/example.spec.yaml
+    python3 check_design.py my-project/specs/example.spec.yaml
 
 It reports. It does not edit your Spec and it does not decide anything for you: there are real
 constructs that break every rule below on purpose, and you may be building one. What it will not
@@ -175,7 +175,7 @@ def analyse(spec: dict, rep: Report) -> None:
             rep.problem(f"'{pid}' has no seal block.",
                         "Without it the engine cannot tell which version of the part you mean, "
                         "so it refuses to build.",
-                        f"Run  python find_part.py {pid}  and paste the seal block it prints.")
+                        f"Run  python3 find_part.py {pid}  and paste the seal block it prints.")
         elif isinstance(seal, dict):
             # Look INSIDE the block. Checking only that one exists let the starter template -
             # the first Spec a beginner opens - report "nothing to report" while carrying
@@ -192,14 +192,14 @@ def analyse(spec: dict, rep: Report) -> None:
                             "stop at Stage 1. Nothing is broken - this part just has not been "
                             "filled in.",
                             f"Add the part with add_part.py, or if you already hold it run  "
-                            f"python find_part.py {pid} --seal  and paste what it prints.")
+                            f"python3 find_part.py {pid} --seal  and paste what it prints.")
             else:
                 if not (len(pin) == 12 and all(c in "0123456789abcdefABCDEF" for c in pin)):
                     rep.problem(f"'{pid}' has a seq_sha256_12 that is not a 12-character "
                                 f"fingerprint: '{pin}'.",
                                 "That value is how the engine confirms it loaded the part you "
                                 "meant. A malformed one cannot match anything, so the build stops.",
-                                f"Run  python find_part.py {pid} --seal  and copy the value it "
+                                f"Run  python3 find_part.py {pid} --seal  and copy the value it "
                                 f"prints.")
                 try:
                     n = int(length)
@@ -210,13 +210,13 @@ def analyse(spec: dict, rep: Report) -> None:
                                 "A part with no length is not a part. The engine checks the "
                                 "sequence it loads against this number, so it must be the real "
                                 "one.",
-                                f"Run  python find_part.py {pid} --seal  and copy the length it "
+                                f"Run  python3 find_part.py {pid} --seal  and copy the length it "
                                 f"prints.")
                 if not lib:
                     rep.check(f"'{pid}' has no lib: filename in its seal block.",
                               "The engine can usually find the part from the manifest anyway, but "
                               "the filename is what makes the Spec readable to a human.",
-                              f"Run  python find_part.py {pid} --seal  and use the full block.")
+                              f"Run  python3 find_part.py {pid} --seal  and use the full block.")
         r = role_of(p)
         known = {PROMOTER, RBS, TERM} | CODING | BACKBONE
         if not r:
@@ -256,7 +256,7 @@ def analyse(spec: dict, rep: Report) -> None:
         rep.problem("There is no promoter anywhere in the construct.",
                     "Nothing will be transcribed.",
                     "Add one. Constitutive promoters are always on; try  "
-                    "python find_part.py --have  to see what you already hold.")
+                    "python3 find_part.py --have  to see what you already hold.")
 
     for n, (pid, role) in enumerate(seq):
         if role not in CODING:
@@ -299,7 +299,7 @@ def analyse(spec: dict, rep: Report) -> None:
         rep.check("No host: named.",
                   "The off-target check needs to know which organism this is going into, and "
                   "it silently does not run without it.",
-                  "Add  host: E_coli_MG1655  (or your chassis), then  python get_genome.py")
+                  "Add  host: E_coli_MG1655  (or your chassis), then  python3 get_genome.py")
 
     cons = spec.get("constraints") or {}
     if not cons.get("host_context"):

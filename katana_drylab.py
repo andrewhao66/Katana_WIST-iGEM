@@ -100,11 +100,11 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
             # all", runs the fetcher again, and gets the same result. Name what IS here.
             warns.append("WARN Stage-4b: OFF-TARGET SKIPPED - this construct needs the genome "
                          "of host %s, but the genome(s) present are for: %s. NOT enforced this "
-                         "run. Fetch the matching one with: python get_genome.py"
+                         "run. Fetch the matching one with: python3 get_genome.py"
                          % (host, ", ".join(sorted(set(_present)))))
         else:
             warns.append("WARN Stage-4b: OFF-TARGET SKIPPED - no genome here for host %s. "
-                         "NOT enforced this run. Fetch one with: python get_genome.py"
+                         "NOT enforced this run. Fetch one with: python3 get_genome.py"
                          % host)
     else:
         try:

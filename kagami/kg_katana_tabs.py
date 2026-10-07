@@ -2,7 +2,7 @@
 
 WHY. Kagami's Audit tab reads a sequence somebody else made. The engine tabs run the other
 direction: take a Design Spec, build it from sealed parts, and hand back an order-ready sequence.
-Until now that needed `python katana_build.py ...` in a terminal, which most students never open.
+Until now that needed `python3 katana_build.py ...` in a terminal, which most students never open.
 
 HOW. These tabs add no logic of their own. Each button runs the engine's own CLI tool as a child
 process (the same way kg_rebuild.py already does) and shows its output, so there is exactly one

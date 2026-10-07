@@ -69,7 +69,7 @@ if _LIB_OVERRIDE:
                 if (c / "LOCK.tsv").exists()), None)
     if LIB is None:
         sys.exit(f"BLOCK: --library {_LIB_OVERRIDE} has no ref_parts/LOCK.tsv.\n"
-                 f"       Create one with:  python katana_init.py {_LIB_OVERRIDE}")
+                 f"       Create one with:  python3 katana_init.py {_LIB_OVERRIDE}")
 else:
     CANDIDATES = [q / "parts-library" / "ref_parts" for q in (HERE, *HERE.parents)]
     LIB = next((p for p in CANDIDATES if p.is_dir()), None)
@@ -160,7 +160,7 @@ def load_yaml_simple(path: Path) -> dict:
                 "       Usually this is an indentation slip, or a missing quote around a value",
                 "       that contains a colon.",
                 "       To see the whole Spec checked at once, run:",
-                "           python check_design.py " + str(path)]
+                "           python3 check_design.py " + str(path)]
         sys.exit("\n".join(msg))
 
 def load_lock(lock_path: Path) -> dict:
@@ -232,7 +232,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       so the engine cannot check it is the one you meant.\n"
                      f"       Every part needs a seal block. add_part.py prints the exact one\n"
                      f"       to paste when it admits a part. To see what you already have:\n"
-                     f"           python find_part.py --have")
+                     f"           python3 find_part.py --have")
 
         # Find in LOCK by id
         lock_key = None
@@ -244,9 +244,9 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
             sys.exit(f"BLOCK Stage-1: part '{pid}' is not in your Parts Library yet.\n"
                      f"       Your Spec asks for it, but the library has never been given it.\n"
                      f"       Nothing is broken - you just need to add it first.\n"
-                     f"       See what you have:      python find_part.py --have\n"
-                     f"       Find it on NCBI:        python find_part.py {pid}\n"
-                     f"       Copy one we ship:       python add_part.py --library <yours> "
+                     f"       See what you have:      python3 find_part.py --have\n"
+                     f"       Find it on NCBI:        python3 find_part.py {pid}\n"
+                     f"       Copy one we ship:       python3 add_part.py --library <yours> "
                      f"--from parts-library/ref_parts --id {pid}")
 
         lock_row = lock[lock_key]
@@ -259,7 +259,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       holds a different one. One of them has moved on.\n"
                      f"       This is the check doing its job, not a bug.\n"
                      f"       Look at what the library actually holds:\n"
-                     f"           python find_part.py {pid}\n"
+                     f"           python3 find_part.py {pid}\n"
                      f"       then update the seal block in your Spec to match it.")
 
         # Load the .gb file
@@ -291,7 +291,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       as. Something edited it after it was sealed.\n"
                      f"       This is exactly what the engine is for, so it has stopped.\n"
                      f"       If you edited it on purpose, undo that. If not, take a fresh\n"
-                     f"       copy of the library and run:  python verify.py")
+                     f"       copy of the library and run:  python3 verify.py")
 
         # Length check
         if expected_len and len(raw_seq) != int(expected_len):
@@ -299,7 +299,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       Your Spec says this part is {expected_len} bases; the library\n"
                      f"       holds {len(raw_seq)}. A part that changed length is a different\n"
                      f"       part. Check the length in the Spec's seal block against:\n"
-                     f"           python find_part.py {pid}")
+                     f"           python3 find_part.py {pid}")
 
         resolved[pid] = {
             "seq": raw_seq,
@@ -347,7 +347,7 @@ def assemble_insert(spec: dict, resolved: dict) -> tuple:
                  "       Add the ids, left to right, e.g.\n"
                  "           architecture:\n"
                  "             order: [my_promoter, my_rbs, my_gene, my_terminator]\n"
-                 "       Then check it reads sensibly:  python check_design.py <your.spec.yaml>")
+                 "       Then check it reads sensibly:  python3 check_design.py <your.spec.yaml>")
 
     insert_parts = []
     features = []
@@ -360,7 +360,7 @@ def assemble_insert(spec: dict, resolved: dict) -> tuple:
                      f"       Spec's parts list. Usually this is a typo in one of the two, or a\n"
                      f"       part you meant to add and did not.\n"
                      f"       This and other Spec problems are all reported at once by:\n"
-                     f"           python check_design.py <your.spec.yaml>")
+                     f"           python3 check_design.py <your.spec.yaml>")
 
         part_data = resolved[pid]
         seq = part_data["seq"]
@@ -789,7 +789,7 @@ def main():
         if _skipped:
             print("           The off-target check did not run: the genome it needs for")
             print("           this construct is not here. The line above says which.")
-            print("           To fetch it:  python get_genome.py")
+            print("           To fetch it:  python3 get_genome.py")
     except SystemExit:
         raise
     except Exception as _e:

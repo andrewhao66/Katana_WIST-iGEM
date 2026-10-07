@@ -1,5 +1,5 @@
 """
-tests.py — self-contained checks for Kagami. Run: python tests.py
+tests.py — self-contained checks for Kagami. Run: python3 tests.py
 No pytest dependency; plain asserts, exits non-zero on failure.
 """
 import os

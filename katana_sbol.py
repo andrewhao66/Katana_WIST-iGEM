@@ -27,7 +27,7 @@ This is an OPTIONAL exporter. The engine core stays near-stdlib; if `sbol3` is n
 installed the caller is told loudly and the build continues without SBOL — the same
 fail-loud-not-silent rule the dry-lab gate follows.
 
-Usage (via the engine):   python katana_build.py <spec> --sbol out.ttl
+Usage (via the engine):   python3 katana_build.py <spec> --sbol out.ttl
 Standalone:               imported by katana_build.py; not a CLI on its own.
 """
 from __future__ import annotations

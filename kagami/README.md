@@ -39,14 +39,14 @@ Verdict roll-up: **FAIL** (any hard error) › **CONDITIONAL** (flags, no fail) 
 ## Requirements
 
 - **Python 3.9+**
-- **NCBI BLAST+** on PATH (`blastn`, `makeblastdb`) — used for identification.
-  If BLAST is absent, Kagami still runs the invariant + composition checks and an
-  annotated GenBank's claim-based checks; identification is skipped.
+- **Nothing else.** Identification is pure Python, so the full audit runs on a machine
+  with nothing installed. NCBI BLAST+ is optional: with `blastn` and `makeblastdb` on
+  your `PATH`, `--deep` adds gapped search for homologs below about 90% identity.
 
 ## Usage
 
 ```bash
-python kagami.py audit INPUT.gb \
+python3 kagami.py audit INPUT.gb \
     --vendor Twist \            # apply a vendor per-fragment size cap
     --host MG1655.fna \         # run the >40 bp host off-target scan
     --html report.html \        # visual report (mirrors the concept one-pager)
@@ -56,19 +56,20 @@ python kagami.py audit INPUT.gb \
 ```
 
 Input may be **GenBank** (annotations are read as the construct's *claims* and
-checked against the sequence) or **FASTA** (blocks are discovered by BLAST).
+checked against the sequence) or **FASTA** (blocks are discovered by searching the
+reference set). A spreadsheet or a pasted sequence works too.
 
 Try it on the bundled demo (contains a deliberate B0032/B0034 mislabel):
 
 ```bash
-python make_demo.py
-python kagami.py audit examples/demo.gb --vendor Twist --html examples/demo_report.html
+python3 make_demo.py
+python3 kagami.py audit examples/demo.gb --vendor Twist --html examples/demo_report.html
 ```
 
 Run the tests:
 
 ```bash
-python tests.py
+python3 tests.py
 ```
 
 ## Closing the loop: can it save parts and rebuild?
@@ -100,8 +101,10 @@ the sealing/hashing/rebuild correctly:
 ## The reference set (`refs/` + `build_refs.py`)
 
 Kagami loads its references from a bundled data file (`refs/reference_parts.tsv` +
-`reference_parts.fasta`), currently **25 public parts** across promoters, RBS,
-terminators, reporters, markers, and origins.
+`reference_parts.fasta`), currently **18,538 public parts** — a filtered mirror of the
+iGEM Registry via SynBioHub, plus parts projected from this project's own sealed library
+and parts fetched live from the Registry API. `refs/ATTRIBUTION.md` records where each
+one came from and what was filtered out.
 
 Most are a **projection of the verified, sealed public reference parts in the
 Synbio parts-library** — primary-sourced and LOCK-hash-checked — so their sequences
@@ -127,7 +130,7 @@ is a sequence that *reproduced its seal at build time*, not one read on trust.
 construct you are auditing — that is circular provenance):
 
 ```bash
-python build_refs.py --library path/to/your/parts-library
+python3 build_refs.py --library path/to/your/parts-library
 ```
 
 `build_refs.py` pulls **only** the public `class=reference` parts on its allowlist —
@@ -139,11 +142,12 @@ identification breadth only changes what can be named.
 
 ## Known limitations (v1)
 
-- Identification depth is bounded by the seed set + BLAST; a rich CDS library (GFP
-  variants, common enzymes) is the obvious next expansion.
+- Identification depth is bounded by the reference set. A match below about 90% identity
+  is reported as unidentified rather than named, because an 85% match is not the part it
+  resembles; `--deep` hands those to blastn's gapped search when it is installed.
 - Repeat detection is a coarse exact-k-mer probe, not a full aligner.
-- Host off-target uses a bounded exact-match net unless `--host` is given (then use
-  the project's real blastn DB for full sensitivity).
+- Host off-target uses a bounded exact-match net; it is a coarse recombination-substrate
+  probe, not an aligner.
 - The draft-spec rebuild is a *bridge*; the actual seal/hash/assemble is forward
   Katana's job, on purpose.
 
@@ -153,12 +157,14 @@ identification breadth only changes what can be named.
 kagami.py        CLI + orchestration + text/JSON/HTML report
 kg_parse.py      FASTA / GenBank reader (claims = features)
 kg_refs.py       loads the public reference set from refs/
-kg_identify.py   BLAST-based decomposition → blocks
+kg_identify.py   decomposition → blocks (pure Python; --deep adds blastn)
+kg_seedmatch.py  the pure-Python identifier: exact for short refs, seeded for long
 kg_audit.py      the checks (Katana conventions reused)
 kg_bridge.py     draft Spec + intake requests (the round-trip, law-abiding)
 build_refs.py    (re)generate refs/ from the sealed parts-library (public only)
 refs/            reference_parts.tsv + .fasta (the bundled reference set)
 make_demo.py     builds examples/demo.gb from the reference set
-tests.py         11 self-contained checks
+tests.py         87 self-contained checks
+test_identify.py oracle tests for the identifier (truncation, mutation, edge inputs)
 run_kagami.bat   Windows double-click wrapper
 ```

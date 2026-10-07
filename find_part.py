@@ -8,9 +8,9 @@ NC_000913.3:3779054-3779830(+). That lookup is mechanical, it is boring, and it 
 a sequence and its label come apart - so it should be done by a machine that shows its working,
 not by a person squinting at a genome browser at midnight.
 
-    python find_part.py lldR
-    python find_part.py lacZ --organism "E. coli Nissle 1917"
-    python find_part.py --have            # what is already in the library next to you
+    python3 find_part.py lldR
+    python3 find_part.py lacZ --organism "E. coli Nissle 1917"
+    python3 find_part.py --have            # what is already in the library next to you
 
 What this does NOT do, deliberately. It will not tell you WHICH part you want. Choosing a
 promoter, deciding whether you need the repressor or the activator, judging whether a part from
@@ -151,7 +151,7 @@ def show_have(yours: Path, shipped: Path | None) -> int:
             first = read_rows(shipped)[0]["id"]
             print("  To copy one across:")
             print()
-            print(f"      python add_part.py --library {rel(yours.parent)} "
+            print(f"      python3 add_part.py --library {rel(yours.parent)} "
                   f"--from {rel(shipped.parent)} --id {first}")
             print()
         total += n
@@ -211,7 +211,7 @@ def main() -> int:
     if a.have or not a.gene:
         if not local:
             print("\n  No parts-library found beside you. Run this from inside the katana folder,\n"
-                  "  or make your own library first:  python katana_init.py my-project\n")
+                  "  or make your own library first:  python3 katana_init.py my-project\n")
             return 1
         # --library, when given, names YOUR library. Before this it was used only to write the
         # example command, while the listing always showed the shipped one.
@@ -224,7 +224,7 @@ def main() -> int:
             mine = Path("my-project/parts-library/ref_parts").resolve()
         show_have(mine, (local / "LOCK.tsv") if local else None)
         if not a.gene:
-            print("  To search NCBI for something else:  python find_part.py <gene name>\n")
+            print("  To search NCBI for something else:  python3 find_part.py <gene name>\n")
             return 0
 
     # Say so if they already have it, before sending them to the internet for a second copy.
@@ -288,14 +288,14 @@ def main() -> int:
 
         if not a.seal:
             print(f"  Writing a Spec and need its seal block?  "
-                  f"python find_part.py {a.gene} --seal")
+                  f"python3 find_part.py {a.gene} --seal")
             print()
 
         if not a.search_anyway:
             # The question was "is it in my library". It is. Answering a question and then
             # explaining how to do the thing anyway is how a reader ends up with a duplicate.
             print("  Not searching NCBI: you already have this. To compare your copy against")
-            print(f"  today's record anyway:  python find_part.py {a.gene} --search-anyway")
+            print(f"  today's record anyway:  python3 find_part.py {a.gene} --search-anyway")
             print()
             return 0
 
@@ -320,7 +320,7 @@ def main() -> int:
             print("  not to. It needs no internet, and it gives you the exact bases already")
             print("  verified here, with their provenance carried across:")
             print()
-            print(f"      python add_part.py --library {rel(yours)} "
+            print(f"      python3 add_part.py --library {rel(yours)} "
                   f"--from {rel(local)} --id {best['id']}")
             print()
             print("  Fetching from NCBI instead gives you whatever the record says TODAY. That is")
@@ -343,7 +343,7 @@ def main() -> int:
     if not hits:
         print(f"\n  Nothing found for '{a.gene}' in {a.organism}.")
         print("  Try a different spelling, or widen the organism:")
-        print(f"      python find_part.py {a.gene} --organism \"Escherichia coli\"\n")
+        print(f"      python3 find_part.py {a.gene} --organism \"Escherichia coli\"\n")
         return 1
 
     print()
@@ -366,7 +366,7 @@ def main() -> int:
     # ERROR in PowerShell, where the continuation is a backtick - and most people reading this
     # are on Windows. A long line wraps in the terminal; pasting a wrapped line still works,
     # because the wrap is visual rather than a newline.
-    print(f"      python add_part.py --library {yours} --id {top['name']} "
+    print(f"      python3 add_part.py --library {yours} --id {top['name']} "
           f"--accession {top['acc']} --range {top['lo']}..{top['hi']} "
           f"--strand {top['strand']} --expect-length {top['length']} "
           f"--expect-organism \"{top['org']}\"")

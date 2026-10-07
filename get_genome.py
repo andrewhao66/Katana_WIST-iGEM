@@ -13,10 +13,10 @@ working in Vibrio, or cyanobacteria, or something nobody thought of.
 So nothing is bundled. You fetch the one you actually use, once, and it lands where the
 checker looks. No team is ever blocked because we failed to guess their chassis.
 
-  python get_genome.py                 pick from a menu
-  python get_genome.py --list          show the menu and exit
-  python get_genome.py --host ecoli    fetch one without the menu
-  python get_genome.py --accession YOUR_ACCESSION --name a_name --key YourHost
+  python3 get_genome.py                 pick from a menu
+  python3 get_genome.py --list          show the menu and exit
+  python3 get_genome.py --host ecoli    fetch one without the menu
+  python3 get_genome.py --accession YOUR_ACCESSION --name a_name --key YourHost
                                        fetch anything else in NCBI nucleotide
 
 Requires only Python's standard library, plus an internet connection for the fetch itself.
@@ -183,7 +183,7 @@ def check_accessions(accs: list) -> None:
     print("  plasmid, and copy the accession from the record header.")
     print()
     print("  For the standard iGEM chassis you do not need an accession at all - run")
-    print("  python get_genome.py with no arguments and pick a letter from the menu.")
+    print("  python3 get_genome.py with no arguments and pick a letter from the menu.")
     print()
     raise SystemExit(1)
 
@@ -310,9 +310,9 @@ def main() -> int:
                 return 0
             if low == "other":
                 print("\n  For anything not on the menu, pass the accession directly:\n")
-                print("    python get_genome.py --accession <ACCESSION> --name <filename> --key <HostKey>")
+                print("    python3 get_genome.py --accession <ACCESSION> --name <filename> --key <HostKey>")
                 print("    e.g. for the cloning vector pUC19, whose accession is M77789.2:")
-                print("         python get_genome.py --accession M77789.2 --name pUC19 --key pUC19\n")
+                print("         python3 get_genome.py --accession M77789.2 --name pUC19 --key pUC19\n")
                 print("  The key is whatever your Design Spec's host field says.\n")
                 return 0
             key = resolve(choice)
@@ -357,7 +357,7 @@ def main() -> int:
         print(f"  {len(mine)} Design Spec(s) here use host '{key}'. For those, Stage 4b will")
         print("  now run the off-target scan for real instead of reporting SKIPPED:")
         print()
-        print(f"      python katana_build.py specs/{mine[0]}")
+        print(f"      python3 katana_build.py specs/{mine[0]}")
         print()
     elif hosts:
         others = ", ".join(sorted(hosts))
@@ -372,10 +372,10 @@ def main() -> int:
             print(f"        {h:<22} needed by {names[0]}"
                   + (f" (+{len(names) - 1} more)" if len(names) > 1 else ""))
         print()
-        print("        To fetch it:   python get_genome.py")
+        print("        To fetch it:   python3 get_genome.py")
         print()
     else:
-        print("      python katana_build.py <path-to-your-spec>.spec.yaml")
+        print("      python3 katana_build.py <path-to-your-spec>.spec.yaml")
         print()
     return 0
 

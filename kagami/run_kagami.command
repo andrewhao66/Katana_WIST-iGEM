@@ -3,8 +3,20 @@
 # Usage from Terminal:  ./run_kagami.command mysequence.gb
 # (Most students want the window instead: open run_kagami_gui.command.)
 #
-# Requires: Python 3.9+ and, for the full audit, NCBI BLAST+ (blastn, makeblastdb) on PATH.
+# Requires: Python 3.9+. Nothing else -- identification is pure Python.
 # Works only from an EXTRACTED folder, not from inside a .zip.
+#
+# macOS will refuse to run this if you DOUBLE-CLICK it after downloading, because every
+# browser marks downloaded files as quarantined and this file is not code-signed. The
+# "Right-click -> Open" trick that used to get past that was removed in macOS 15.
+#
+# Run it from Terminal instead, which is NOT affected: the quarantine check applies to
+# double-clicking, not to a script a shell runs. Open Terminal, type `bash ` (with the
+# trailing space), drag this file onto the window, and press Return:
+#
+#     bash /path/to/kagami/run_kagami.command
+#
+# Or, equivalently:  cd into this folder and run  python3 kagami.py audit YOURFILE.gb
 
 cd "$(dirname "${0}")" || exit 1
 

@@ -5,9 +5,17 @@
 # downloaded .zip already unpacks it into a folder next to it; open that folder, then open "kagami"
 # and double-click this file.
 #
-# First-time Gatekeeper note: macOS may say this file "cannot be opened because it is from an
-# unidentified developer." If so, either Right-click -> Open (then Open again), OR skip this file
-# entirely and run  python3 kagami_gui.py  in Terminal from this folder. Both do the same thing.
+# macOS will refuse to run this if you DOUBLE-CLICK it after downloading, because every
+# browser marks downloaded files as quarantined and this file is not code-signed. The
+# "Right-click -> Open" trick that used to get past that was removed in macOS 15.
+#
+# Run it from Terminal instead, which is NOT affected: the quarantine check applies to
+# double-clicking, not to a script a shell runs. Open Terminal, type `bash ` (with the
+# trailing space), drag this file onto the window, and press Return:
+#
+#     bash /path/to/kagami/run_kagami_gui.command
+#
+# Or, equivalently:  cd into this folder and run  python3 kagami_gui.py
 
 cd "$(dirname "${0}")" || exit 1
 

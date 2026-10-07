@@ -23,8 +23,8 @@ This suite proves it five ways:
                  hash recomputes from the SBOL file to the same seal. Publishing to a
                  standard must not cost you the ability to verify what you published.
 
-Run:  python test_determinism.py            (uses the sibling parts-library)
-      python test_determinism.py -v         (show each build)
+Run:  python3 test_determinism.py            (uses the sibling parts-library)
+      python3 test_determinism.py -v         (show each build)
 
 Exit 0 = all passed. Non-zero = a failure, printed.
 """

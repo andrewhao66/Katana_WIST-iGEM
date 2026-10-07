@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check this parts library, and prove the checker actually works.
 
-    python verify.py
+    python3 verify.py
 
 No arguments, no setup, no dependencies beyond a standard Python 3.9+.
 

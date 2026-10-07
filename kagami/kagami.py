@@ -15,7 +15,7 @@ Kagami REPORTS; it does not SEAL. Only forward Katana seals, hashes, and rebuild
 (see kg_bridge for how the loop closes without breaking circular-provenance).
 
 Usage:
-  python kagami.py audit INPUT.gb [options]
+  python3 kagami.py audit INPUT.gb [options]
     --vendor {Twist,GenScript,IDT}   apply that vendor's per-fragment size cap
     --host GENOME.fna                run the >40 bp host off-target scan
     --html OUT.html                  write the visual report

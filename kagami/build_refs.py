@@ -21,7 +21,7 @@ reads a sequence out of a construct (circular provenance). Only the allowlist be
 — public, generically useful iGEM parts — is included.
 
 Usage:
-  python build_refs.py --library path/to/your/parts-library
+  python3 build_refs.py --library path/to/your/parts-library
   (defaults to a sibling ../../../../parts-library if run inside the project tree)
   --no-lock-root  : skip the LOCK.root integrity check (per-part hash gate still runs)
 

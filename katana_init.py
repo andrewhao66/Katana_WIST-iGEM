@@ -12,7 +12,7 @@ demonstration, not a tool.
 So: this makes YOUR library. Ours stays sealed and verifiable as the reference it is meant to
 be, and yours is the one you fill.
 
-    python katana_init.py my-project
+    python3 katana_init.py my-project
 
 leaves you with
 
@@ -25,7 +25,7 @@ leaves you with
         example.spec.yaml      a commented template to edit
 
 Then add parts with add_part.py, and build with
-    python katana_build.py my-project/specs/my.spec.yaml --library my-project/parts-library
+    python3 katana_build.py my-project/specs/my.spec.yaml --library my-project/parts-library
 """
 from __future__ import annotations
 
@@ -59,14 +59,14 @@ SPEC_TEMPLATE = '''\
 # sealed library by id, checks its fingerprint, and refuses if they disagree.
 #
 # Edit this file, then build it:
-#   python katana_build.py {spec_rel} --library {lib_rel}
+#   python3 katana_build.py {spec_rel} --library {lib_rel}
 
 id:            my-construct
 version:       1
 track:         {track}
 purpose:       "One sentence on what this construct is supposed to do."
 
-host:          E_coli_MG1655        # fetch its genome with:  python get_genome.py
+host:          E_coli_MG1655        # fetch its genome with:  python3 get_genome.py
 backbone:      {{ vector: pSB1C3, ori: pMB1, marker: CmR }}
 assembly:      {{ method: single_fragment, decided: "{today}",
                  note: "Why this method. single_fragment means order it as one synthesised piece." }}
@@ -155,12 +155,12 @@ def main() -> int:
     print("  Next, put a part in your library. A reference part from NCBI:")
     print()
     # One line: backslash continuation is a PowerShell syntax error. See find_part.py.
-    print(f"      python add_part.py --library {_rel(lib)} --id lacZ "
+    print(f"      python3 add_part.py --library {_rel(lib)} --id lacZ "
            "--accession NC_000913.3 --range 363231..366305 --strand -")
     print()
     print("  or a part you designed yourself, from a local FASTA or GenBank file:")
     print()
-    print(f"      python add_part.py --library {_rel(lib)} --id my_rbs --file my_rbs.fasta")
+    print(f"      python3 add_part.py --library {_rel(lib)} --id my_rbs --file my_rbs.fasta")
     print()
     print("  Each one prints the `seal:` line to paste into your Spec.")
     print()
