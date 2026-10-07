@@ -88,13 +88,78 @@ def _short_hits(sid, ref, query, qrc, n):
     return out
 
 
-def identify_hits(query, refs):
+def _query_index(q, k):
+    """k-mer -> positions in q. Built once per query; the query is small."""
+    idx = defaultdict(list)
+    for i in range(len(q) - k + 1):
+        idx[q[i:i + k]].append(i)
+    return idx
+
+
+def _long_hits(sid, ref, q, qidx, n, k, stride):
+    """Seed on a stride, then align the WHOLE reference on the best diagonal.
+
+    Stride filtering is a q-gram guarantee: an exact match of length >= MIN_HIT
+    contains (MIN_HIT - k + 1) consecutive k-mer start positions, so sampling that
+    often cannot miss it. Halved, to stay robust when mismatches break up the run.
+    """
+    out = []
+    L = len(ref)
+    get = qidx.get
+    for strand, s in ((1, ref), (-1, revcomp(ref))):
+        # cheap rejection: does any sampled seed hit at all?
+        seeded = False
+        for i in range(0, L - k + 1, stride):
+            if get(s[i:i + k]):
+                seeded = True
+                break
+        if not seeded:
+            continue
+
+        # full scan of this one reference, grouping seeds by diagonal
+        diags = defaultdict(int)
+        for i in range(L - k + 1):
+            h = get(s[i:i + k])
+            if h:
+                for qp in h:
+                    diags[qp - i] += 1
+        if not diags:
+            continue
+        d = max(diags.items(), key=lambda kv: kv[1])[0]   # d = qpos - refpos
+
+        # The diagonal fixes the correspondence, so compare the whole reference
+        # against its query window. Stopping at the last seed under-reports coverage
+        # when a mutation sits near an end, which raises a false truncation FLAG.
+        ws, we = d, d + L
+        cs, ce = max(0, ws), min(n, we)
+        span = ce - cs
+        if span < MIN_HIT:
+            continue
+        qseg = q[cs:ce]
+        sseg = s[cs - ws:ce - ws]
+        matches = 0
+        for a, b in zip(qseg, sseg):
+            if a == b:
+                matches += 1
+        pident = 100.0 * matches / span
+        if pident < MIN_IDENT:
+            continue
+        out.append(dict(sid=sid, pident=round(pident, 1), length=span,
+                        qstart=cs + 1, qend=ce, strand=strand,
+                        cov=span / float(L), bit=2.0 * matches))
+    return out
+
+
+def identify_hits(query, refs, k=K):
     """Identify which references occur in `query`. Returns kg_identify._blast()'s shape."""
     q = kg_refs.normalise(query)
     n = len(q)
     if n < SHORT_MIN:
         return []                        # nothing in the set can identify this
     qrc = revcomp(q)
+
+    qidx = _query_index(q, k) if n >= k else {}
+    stride = max(1, (MIN_HIT - k + 1) // 2)
 
     hits = []
     for r in refs:
@@ -103,4 +168,16 @@ def identify_hits(query, refs):
             continue
         if len(ref) <= SHORT_MAX:
             hits.extend(_short_hits(r["id"], ref, q, qrc, n))
-    return hits
+        elif qidx:
+            hits.extend(_long_hits(r["id"], ref, q, qidx, n, k, stride))
+
+    # One reference can seed on both strands at the same place (a palindrome, or a
+    # self-complementary terminator). Keep the better reading rather than reporting
+    # the same block twice.
+    keep = {}
+    for h in hits:
+        key = (h["sid"], h["qstart"] // 10, h["qend"] // 10)
+        cur = keep.get(key)
+        if cur is None or (h["pident"], h["cov"]) > (cur["pident"], cur["cov"]):
+            keep[key] = h
+    return list(keep.values())
