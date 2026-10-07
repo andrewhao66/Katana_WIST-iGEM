@@ -225,9 +225,11 @@ def main() -> int:
                                "katana_order_table.py", "katana_sbol.py", "vendor_path.py"):
                     if (HERE / helper).exists():
                         shutil.copyfile(HERE / helper, sandbox / helper)
-                if (HERE / "_vendor").is_dir():
-                    shutil.copytree(HERE / "_vendor", sandbox / "_vendor",
-                                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+                for pkg in ("_vendor", "core"):
+                    if (HERE / pkg).is_dir():
+                        shutil.copytree(HERE / pkg, sandbox / pkg,
+                                        ignore=shutil.ignore_patterns("__pycache__",
+                                                                      "*.pyc"))
                 # Assert the sandbox can run at all before trusting what it says about
                 # tampering. Without this the next assertion cannot tell "the engine refused
                 # the tampered library" from "the engine could not start".
@@ -250,9 +252,17 @@ def main() -> int:
                         capture_output=True, text=True,
                         encoding="utf-8", errors="replace")
                     out = proc.stdout + proc.stderr
-                    if proc.returncode != 0 and "not self-consistent" in out:
+                    # Assert the BEHAVIOUR and that the refusal is diagnostic, not one
+                    # exact sentence. core.lock.verify_root checks each row against its
+                    # own fields BEFORE checking the root, so a corrupted row_sha256 now
+                    # produces the more precise "row_sha256 does not match the row's own
+                    # fields" rather than the blanket "not self-consistent". Pinning the
+                    # old wording made a better diagnosis read as a regression.
+                    _diagnostic = ("row_sha256" in out or "not self-consistent" in out)
+                    if proc.returncode != 0 and _diagnostic:
                         passed += 1
-                        print("   PASS tampered manifest refused (root no longer self-consistent)")
+                        print("   PASS tampered manifest refused, and the refusal says "
+                              "which row disagrees")
                     else:
                         failures.append("TAMPER: a corrupted LOCK row did NOT block the build")
                         print(f"   FAIL tampered manifest accepted (rc={proc.returncode})")

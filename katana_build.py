@@ -77,6 +77,13 @@ else:
         sys.exit("BLOCK: cannot find parts-library/ref_parts. Checked:\n  " +
                  "\n  ".join(str(c) for c in CANDIDATES))
 
+sys.path.insert(0, str(HERE))
+import vendor_path
+vendor_path.ensure()
+from core import hashing as _hashing
+from core import lock as _lock
+from core import parts as _parts
+
 LOCK_PATH = LIB / "LOCK.tsv"
 LOCK_ROOT_PATH = LIB / "LOCK.root"
 # The expected LOCK root is a DEPLOYMENT pin, not a property of the engine.
@@ -91,30 +98,19 @@ DEFAULT_EXPECT_ROOT = None
 # ── helpers ─────────────────────────────────────────────────────────────────
 
 def sha256_hex(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
+    return _hashing.sha256_hex(data)
 
 def seq_sha256(seq: str, topology: str = "linear") -> str:
-    """Normalised sequence hash: UPPER-cased letters only.
-    NOTE: KATANA_SPEC v2 §3.4 specifies UPPER+|topology, but the existing
-    LOCK and all sealed parts/constructs use plain UPPER (no topology tag).
-    The engine matches the established convention to reproduce the oracle.
-    When the topology tag is adopted, bump a flag here and re-seal."""
-    normalised = seq.upper()
-    return sha256_hex(normalised.encode("ascii"))
+    """Normalised sequence hash. `topology` is accepted and ignored: KATANA_SPEC v2
+    section 3.4 specifies a topology tag, the sealed library predates it, and the
+    convention now lives in core.hashing as the single definition."""
+    return _hashing.seq_sha256(seq)
+
 
 def extract_gb_sequence(text: str) -> str:
-    """Extract raw sequence from GenBank ORIGIN block → uppercase."""
-    in_origin = False
-    parts = []
-    for line in text.splitlines():
-        if line.startswith("ORIGIN"):
-            in_origin = True
-            continue
-        if in_origin:
-            if line.startswith("//"):
-                break
-            parts.append(re.sub(r"[^A-Za-z]", "", line))
-    return "".join(parts).upper()
+    """Delegates to core.parts, which is the one reader. There were four."""
+    return _parts.extract_sequence(text, ".gb")
+
 
 def load_yaml_simple(path: Path) -> dict:
     """Minimal YAML-subset loader for spec files (avoids PyYAML dependency).
@@ -163,54 +159,30 @@ def load_yaml_simple(path: Path) -> dict:
                 "           python3 check_design.py " + str(path)]
         sys.exit("\n".join(msg))
 
-def load_lock(lock_path: Path) -> dict:
-    """Load LOCK.tsv → {id: {version, seq_sha256, length, outfile, ...}}"""
-    rows = {}
-    with open(lock_path, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        for row in reader:
-            key = (row["id"], row["version"])
-            rows[key] = row
-    return rows
+def load_lock(lock_path: Path) -> list:
+    """The manifest as a list of rows.
+
+    A list, not a dict keyed by (id, version): keying silently kept the LAST of two rows
+    claiming the same identity, where core.lock.resolve refuses the ambiguity.
+    """
+    try:
+        return _lock.read(lock_path)[1]
+    except _lock.LockError as exc:
+        sys.exit("BLOCK: %s" % exc)
+
 
 def verify_lock_root(lock_path: Path, lock_root_path: Path, pinned: str | None = None):
-    """Verify the Parts Library manifest is internally consistent, and (optionally)
-    that it is the exact library state this build was pinned to.
+    """Delegates to core.lock.verify_root, which RECOMPUTES every row hash from the
+    row's own fields before checking the root.
 
-    Two independent checks:
-      1. SELF-CONSISTENCY (always on, fail-closed). Recompute the root from the row
-         hashes and require it to equal the LOCK.root file. This catches an edited
-         manifest: you cannot change a row without changing the root.
-      2. EXTERNAL PIN (only when `pinned` is given). Require that root to equal a
-         hash you supplied out-of-band. This catches a library that is internally
-         consistent but not the one you meant to build against — a stale sync, a
-         wrong checkout, a second machine.
-
-    Returns (ok, message).
+    This function used to hash the row_sha256 COLUMN as written, so editing a recorded
+    accession without touching its row hash passed the gate: a falsified provenance
+    claim built to completion with exit 0 while verify_library_v2.py reported two
+    problems. The sequence was protected by stage 2; the recorded ORIGIN of that
+    sequence was not. CODE-REPORT finding A.
     """
-    if not lock_root_path.exists():
-        return False, "LOCK.root file missing"
-    disk_root = lock_root_path.read_text(encoding="utf-8").strip()
+    return _lock.verify_root(lock_path, lock_root_path, pinned)
 
-    # 1. Self-consistency — always enforced.
-    row_hashes = []
-    with open(lock_path, "r", encoding="utf-8") as f:
-        reader = csv.DictReader(f, delimiter="\t")
-        for row in reader:
-            row_hashes.append(row["row_sha256"])
-    computed = sha256_hex("\n".join(row_hashes).encode("utf-8"))
-    if computed != disk_root:
-        return False, (f"LOCK is not self-consistent: recomputed root {computed[:16]}… "
-                       f"≠ LOCK.root file {disk_root[:16]}… (manifest edited?)")
-
-    # 2. External pin — only if the caller supplied one.
-    if pinned:
-        if disk_root != pinned:
-            return False, (f"LOCK.root mismatch: library={disk_root[:16]}… "
-                           f"pinned={pinned[:16]}… (wrong or stale library)")
-        return True, f"self-consistent + matches pin {pinned[:16]}…"
-
-    return True, f"self-consistent ({disk_root[:16]}…); NO EXTERNAL PIN — pass --expect-root to bind"
 
 # ── Stage 1+2: resolve + verify parts ──────────────────────────────────────
 
@@ -234,13 +206,20 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       to paste when it admits a part. To see what you already have:\n"
                      f"           python3 find_part.py --have")
 
-        # Find in LOCK by id
-        lock_key = None
-        for (lid, lver), lrow in lock.items():
-            if lid == pid:
-                if lock_key is None or int(lver) > int(lock_key[1]):
-                    lock_key = (lid, lver)
-        if lock_key is None:
+        # Resolve by the Spec's PIN, not by the highest version number.
+        #
+        # This loop used to scan for max(version) and then compare the pin against only
+        # that row, so a Spec pinned to an OLDER sealed version -- row still in the
+        # manifest, file still on disk -- was refused, with advice to update the Spec to
+        # match the library. Following that advice changes the construct, and it
+        # contradicts ARCHITECTURE.md's promise that history is append-only so a build
+        # from last month can still be reproduced. HrpS.Ec-opt has v1, v2 and v3 sealed;
+        # pAP-Logic v5 pinned v2. CODE-REPORT finding B.
+        #
+        # core.lock.resolve enforces the pin itself, so the separate check that used to
+        # follow is gone: enforcing one rule in two places is how the engine's copy and
+        # katana_lock's copy came to disagree in the first place.
+        if not any(r.get("id") == pid for r in lock):
             sys.exit(f"BLOCK Stage-1: part '{pid}' is not in your Parts Library yet.\n"
                      f"       Your Spec asks for it, but the library has never been given it.\n"
                      f"       Nothing is broken - you just need to add it first.\n"
@@ -248,19 +227,15 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                      f"       Find it on NCBI:        python3 find_part.py {pid}\n"
                      f"       Copy one we ship:       python3 add_part.py --library <yours> "
                      f"--from parts-library/ref_parts --id {pid}")
-
-        lock_row = lock[lock_key]
-        lock_sha = lock_row["seq_sha256"]
-
-        # Verify pin matches LOCK
-        if not lock_sha.startswith(expected_sha12):
-            sys.exit(f"BLOCK Stage-1: part '{pid}' pin {expected_sha12} ≠ LOCK {lock_sha[:12]}\n"
-                     f"       Your Spec is pinned to one version of this part; your library\n"
-                     f"       holds a different one. One of them has moved on.\n"
+        try:
+            lock_row = _lock.resolve(lock, pid, pin=expected_sha12, lib=lib_file)
+        except _lock.LockError as exc:
+            sys.exit(f"BLOCK Stage-1: {exc}\n"
                      f"       This is the check doing its job, not a bug.\n"
                      f"       Look at what the library actually holds:\n"
                      f"           python3 find_part.py {pid}\n"
-                     f"       then update the seal block in your Spec to match it.")
+                     f"       then correct whichever of the two is wrong.")
+        lock_sha = lock_row["seq_sha256"]
 
         # Load the .gb file
         gb_path = LIB / lib_file
