@@ -40,28 +40,45 @@ sys.path.insert(0, HERE)
 import kg_parse  # noqa: E402
 
 
-# ---- hashing, byte-for-byte per parts-library/_tools/katana_lock.py ----
+# ---- hashing, through core ----
+# This block used to carry its own copies of the conventions, with a header comment
+# claiming they were "byte-for-byte per parts-library/_tools/katana_lock.py" -- a file
+# that is not in this repository. That is exactly how a hand-maintained copy drifts.
+import kg_refs as _kg_refs                                      # noqa: E402
+
+_core_hashing, _core_lock, _core_parts = _kg_refs._import_core()
+
 LOCK_FIELDS = ["id", "version", "seq_sha256", "file_sha256", "length",
                "source", "date", "class", "outfile"]
 
 
 def _sha(b):
+    if _core_hashing is not None:
+        return _core_hashing.sha256_hex(b)
     return hashlib.sha256(b).hexdigest()
 
 
 def seq_sha256_of(seq):
+    if _core_hashing is not None:
+        return _core_hashing.seq_sha256("".join(c for c in seq if c.isalpha()))
     return _sha("".join(c for c in seq if c.isalpha()).upper().encode())
 
 
 def _row_sha(row):
-    return _sha("\n".join(f"{k}={row.get(k,'')}" for k in LOCK_FIELDS).encode())
+    if _core_hashing is not None:
+        return _core_hashing.row_sha256(row)
+    return _sha("\n".join("%s=%s" % (k, row.get(k, "")) for k in LOCK_FIELDS).encode())
 
 
 def _lock_root(rows):
+    if _core_hashing is not None:
+        return _core_hashing.lock_root(rows)
     return _sha("\n".join(_row_sha(r) for r in rows).encode())
 
 
 def read_lock(path):
+    if _core_lock is not None:
+        return _core_lock.read(path)[1]
     with open(path, "r", encoding="utf-8") as f:
         lines = [ln.rstrip("\n") for ln in f if ln.strip() != ""]
     header = lines[0].split("\t")
@@ -81,6 +98,9 @@ def last_attested_root(logpath):
 
 
 def _filename_sha12(outfile):
+    """The 12-hex fingerprint in a sealed part's filename, through core.lock."""
+    if _core_lock is not None:
+        return _core_lock.filename_sha12(outfile)
     return os.path.basename(outfile).rsplit(".", 1)[0].split("__")[-1]
 
 
