@@ -44,6 +44,7 @@ class Block:
         self.pident = None            # % identity over the reference's own span
         self.core_pident = None       # % identity over the best-supported segment only
         self.ref_in_query = None      # did the whole reference fit inside this sequence?
+        self.wraps_origin = False     # on a plasmid, does this part cross the origin?
         self.coverage = None          # matched_len / reference_len
         self.ref_len = None
         self.matched_len = None
@@ -250,7 +251,15 @@ def identify(record, workdir, status=None, deep=False):
         # top; it does not replace this. An earlier version ran only blastn when --deep
         # succeeded, which made a built-in hit that blastn did not report DISAPPEAR when
         # a user asked for a deeper search -- the opposite of what the flag promises.
-        raw = kg_seedmatch.identify_hits(seq, kg_refs.REFERENCE_PARTS)
+        # The record's own topology, not an assumption. A part sitting across a
+        # plasmid's origin was read as two truncated pieces before this was passed.
+        raw = kg_seedmatch.identify_hits(
+            seq, kg_refs.REFERENCE_PARTS,
+            circular=(getattr(record, "topology", "linear") == "circular"))
+        if status is not None:
+            _capped = {h["sid"]: h["loci_capped"] for h in raw if h.get("loci_capped")}
+            if _capped:
+                status["loci_capped"] = _capped
         if deep:
             if not _have_blast():
                 _deep_failed("--deep was requested but NCBI BLAST+ is not installed "
@@ -279,6 +288,7 @@ def identify(record, workdir, status=None, deep=False):
         # Both identity measures, and whether the reference even fit, so the audit
         # can describe a shortfall instead of guessing at its cause.
         b.core_pident = h.get("core_pident")
+        b.wraps_origin = bool(h.get("wraps_origin"))
         b.ref_in_query = h.get("ref_in_query")
         b.alternatives = h.get("alternatives") or []
         b.ref_len = len(kg_refs.normalise(r["seq"])); b.matched_len = h["length"]

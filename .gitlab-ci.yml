@@ -58,6 +58,7 @@ verify:
     - python3 tests/test_synonym_labels.py
     - python3 tests/test_orientation.py
     - python3 tests/test_terminal_divergence.py
+    - python3 tests/test_circular.py
     - python3 tests/test_bad_input.py
     - python3 tests/test_web_pyodide.py
     - python3 tests/test_py39.py
@@ -101,6 +102,7 @@ no-deps:
     - python3 tests/test_synonym_labels.py
     - python3 tests/test_orientation.py
     - python3 tests/test_terminal_divergence.py
+    - python3 tests/test_circular.py
     - python3 tests/test_bad_input.py
     - python3 tests/test_web_pyodide.py
     - python3 tests/test_py39.py

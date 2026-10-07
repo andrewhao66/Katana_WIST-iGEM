@@ -146,10 +146,20 @@ def _long_hits(sid, ref, q, qidx, n, k, stride):
         #
         # Bounded at MAX_LOCI by seed count: unbounded would mean a full extension per
         # diagonal per reference across 18,538 references.
-        for d, _seeds in sorted(diags.items(), key=lambda kv: kv[1],
-                                reverse=True)[:MAX_LOCI]:
+        #
+        # The cap used to drop the rest IN SILENCE. Five tandem copies of B0015 returned
+        # four hits and the fifth, at 517-645, was simply missing -- so a wrong label on
+        # that copy received no identity comparison at all. Raising the cap would not fix
+        # that; any cap drops the next one. What fixes it is saying so, which is this
+        # project's own SKIP principle: "we did not check" must never read as "checked
+        # and fine". loci_capped rides on the hits so the audit can report it.
+        ranked = sorted(diags.items(), key=lambda kv: kv[1], reverse=True)
+        capped = len(ranked) > MAX_LOCI
+        for d, _seeds in ranked[:MAX_LOCI]:
             hit = _extend(sid, q, s, d, L, n, strand)
             if hit is not None:
+                if capped:
+                    hit["loci_capped"] = len(ranked)
                 out.append(hit)
     return out
 
@@ -220,12 +230,41 @@ def _extend(sid, q, s, d, L, n, strand):
                 ref_in_query=(ws >= 0 and we <= n))
 
 
-def identify_hits(query, refs, k=K):
-    """Identify which references occur in `query`. Returns kg_identify._blast()'s shape."""
+def identify_hits(query, refs, k=K, circular=False):
+    """Identify which references occur in `query`. Returns kg_identify._blast()'s shape.
+
+    circular: the query is a plasmid, so a part may sit ACROSS its origin.
+
+    Where the origin falls is an arbitrary choice made by whoever exported the file --
+    often the cloning site, which sits right next to the parts. Read linearly, a part
+    spanning it is split in two: B0015 as a 129 bp circle rotated by 26 bases gave hits
+    at coverage 0.798 and 0.202, and the audit raised a truncation FLAG saying 80% of the
+    part was there when all of it was. A false warning on a correct plasmid is the
+    cry-wolf failure -- once a student learns the warnings are noise, the real one goes
+    past them too.
+
+    So a circular query is searched with its own beginning appended, long enough for the
+    longest reference to be found whole. Hits are then mapped back: one that lies wholly
+    in the appended tail is a duplicate of one already found and is dropped, and one that
+    crosses the seam is reported once, with an end coordinate past the sequence length --
+    the same convention GenBank's join(104..129,1..103) expresses, and marked
+    wraps_origin so nothing downstream has to infer it from arithmetic.
+    """
     q = kg_refs.normalise(query)
     n = len(q)
     if n < SHORT_MIN:
         return []                        # nothing in the set can identify this
+
+    # The overlap only needs to cover the longest reference that could straddle the
+    # origin, and can never usefully exceed the plasmid itself.
+    wrap = 0
+    if circular:
+        longest = max((len(kg_refs.normalise(r.get("seq") or "")) for r in refs),
+                      default=0)
+        wrap = min(n, max(0, longest - 1))
+        if wrap:
+            q = q + q[:wrap]
+            n = len(q)
     qrc = revcomp(q)
 
     qidx = _query_index(q, k) if n >= k else {}
@@ -250,4 +289,25 @@ def identify_hits(query, refs, k=K):
         cur = keep.get(key)
         if cur is None or (h["pident"], h["cov"]) > (cur["pident"], cur["cov"]):
             keep[key] = h
-    return list(keep.values())
+    out = list(keep.values())
+
+    if circular and wrap:
+        real = n - wrap                  # the plasmid's own length
+        mapped = []
+        for h in out:
+            if h["qstart"] > real:
+                continue                 # wholly inside the appended tail: a duplicate
+            h = dict(h, wraps_origin=h["qend"] > real)
+            mapped.append(h)
+        # A part found whole across the seam and also found split either side of it would
+        # be reported three times. Keep the whole reading.
+        best = {}
+        for h in mapped:
+            key = h["sid"]
+            cur = best.get(key)
+            if cur is None or (h["cov"], h["pident"]) > (cur["cov"], cur["pident"]):
+                best[key] = h
+        whole = {sid: h for sid, h in best.items() if h["cov"] > 0.99}
+        out = [h for h in mapped
+               if h["sid"] not in whole or h is whole[h["sid"]]]
+    return out

@@ -10,6 +10,7 @@ same thing a katana-validate PASS does:
   - junction rules: RBS→ATG spacing 5–9 nt, no spurious internal ATG/stop
 """
 from kg_parse import revcomp
+from kg_seedmatch import MAX_LOCI
 import kg_refs
 
 # --- enzyme sites, copied from parts-library/_tools/forbid_sites_check.py ---
@@ -216,6 +217,35 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                                      if not _ident_ran else
                                      "Add the relevant parts to the seed set via "
                                      "katana-parts-library intake, then re-run.")))
+
+    # ---- NOT EVERY OCCURRENCE WAS EXAMINED ----
+    # The identifier extends at most MAX_LOCI diagonals per reference per strand. Beyond
+    # that it used to drop the rest in silence: five tandem copies of a part got four
+    # identity comparisons and the fifth got none, so a wrong label on it was never
+    # checked. Raising the cap would not fix it -- any cap drops the next one -- so the
+    # cap is reported instead. "We did not check" must never read as "checked and fine".
+    # Only for references the construct ACTUALLY contains. With 18,538 references, some
+    # short repetitive one seeds more than MAX_LOCI diagonals in almost any sequence --
+    # measured on the demo: 355 references hit the cap and not one of them was identified
+    # anywhere in the construct. Reporting those would put a FLAG on every clean audit,
+    # which is the cry-wolf failure this finding exists to prevent.
+    _identified = {b.ident_id for b in blocks if b.ident_id}
+    _capped = {sid: k for sid, k in
+               ((identify_status or {}).get("loci_capped") or {}).items()
+               if sid in _identified}
+    if _capped:
+        _worst = sorted(_capped.items(), key=lambda kv: -kv[1])
+        _names = ", ".join("%s (%d places)" % (sid, k) for sid, k in _worst[:4])
+        findings.append(Finding(
+            "identification-partial", FLAG,
+            "Not every occurrence of a repeated part was examined",
+            detail=(f"These references occur in more places than Katana examines: "
+                    f"{_names}. It compares the best {MAX_LOCI} per reference per "
+                    f"strand, so a wrong label on a further copy would not be caught "
+                    f"here. This is a limit of the search, not a finding about your "
+                    f"sequence."),
+            fix="Check the repeated copies against each other by hand, or audit the "
+                "repeated region on its own so each copy gets compared."))
 
     # ---- IDENTITY: claim vs sequence (the headline check) ----
     for b in blocks:
