@@ -123,10 +123,18 @@ def load_yaml_simple(path: Path) -> dict:
     try:
         import yaml
     except ImportError:
-        sys.exit("BLOCK: PyYAML is missing. It is the one thing this engine cannot run without.\n"
-                 "       Install it with:   python -m pip install pyyaml\n"
-                 "       If you made a workspace with python -m venv .venv, switch to it first,\n"
-                 "       or the install goes somewhere this build cannot see.")
+        # Fall back to the vendored copy. An installed PyYAML wins (vendor_path appends,
+        # never prepends), so a developer's venv stays authoritative; this is what makes a
+        # machine with nothing installed work.
+        try:
+            sys.path.insert(0, str(HERE))
+            import vendor_path
+            vendor_path.ensure()
+            import yaml
+        except ImportError:
+            sys.exit("BLOCK: no YAML parser available, and the vendored copy in _vendor/\n"
+                     "       is missing. If you cloned this repository, the simplest repair\n"
+                     "       is a fresh copy of it.")
     # A malformed Spec used to escape as a raw Python traceback ending in a scanner error,
     # while check_design.py — given the SAME file — printed a clear message. Two entry points
     # handling one failure two different ways is the defect; a traceback is not a verdict.

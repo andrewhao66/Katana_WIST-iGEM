@@ -1,22 +1,21 @@
-# Katana engine — pinned dependencies.
+# Katana engine — dependencies.
 #
-# The engine core is deliberately near-stdlib: the only hard requirement is a YAML
-# parser for Design Specs. Everything else is optional and gated, and the engine
-# reports loudly (never silently) when an optional gate could not run.
+# THERE ARE NONE. The engine needs nothing installed.
 #
-# INSTALL THIS INSIDE A VIRTUAL ENVIRONMENT. These are exact pins, which is what makes
-# a build reproducible - but run against a system-wide Python they will UNINSTALL newer
-# versions you already had and replace them with these, silently, for every other project
-# on that machine. A venv confines them to this project. The README says so too.
-
-PyYAML==6.0.2            # required: parse .spec.yaml Design Specs
-
-# Optional — Stage-4b dry-lab gate. Without these the gate WARNS and is not enforced.
-python-codon-tables==0.1.12   # optional: real E. coli CAI for designed CDSs
-
-# Optional — SBOL 3 interchange (`--sbol out.ttl`). Without it the engine still builds;
-# it just cannot emit SBOL, and says so rather than failing quietly.
-sbol3==1.2.0.post0            # optional: validated SBOL 3 export
-#   NOTE: .post0 matters. There is no plain 1.2.0 on PyPI, so `sbol3==1.2.0` resolves to the
-#   YANKED 1.2 wheel (withdrawn: built from an older commit than its tag). Pip warns and
-#   installs it anyway.
+# Its one hard dependency used to be a YAML parser, and `pip install` was the first
+# step of the install instructions. On a school machine that step fails in a dozen ways
+# — no pip, an externally-managed Python, a proxy, no network, a version conflict with
+# another project — and when it fails the engine cannot read a Design Spec at all.
+# PyYAML is now vendored in _vendor/yaml/ (pure Python, MIT) and loaded by
+# vendor_path.py. See _vendor/README.md.
+#
+# NCBI BLAST+ is no longer needed either. Identification is pure Python
+# (kagami/kg_seedmatch.py) and measures identical to blastn on full-length parts, on
+# truncation and on point mutations, while being about twice as fast. BLAST+ remains
+# useful for gapped, distant-homology search and the CLI exposes it as `--deep`.
+#
+# Python 3.9 or newer is the only requirement.
+#
+# Two OPTIONAL extras are in requirements-optional.txt. Without them the engine still
+# builds and still audits; it says loudly which checks it therefore did not run,
+# because an optional check that vanishes silently is worse than no check at all.

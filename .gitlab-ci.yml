@@ -5,56 +5,67 @@
 # worth exactly as much as the last time somebody ran it, so it runs here, on a
 # clean machine that is not ours, every commit.
 #
-# Three jobs, deliberately separated so a red pipeline says WHICH property broke:
+# Four jobs, deliberately separated so a red pipeline says WHICH property broke:
 #
 #   verify        the library is intact, and the checker still catches tampering
-#                 (verify.py corrupts a scratch copy eight ways and expects eight catches)
+#                 (verify.py runs eight adversarial checks on a scratch copy: four real
+#                  corruptions, three resolver refusals, and a clean baseline)
 #   determinism   every Design Spec still rebuilds to its recorded sealed hash,
 #                 and a wrong library pin / edited manifest is still refused
-#   minimal       the engine works with ONLY its required dependency installed
-#   kagami        the auditor a stranger is invited to run still works on a bare machine
-#                 (no blastn: an annotated file is still checked by exact match)
+#   no-deps       the engine and the auditor work with NOTHING installed -- no pip
+#                 packages, no NCBI BLAST+. This is the machine every team member has.
+#   kagami        the auditor a stranger is invited to run, on an image with no blastn.
+#                 Since phase 1 that is the FULL audit, not a degraded one.
 #
-# `minimal` exists because the other two install everything. Optional extras are
+# `no-deps` exists because the other two install everything. Optional extras are
 # supposed to degrade to a loud warning, never a crash — and the only way to know
-# that is still true is to run without them.
+# that is still true is to run without them. It is also the machine every team
+# member actually has, which is the machine the old pipeline never tested.
 
 stages: [test]
 
 default:
   image: python:3.12
   before_script:
-    - python --version
+    - python3 --version
 
-# Full install: PyYAML + the optional CAI and SBOL extras, so the optional gates
-# actually execute rather than being skipped.
+# With the optional extras installed, so the optional gates actually execute rather
+# than reporting themselves skipped. requirements.txt is empty by design -- the engine
+# needs nothing -- so these jobs install requirements-optional.txt instead.
 .full: &full
   stage: test
   before_script:
-    - python --version
-    - pip install --no-cache-dir -r requirements.txt
+    - python3 --version
+    - pip install --no-cache-dir -r requirements-optional.txt
 
 verify:
   <<: *full
   script:
     # Exits non-zero if any part mismatches its manifest, or if any of the eight
     # deliberate corruptions goes UNcaught.
-    - python verify.py
+    - python3 verify.py
 
 determinism:
   <<: *full
   script:
     # Oracle (every Spec -> its recorded hash), repeatability, wrong-pin refused,
     # tampered-manifest refused, and the SBOL export round-tripping to the same hash.
-    - python test_determinism.py
+    - python3 test_determinism.py
 
-# No extras. Proves the near-stdlib claim: the engine must still build a construct
-# with only PyYAML present, warning about the gates it cannot run instead of dying.
-minimal-deps:
+# NOTHING installed. This is the claim that matters now, and it is the whole point of
+# phase 1: the engine must build a construct and the auditor must audit a sequence on a
+# machine with no pip packages and no NCBI BLAST+. PyYAML is vendored; identification is
+# pure Python; the two optional gates must degrade to a loud warning rather than dying.
+#
+# This job is the one that would have caught the install failures: every member asked to
+# install the old version failed, and the pipeline never ran anything on a bare machine.
+no-deps:
   stage: test
   script:
-    - pip install --no-cache-dir "PyYAML==6.0.2"
-    - python test_determinism.py
+    - python3 -c "import yaml" && exit 1 || echo "confirmed: no PyYAML installed"
+    - python3 verify.py
+    - python3 test_determinism.py
+    - cd kagami && python3 tests.py && python3 test_identify.py
 
 # Kagami is the tool the wiki invites a visitor to download and run. This image has no
 # blastn, which is the point - it is the machine a stranger actually has. As of phase 1

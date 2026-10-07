@@ -27,6 +27,8 @@ import re
 import sys
 from pathlib import Path
 
+HERE = Path(__file__).resolve().parent
+
 # The part roles this understands. Anything else is passed over rather than guessed at.
 PROMOTER, RBS, CDS, TERM = "promoter", "rbs", "cds", "terminator"
 
@@ -46,8 +48,18 @@ def load_spec(path: Path) -> dict:
     try:
         import yaml
     except ImportError:
-        sys.exit("BLOCK: PyYAML is missing, and this reads YAML.\n"
-                 "       Install it with:   python -m pip install pyyaml")
+        # Fall back to the vendored copy. An installed PyYAML wins (vendor_path appends,
+        # never prepends), so a developer's venv stays authoritative; this is what makes a
+        # machine with nothing installed work.
+        try:
+            sys.path.insert(0, str(HERE))
+            import vendor_path
+            vendor_path.ensure()
+            import yaml
+        except ImportError:
+            sys.exit("BLOCK: no YAML parser available, and the vendored copy in _vendor/\n"
+                     "       is missing. If you cloned this repository, the simplest repair\n"
+                     "       is a fresh copy of it.")
     try:
         # Read from the handle, not from a string: PyYAML names its source in the error, and
         # from a string that name is the useless "<unicode string>" rather than the file.

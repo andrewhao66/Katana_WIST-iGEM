@@ -545,9 +545,19 @@ _spec_text = kg_bridge.draft_spec(_r_yes, _b_yes, _f_legacy, vendor="Twist")
 try:
     import yaml as _yaml
 except ImportError:
-    _yaml = None
+    # The repository vendors PyYAML, so this assertion must not degrade to SKIPPED on a
+    # machine with nothing installed -- that is the silently-vanishing check this project
+    # refuses, and the defect it pins (an emitted Spec that forward Katana could not parse)
+    # was real and reported.
+    try:
+        sys.path.insert(0, os.path.dirname(HERE))
+        import vendor_path
+        vendor_path.ensure()
+        import yaml as _yaml
+    except ImportError:
+        _yaml = None
 if _yaml is None:
-    check("emitted Spec is valid YAML (SKIPPED — PyYAML not installed)", True)
+    check("emitted Spec is valid YAML (SKIPPED — no YAML parser, not even vendored)", True)
 else:
     try:
         _spec = _yaml.safe_load(_spec_text)

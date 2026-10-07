@@ -215,23 +215,47 @@ def main() -> int:
                 lock.write_text("\n".join(rows) + "\n", encoding="utf-8")
                 engine_copy = sandbox / "katana_build.py"
                 shutil.copyfile(ENGINE, engine_copy)
-                for helper in ("katana_drylab.py", "blast_offtarget.py"):
+                # Everything the engine needs to RUN, not just the engine. This list grew
+                # when PyYAML was vendored: a sandbox missing _vendor/ made the engine exit
+                # on "no YAML parser available" BEFORE it ever reached the LOCK.root check,
+                # so this test reported "tampered manifest accepted" while the real cause was
+                # an incomplete sandbox. A test that assembles a broken engine proves nothing
+                # about the engine.
+                for helper in ("katana_drylab.py", "blast_offtarget.py",
+                               "katana_order_table.py", "katana_sbol.py", "vendor_path.py"):
                     if (HERE / helper).exists():
                         shutil.copyfile(HERE / helper, sandbox / helper)
-                spec_copy = sandbox / "specs"
-                if not spec_copy.exists():
-                    shutil.copytree(specs_dir, spec_copy)
-                target = spec_copy / sample.name
-                proc = subprocess.run(
-                    [sys.executable, str(engine_copy), str(target), "--dry-run"],
-                    capture_output=True, text=True,
-                    encoding="utf-8", errors="replace")
-                if proc.returncode != 0 and "not self-consistent" in (proc.stdout + proc.stderr):
-                    passed += 1
-                    print("   PASS tampered manifest refused (root no longer self-consistent)")
+                if (HERE / "_vendor").is_dir():
+                    shutil.copytree(HERE / "_vendor", sandbox / "_vendor",
+                                    ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+                # Assert the sandbox can run at all before trusting what it says about
+                # tampering. Without this the next assertion cannot tell "the engine refused
+                # the tampered library" from "the engine could not start".
+                sanity = subprocess.run(
+                    [sys.executable, str(engine_copy), "--help"],
+                    capture_output=True, text=True, encoding="utf-8", errors="replace")
+                if sanity.returncode != 0:
+                    failures.append("TAMPER: the sandboxed engine could not start, so this "
+                                    "check could not measure anything")
+                    print("   FAIL sandboxed engine will not start — this check measured "
+                          "nothing:\n     "
+                          + (sanity.stdout + sanity.stderr).strip()[:300])
                 else:
-                    failures.append("TAMPER: a corrupted LOCK row did NOT block the build")
-                    print(f"   FAIL tampered manifest accepted (rc={proc.returncode})")
+                    spec_copy = sandbox / "specs"
+                    if not spec_copy.exists():
+                        shutil.copytree(specs_dir, spec_copy)
+                    target = spec_copy / sample.name
+                    proc = subprocess.run(
+                        [sys.executable, str(engine_copy), str(target), "--dry-run"],
+                        capture_output=True, text=True,
+                        encoding="utf-8", errors="replace")
+                    out = proc.stdout + proc.stderr
+                    if proc.returncode != 0 and "not self-consistent" in out:
+                        passed += 1
+                        print("   PASS tampered manifest refused (root no longer self-consistent)")
+                    else:
+                        failures.append("TAMPER: a corrupted LOCK row did NOT block the build")
+                        print(f"   FAIL tampered manifest accepted (rc={proc.returncode})")
 
     # ── 5. SBOL — export must be valid, reloadable, and hash-faithful ───────
     print("\n5. SBOL — export is valid SBOL 3 and preserves hash verifiability")
