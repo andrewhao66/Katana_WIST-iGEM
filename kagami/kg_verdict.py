@@ -29,3 +29,48 @@ def classify(rc, out, dry):
     if unenforced:
         return "REVIEW", "SEALED - a gate did not run", unenforced[0]
     return "PASS", "SEALED", sealed[0].replace("SEALED:", "seq_sha256").strip()
+
+
+def from_result(result):
+    """Turn a BuildResult (object or its to_dict) into (kind, headline, detail).
+
+    The same three-tuple classify() returns, so a caller swaps one for the other and the
+    window's rendering is unchanged. What changes is that rewording an engine message can
+    no longer silently turn a sealed build into REVIEW: classify() greps prose, and this
+    reads data.
+
+    The rule classify() encodes is kept exactly: a run that finished but left a gate
+    unenforced is REVIEW, never PASS. "We did not check" must not read as "checked and
+    fine".
+    """
+    d = result if isinstance(result, dict) else result.to_dict()
+    verdict = d.get("verdict", "FAIL")
+    not_run = list(d.get("not_run") or [])
+
+    if verdict == "FAIL":
+        stage = d.get("blocked_stage") or "?"
+        reason = ""
+        for f in d.get("findings") or []:
+            if f.get("status") == "FAIL":
+                reason = f.get("summary", "")
+                break
+        detail = reason or "The engine stopped."
+        if stage and stage not in detail:
+            detail = "%s (stage: %s)" % (detail, stage)
+        return "FAIL", "BLOCKED", detail
+
+    if d.get("dry_run"):
+        if not_run:
+            return ("REVIEW", "CHECKED - a gate did not run",
+                    "Not enforced this run: " + ", ".join(not_run))
+        return "PASS", "CHECKED", "Stages 1-4b passed. Dry run: nothing was written."
+
+    if not d.get("seq_sha256"):
+        return ("REVIEW", "FINISHED - no seal",
+                "The engine exited cleanly but recorded no sealed hash.")
+
+    if not_run:
+        return ("REVIEW", "SEALED - a gate did not run",
+                "Not enforced this run: " + ", ".join(not_run))
+
+    return "PASS", "SEALED", "seq_sha256 " + d["seq_sha256"]

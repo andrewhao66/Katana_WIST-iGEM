@@ -81,8 +81,10 @@ def read_lock(lock):
         return []
 
 
-# classify lives in kg_verdict so the browser page can share it without importing tkinter.
-from kg_verdict import classify  # noqa: E402,F401
+# Both live in kg_verdict so the browser page can share them without importing tkinter.
+# classify() greps the engine's prose and is the fallback for the subprocess path;
+# from_result() reads a BuildResult and is what the in-process path uses.
+from kg_verdict import classify, from_result  # noqa: E402,F401
 
 
 class _Pane:

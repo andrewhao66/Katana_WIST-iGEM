@@ -695,5 +695,58 @@ if _kt:
     check("a crash with no BLOCK line still fails, quoting the last line",
           _kt.classify(1, "Traceback\nValueError: boom\n", False)[::2] == ("FAIL", "ValueError: boom"))
 
+    # from_result reads the engine's structured result instead of greping its prose.
+    # The same three-tuple, so the window's rendering is unchanged -- what changes is
+    # that rewording a message can no longer silently turn a sealed build into REVIEW.
+    _ok = {"verdict": "PASS", "exit_code": 0, "blocked_stage": None, "not_run": [],
+           "dry_run": False, "seq_sha256": "abc123def4567890" + "0" * 48,
+           "findings": [], "stages": [{"name": "seal", "ok": True, "findings": [],
+                                       "data": {}}]}
+    check("from_result: a clean sealed result reads SEALED / PASS",
+          _kt.from_result(_ok)[:2] == ("PASS", "SEALED"))
+
+    _skipped = dict(_ok, not_run=["offtarget"],
+                    findings=[{"category": "offtarget", "status": "SKIP",
+                               "summary": "OFF-TARGET SKIPPED - no genome",
+                               "loc": "", "detail": "", "fix": ""}])
+    _k, _h, _d = _kt.from_result(_skipped)
+    check("from_result: a seal with a gate that did not run is REVIEW", _k == "REVIEW")
+    check("from_result: ...and the headline says so in words", "gate did not run" in _h)
+    check("from_result: ...and the detail names which gate", "offtarget" in _d)
+
+    _dry = dict(_ok, dry_run=True, seq_sha256="")
+    check("from_result: a clean dry run says nothing was written",
+          "nothing was written" in _kt.from_result(_dry)[2])
+
+    _blocked = {"verdict": "FAIL", "exit_code": 1, "blocked_stage": "source",
+                "not_run": [], "dry_run": False, "seq_sha256": "",
+                "findings": [{"category": "pin", "status": "FAIL",
+                              "summary": "part 'sfGFP': pin does not match",
+                              "loc": "", "detail": "", "fix": ""}],
+                "stages": [{"name": "source", "ok": False, "findings": [], "data": {}}]}
+    _k, _h, _d = _kt.from_result(_blocked)
+    check("from_result: a refused build is BLOCKED", (_k, _h) == ("FAIL", "BLOCKED"))
+    check("from_result: ...and quotes the reason", "pin does not match" in _d)
+    check("from_result: ...and names the stage", "source" in _d)
+
+    # Review Focus 4: the Build tab on a Spec that BLOCKs. The verdict must read FAIL
+    # and name the blocking stage -- which is what the greped "BLOCK" line supplied, and
+    # what a reader needs in order to know where to look.
+    _blk = dict(_blocked, blocked_stage="assemble", dry_run=True,
+                findings=[{"category": "block", "status": "FAIL",
+                           "summary": "'NoSuchPart' appears in architecture.order but "
+                                      "is not in your Spec's parts list",
+                           "loc": "", "detail": "", "fix": ""}],
+                stages=[{"name": "assemble", "ok": False, "findings": [], "data": {}}])
+    _k, _h, _d = _kt.from_result(_blk)
+    check("from_result: a BLOCKing Spec reads FAIL in the window", _k == "FAIL")
+    check("from_result: ...and the detail names the stage that refused", "assemble" in _d)
+    check("from_result: ...and quotes what the engine said", "NoSuchPart" in _d)
+
+    # The prose-greping classify() stays for the subprocess path and for anything
+    # outside this repository. It must not have changed.
+    check("classify() still works on raw output",
+          _kt.classify(0, "  SEALED: abc\n", False)[:2] == ("PASS", "SEALED"))
+
 print(f"\n{PASS} passed, {FAIL} failed")
 sys.exit(1 if FAIL else 0)
