@@ -13,15 +13,15 @@ Neither is worth giving that up.
 DESIGN NOTES, mostly about not lying to the reader:
 
 The verdict is large and colour-coded, but the colour never carries the meaning alone - the word
-PASS / CONDITIONAL / FAIL is always there, because roughly one in twelve men cannot reliably
-separate the red from the green.
+PASS / REVIEW / FAIL is always there, because roughly one in twelve men cannot reliably separate
+the red from the green.
 
-The audit runs on a worker thread. A frozen window is indistinguishable from a crashed one, and a
-blastn run against 18,538 references takes a few seconds.
+The audit runs on a worker thread. A frozen window is indistinguishable from a crashed one, and
+searching 18,538 references takes a few seconds.
 
-Missing blastn is reported as a specific, fixable condition rather than as a failure. Without it
-Kagami still audits everything that does not need references, and the window says exactly that
-instead of silently producing a thinner report.
+Nothing has to be installed. Identification is pure Python, so the window no longer opens with a
+notice about a missing add-on - there is no add-on. NCBI BLAST+ remains useful for finding distant
+homologs and the CLI exposes it as `--deep`, but the audit is complete without it.
 
 A stitched input (several DNA fragments found in one spreadsheet) is announced in the window, in
 the same words the CLI uses, because joining fragments in the wrong order produces a different
@@ -29,7 +29,6 @@ construct that would still audit cleanly.
 """
 import os
 import queue
-import shutil
 import sys
 import tempfile
 import threading
@@ -178,43 +177,6 @@ class App:
         self.text.configure(state="disabled")
 
         self._say("Choose a sequence file and press Audit.\n", "dim")
-        if not (shutil.which("blastn") and shutil.which("makeblastdb")):
-            # NOT the "FAIL" tag. That tag is red — the same red as a construct with an internal
-            # stop codon — and a missing optional add-on rendered in it reads as "the program
-            # broke". A WIST student hit exactly that on 2026-10-01 and reported Kagami as
-            # erroring. Nothing has gone wrong here and nothing the student did caused it, so the
-            # headline is plain bold and the words say so.
-            self._say("\nOne feature needs a free add-on (nothing is broken)\n", "head")
-            self._say("Kagami can check reading frame, GC, repeats, restriction sites and size "
-                      "right now. To also name the parts inside your sequence — which is how it "
-                      "catches a label that disagrees with its DNA — it needs a free program "
-                      "from the NCBI called BLAST+.\n", "dim")
-            self._say("Download: https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/\n",
-                      "fix")
-            # No PATH talk and no "re-run". A student using this window has no terminal open and
-            # may not have one available at all; "re-run" is a terminal instruction wearing a
-            # GUI's clothes. Tell them which file to click and what to do with this window.
-            # NCBI's folder is a bare file listing, which reads as broken to someone expecting a
-            # download page. Say what it will look like and which one line to click. The names are
-            # given by their ENDING, not the version number, so this does not go stale at 2.18; the
-            # leading "-" matters, it rules out the x64-win64.tar.gz archive that also ends win64.
-            self._say("The link opens a plain list of files. That is normal. Ignore all of it "
-                      "except one line, and click that line:\n"
-                      "  Windows: the file ending -win64.exe (not the ones ending .md5, .tar.gz "
-                      "or .rpm)\n"
-                      "  Mac: the file ending -universal.dmg (it works on every Mac)\n"
-                      "Your browser downloads it (130 to 400 MB, so it can take a few minutes). "
-                      "Open the downloaded file, click Next or Continue until it finishes, and "
-                      "keep the default settings. Then close this window and open Kagami again. "
-                      "You do not need the terminal for any of this.\n", "dim")
-            # The one failure that will otherwise send a student back to a teacher. A program is
-            # only findable after the installer has updated the system's program list, and an
-            # already-running session keeps the old one. Restarting is the fix a student can
-            # actually carry out; "add it to PATH" is not.
-            self._say("If Kagami still shows this message after installing, restart the computer "
-                      "and open Kagami once more — a newly installed program is often not "
-                      "visible to anything that was already running.\n", "dim")
-
         # Engine tabs: Build and Library. Skipped (not greyed out) when the engine is absent, since
         # Kagami on its own is a complete auditor; the Rebuild button already explains the gap.
         engine = kg_rebuild.find_engine(HERE)

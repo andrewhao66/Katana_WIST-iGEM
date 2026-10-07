@@ -3,7 +3,6 @@ tests.py — self-contained checks for Kagami. Run: python tests.py
 No pytest dependency; plain asserts, exits non-zero on failure.
 """
 import os
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -35,20 +34,11 @@ if hasattr(kg_refs, "tier"):
 R = kg_refs.by_id()
 PASS = FLAG = FAIL = 0
 
-# Is blastn actually installed on THIS machine? A handful of assertions below search sequence
-# rather than check a claim, and searching is what BLAST+ does; they cannot pass without it. The
-# CI image deliberately has no blastn - that is the machine a stranger actually has - so those
-# assertions must skip there rather than fail, while everything that does not need the binary
-# still runs. Guarding on this rather than on an import is the point: the binary is external.
-HAVE_BLAST = bool(shutil.which("blastn") and shutil.which("makeblastdb"))
-
-
-def check_blast(name, cond):
-    """A check that cannot run without blastn installed. Skipped, never failed, when it is absent."""
-    if not HAVE_BLAST:
-        print(f"  skip {name} (needs BLAST+)")
-        return
-    check(name, cond)
+# No blastn guard any more. Identification is pure Python as of 2026-10-07, so the
+# assertions that SEARCH sequence -- rather than merely check an annotated claim -- no
+# longer need an external binary and must run on every machine, including the CI image
+# that deliberately has none. A helper that skipped them is what let the no-BLAST+ path
+# go untested for months; keeping it with no call sites would invite its return.
 
 
 def _audit_seq(gb_text):
@@ -118,7 +108,7 @@ check("EcoRI flagged", any("EcoRI" in f.summary for f in finds if f.category == 
 rec, blocks, finds = _audit_seq(_gb(prom + rbs + term,
                                     [("RBS", "TotallyWrongLabel", len(prom) + 1, len(prom) + len(rbs))]))
 ids = {b.ident_id for b in blocks if b.ident_id}
-check_blast("identity from sequence not label", "B0034" in ids and "J23116" in ids)
+check("identity from sequence not label", "B0034" in ids and "J23116" in ids)
 
 # 6. bridge never seals from the construct; unmatched -> unresolved
 reqs = kg_bridge.intake_requests(blocks)
@@ -153,9 +143,9 @@ mystery = "ACAAAGGACAAATACTAG"              # 18 bp, unknown to the seed set, en
 tail_term = N(R["B0015"]["seq"])
 rec, blocks, finds = _audit_seq(_gb(orf + mystery + tail_term, []))
 cds_blocks = [b for b in blocks if b.ident_role == "cds"]
-check_blast("CDS block stops at the ORF, not at the end of the gap",
+check("CDS block stops at the ORF, not at the end of the gap",
             len(cds_blocks) == 1 and cds_blocks[0].start == 1 and cds_blocks[0].end == len(orf))
-check_blast("the unrecognised neighbour becomes its own block",
+check("the unrecognised neighbour becomes its own block",
             any(b.start == len(orf) + 1 and b.end == len(orf) + len(mystery) for b in blocks))
 check("absorbed neighbour no longer causes a false internal stop",
       not any(f.status == "FAIL" and f.category == "orf" for f in finds))
@@ -470,43 +460,77 @@ def _identify_with(gb_text, have_blast):
 
 
 _gb_text = _gb(_ident_seq, [("misc_feature", "B0032", 1, 35)])
+
+# PHASE 1 (2026-10-07): the hole above is now closed BY CONSTRUCTION rather than by a
+# FLAG. Identification is pure Python (kg_seedmatch), so there is no longer a path on
+# which it does not run -- BLAST+ absent and BLAST+ raising both become irrelevant to
+# the default behaviour. These assertions pin the stronger guarantee: not "we tell you
+# when we could not look", but "we always look".
 _r_no, _b_no, _st_no = _identify_with(_gb_text, False)
-check("identify() reports ran=False when BLAST+ is absent", _st_no.get("ran") is False)
-check("identify() names BLAST+ as the reason", "BLAST" in (_st_no.get("reason") or ""))
+check("identification runs with no BLAST+ installed", _st_no.get("ran") is True)
+check("and it actually identifies the planted block", any(b.ident_id for b in _b_no))
 
-# Forcing _have_blast True only tells identify() it MAY search; the search then really shells out
-# to blastn. On a machine without the binary that is a lie to the function, so the assertion only
-# means anything where blastn is actually installed.
 _r_yes, _b_yes, _st_yes = _identify_with(_gb_text, True)
-check_blast("identify() reports ran=True when BLAST+ is present", _st_yes.get("ran") is True)
+check("identification runs with BLAST+ present too", _st_yes.get("ran") is True)
 
-# The audit must raise it, and it must be a FLAG — not a SKIP. SKIP is for a check the user
-# OPTED OUT of (no host chosen); this is a check they asked for and silently did not get.
-# The Registry precedent already grades "could not reach" as FLAG, and identification is the
-# more important of the two, so it cannot grade softer.
 _f_no = kg_audit.audit(_r_no, _b_no, identify_status=_st_no)
 _idf = [f for f in _f_no if f.category == "identification"]
-check("audit raises a finding when identification did not run", len(_idf) == 1)
-check("that finding is a FLAG, not a SKIP or NOTE", bool(_idf) and _idf[0].status == "FLAG")
-check("the finding tells the user how to fix it", bool(_idf) and "BLAST" in _idf[0].fix)
+check("no identification FLAG is raised, because identification ran", not _idf)
+check("the planted mislabel is still caught",
+      any(f.category == "identity-mislabel" for f in _f_no))
 
-# The verdict is the whole point: it must NOT read clean-to-order.
-check("a construct whose identification never ran cannot be PASS",
+# The verdict is still the whole point: a construct carrying a mislabel must NOT read
+# clean-to-order. It now reaches REVIEW through the mislabel itself rather than through
+# a "we did not look" flag, which is the better reason.
+check("a construct carrying a mislabel cannot be PASS",
       kg_audit.verdict_kind(_f_no) == "REVIEW")
 check("the CLI exit code for that construct is 5 (REVIEW), not 0",
       {"PASS": 0, "REVIEW": 5, "FAIL": 1}[kg_audit.verdict_kind(_f_no)] == 5)
 
-# A BLAST+ that IS installed but blows up is the same hole, and harder to notice.
+# --deep asks for blastn. When it is unavailable the built-in identifier still runs and
+# the caller is TOLD, rather than silently getting a thinner answer. Same rule as before,
+# applied to the opt-in rather than to the default.
+_st_deep = {}
+with tempfile.TemporaryDirectory() as _wd:
+    _p = os.path.join(_wd, "c.gb")
+    open(_p, "w", encoding="utf-8").write(_gb_text)
+    _rec_d = kg_parse.parse(_p)
+    _real_hb = kg_identify._have_blast
+    kg_identify._have_blast = lambda: False
+    try:
+        _b_deep = kg_identify.identify(_rec_d, _wd, status=_st_deep, deep=True)
+    finally:
+        kg_identify._have_blast = _real_hb
+check("--deep without BLAST+ still identifies", any(b.ident_id for b in _b_deep))
+check("--deep without BLAST+ says so", "deep_failed" in _st_deep)
+check("--deep without BLAST+ names BLAST+ as the reason",
+      "BLAST" in _st_deep.get("deep_failed", ""))
+check("--deep without BLAST+ still reports ran=True", _st_deep.get("ran") is True)
+
+# A --deep run whose blastn IS installed but blows up falls back and says so, rather
+# than returning nothing. This was the harder of the two old holes to notice.
 _broken = kg_identify._write_ref_db
 kg_identify._write_ref_db = lambda wd: (_ for _ in ()).throw(RuntimeError("simulated blast failure"))
+_st_br = {}
 try:
-    _r_br, _b_br, _st_br = _identify_with(_gb_text, True)
+    with tempfile.TemporaryDirectory() as _wd:
+        _p = os.path.join(_wd, "c.gb")
+        open(_p, "w", encoding="utf-8").write(_gb_text)
+        _rec_br = kg_parse.parse(_p)
+        _real_hb = kg_identify._have_blast
+        kg_identify._have_blast = lambda: True
+        try:
+            _b_br = kg_identify.identify(_rec_br, _wd, status=_st_br, deep=True)
+        finally:
+            kg_identify._have_blast = _real_hb
 finally:
     kg_identify._write_ref_db = _broken
-check("identify() reports ran=False when BLAST+ is present but raises",
-      _st_br.get("ran") is False)
-check("a raising BLAST+ also cannot produce a PASS",
-      kg_audit.verdict_kind(kg_audit.audit(_r_br, _b_br, identify_status=_st_br)) == "REVIEW")
+check("a raising --deep falls back to the built-in identifier",
+      any(b.ident_id for b in _b_br))
+check("a raising --deep says the deep search failed", "deep_failed" in _st_br)
+check("a raising --deep still cannot produce a PASS",
+      kg_audit.verdict_kind(kg_audit.audit(_rec_br, _b_br,
+                                           identify_status=_st_br)) == "REVIEW")
 
 # Callers that pass no status keep the old signature and must not be penalised.
 _f_legacy = kg_audit.audit(_r_yes, _b_yes)
@@ -562,39 +586,40 @@ for _fn in _src_files:
             _offenders.append(f"{_fn}:{_d}")
 check("no source file carries a known-dead BLAST+ URL", not _offenders)
 
-_fix_text = (_idf[0].fix if _idf else "")
-check("the missing-BLAST+ finding still hands the reader a URL", "http" in _fix_text)
-check("that URL is the NCBI installer directory",
-      "ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST" in _fix_text)
-# A student with no terminal cannot act on "add it to PATH" or "re-run". The fix line is the
-# instruction they follow, so it must name a file to click, not a shell concept.
-check("the fix names which installer file to take, not a PATH edit",
-      "win64.exe" in _fix_text and "PATH" not in _fix_text)
+# PHASE 1: the install instructions themselves are gone -- identification needs no
+# binary -- so the scanner's job changes from "is the link alive" to "have the
+# instructions crept back". Telling a student to download 400 MB for a capability they
+# already have IS the install barrier this phase removed.
+_install_hints = []
+for _fn in _src_files:
+    try:
+        _txt = open(os.path.join(HERE, _fn), encoding="utf-8").read()
+    except Exception:
+        continue
+    if "ftp.ncbi.nlm.nih.gov/blast/executables" in _txt:
+        _install_hints.append(_fn)
+check("no source file tells the user to install BLAST+ (%s)"
+      % (", ".join(_install_hints) or "none"), not _install_hints)
 
-# 21. The not-run wording must match what actually happened (2026-10-01). Without blastn an
-#      ANNOTATED record still gets its own claims checked by exact match, so blocks can carry an
-#      identity even though identification did not fully run. The flat summary then printed
-#      "this audit cannot catch a mislabel" directly above a caught mislabel on demo.gb — a
-#      self-contradiction that teaches a reader to stop trusting the tool.
-_ann_summary = (_idf[0].summary if _idf else "")
-_ann_partial = any(b.ident_id for b in _b_no)
-check("the annotated no-BLAST case does identify something by exact match", _ann_partial)
-check("its summary does NOT claim a mislabel cannot be caught",
-      "cannot catch a mislabel" not in _ann_summary)
-check("its summary names the real gap (unlabelled regions)",
-      "unlabelled" in _ann_summary)
-
-# The unannotated case must keep the blunt wording, because there nothing was checked at all.
+# 21. An unannotated file and an annotated one must both be fully identified (2026-10-07).
+#      Before phase 1, an unannotated file with no blastn identified NOTHING, and the
+#      audit said so in a FLAG whose wording had to be carefully distinguished from the
+#      annotated case. Both of those situations are gone: the seeded identifier searches
+#      unannotated sequence as well as it checks annotated claims, so there is one
+#      behaviour and no wording to get wrong.
 _bare = _gb(_ident_seq, [])          # same bases, no features to check claims against
 _r_bare, _b_bare, _st_bare = _identify_with(_bare, False)
 _f_bare = kg_audit.audit(_r_bare, _b_bare, identify_status=_st_bare)
-_idf_bare = [f for f in _f_bare if f.category == "identification"]
-check("an unannotated file identifies nothing without BLAST+",
-      not any(b.ident_id for b in _b_bare))
-check("and it keeps the blunt 'cannot catch a mislabel' wording",
-      bool(_idf_bare) and "cannot catch a mislabel" in _idf_bare[0].summary)
-check("both wordings still hold the verdict at REVIEW",
-      kg_audit.verdict_kind(_f_bare) == "REVIEW" and kg_audit.verdict_kind(_f_no) == "REVIEW")
+check("an unannotated file IS identified with no BLAST+ installed",
+      any(b.ident_id for b in _b_bare))
+check("no identification FLAG is raised for an unannotated file",
+      not any(f.category == "identification" for f in _f_bare))
+# The annotated and unannotated readings of the same bases must agree on what is there.
+# They used to differ: one was an exact claim check, the other found nothing at all.
+_named_bare = set(b.ident_id for b in _b_bare if b.ident_id)
+_named_ann = set(b.ident_id for b in _b_no if b.ident_id)
+check("annotated and unannotated readings of the same bases agree (bare=%s ann=%s)"
+      % (sorted(_named_bare), sorted(_named_ann)), _named_bare == _named_ann)
 
 # ---- engine tabs: how a run is worded (kg_katana_tabs.classify) ------------------------------
 # The Build tab must never call a run PASS when the engine said a gate did not run. classify is a

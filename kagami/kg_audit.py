@@ -162,48 +162,29 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         return findings
 
     # ---- DID THE IDENTIFICATION HALF ACTUALLY RUN? ----
-    # First, because every finding below that depends on naming a part is weaker if it did not,
-    # and because the reader must meet this before they meet a verdict.
+    # As of 2026-10-07 it always does: identification is pure Python (kg_seedmatch) with no
+    # external dependency, so the path that used to skip it -- NCBI BLAST+ absent, or present
+    # and raising -- no longer exists. That path is what let a construct carrying a planted
+    # mislabel report "PASS, clean to order" with exit 0.
+    #
+    # This branch is kept rather than deleted, and the distinction matters. It is now a guard
+    # against a FUTURE identification path that cannot run, not a report on a missing binary:
+    # a caller that hands us ran=False is telling us the audit is incomplete, and that must
+    # never read as "checked and fine" -- the same rule the SKIP tier encodes. What it no longer
+    # does is carry install instructions for a program this software does not need.
     _ident_ran = not (identify_status is not None and identify_status.get("ran") is False)
-    # Without blastn, an ANNOTATED record can still have its own claims checked by exact match,
-    # so some blocks may carry an identity even though identification did not fully run. When
-    # that happened, "this audit cannot catch a mislabel" is simply false — and it printed
-    # directly above a caught mislabel on demo.gb, which is the kind of self-contradiction that
-    # teaches a reader to stop trusting the tool. Say which of the two situations this is.
-    _partial = (not _ident_ran) and any(b.ident_id for b in blocks)
     if not _ident_ran:
         findings.append(Finding(
             "identification", FLAG,
-            "Only annotated parts were checked — an unlabelled region could hide a mislabel"
-            if _partial else
             "Part identification did NOT run — this audit cannot catch a mislabel",
-            detail=(identify_status.get("reason") or "NCBI BLAST+ unavailable") +
+            detail=(identify_status.get("reason") or "the caller reported it did not run") +
                    ". Everything that does not depend on naming a part still ran (reading frame, "
-                   "restriction sites, GC, repeats, size), and those results stand. " +
-                   ("Annotated features WERE compared against the reference set, so a label "
-                    "naming a different part has been caught. What was not done is the search "
-                    "of the unlabelled sequence between them, and a truncated or single-base-"
-                    "changed part does not match exactly and so reads as unidentified rather "
-                    "than as altered."
-                    if _partial else
-                    "But no block was compared against a reference, so a part whose label "
-                    "disagrees with its bases would NOT have been reported.") +
-                   " Blocks shown as \"unidentified\" below mean 'not checked', not 'checked "
-                   "and unmatched'.",
-            # The URL here is load-bearing: it is the one thing a reader copies out of this
-            # message, so a dead one wastes the whole finding. The previous link was to an NCBI
-            # blast-help doc page that NCBI retired, and it returned 404 — a WIST student copied
-            # it on 2026-10-01 and landed on a missing page. (The exact dead path is not spelled
-            # out here: tests.py scans these sources for it, and a comment quoting it would trip
-            # that scanner forever.) Point at the
-            # installer directory itself, which is a plain file listing rather than a doc page
-            # that can be reorganised, and name the file to pick so the reader does not have to
-            # interpret thirteen entries. Re-check this link if it is ever edited.
-            fix="Install NCBI BLAST+, then open Kagami again. Open "
-                "https://ftp.ncbi.nlm.nih.gov/blast/executables/blast+/LATEST/ (a plain list of "
-                "files, ignore all of it but one line), click the file ending -win64.exe on "
-                "Windows or the one ending -universal.dmg on a Mac, then run the downloaded file "
-                "with its default settings."))
+                   "restriction sites, GC, repeats, size), and those results stand. But no block "
+                   "was compared against a reference, so a part whose label disagrees with its "
+                   "bases would NOT have been reported. Blocks shown as \"unidentified\" below "
+                   "mean 'not checked', not 'checked and unmatched'.",
+            fix="Re-run the audit. Identification needs nothing installed, so this should not "
+                "happen; if it persists, report it."))
     if not blocks:
         findings.append(Finding("invariant", FLAG,
                                 "No blocks identified against the reference seed set",

@@ -13,6 +13,7 @@ import tempfile
 
 from kg_parse import revcomp
 import kg_refs
+import kg_seedmatch
 
 
 class Block:
@@ -258,15 +259,19 @@ def _exact_hits_from_features(record):
     return hits
 
 
-def identify(record, workdir, status=None):
+def identify(record, workdir, status=None, deep=False):
     """Return an ordered list[Block] covering the construct, with claim + identity.
 
-    status: an optional dict the caller passes in to LEARN WHETHER IDENTIFICATION ACTUALLY RAN.
-    Filled with {"ran": bool, "reason": str}. This exists because an empty identity result is
-    ambiguous in exactly the way that matters: "no reference matched these bases" and "we never
-    got to ask" both leave blocks reading `unidentified`. Without this, a missing BLAST+ made a
-    construct with a planted mislabel report PASS — clean to order, exit 0, silently. Callers that
-    pass nothing keep the old signature and the old behaviour.
+    status: an optional dict the caller passes in. Filled with {"ran": True, "reason": ""}.
+    Identification now ALWAYS runs: it is pure Python with no external dependency, so
+    the old "BLAST+ is missing" path -- which let a construct carrying a planted
+    mislabel report PASS, clean to order, exit 0 -- cannot occur. When the caller asked
+    for --deep and BLAST+ was unavailable or failed, status["deep_failed"] carries a
+    sentence saying so; the built-in identifier ran regardless.
+
+    deep: opt in to blastn's gapped local alignment for distant homologs. Not automatic:
+    an ambient dependency makes two machines disagree about the same file, which is the
+    works-on-my-machine failure the engine's own --expect-root flag exists to prevent.
     """
     seq = record.seq
     blocks = []
@@ -275,41 +280,32 @@ def identify(record, workdir, status=None):
         status.clear()
         status.update({"ran": True, "reason": ""})
 
-    def _not_run(reason):
+    def _deep_failed(reason):
         if status is not None:
-            status.update({"ran": False, "reason": reason})
+            status["deep_failed"] = reason
 
     id_hits = []
     if len(seq) < 8:
         # Not a failure: there is nothing to identify. Left as ran=True so a 4 bp input does not
         # produce an alarming "identification did not run" on top of its real findings.
         pass
-    elif not _have_blast():
-        # No blastn. If the record annotates its own parts we can still check those claims
-        # by exact comparison against the same reference set - which is enough to catch a
-        # label that names one part while the bases are another. It is NOT enough to find a
-        # truncation, a point mutation or a fragment, so `ran` stays False and the reason
-        # says what was and was not done. A file with no features gets the old behaviour.
-        id_hits = _exact_hits_from_features(record)
-        if id_hits:
-            _not_run("NCBI BLAST+ was not found on this computer "
-                     "(blastn/makeblastdb are not on PATH). "
-                     "Annotated features were checked by EXACT match against the bundled "
-                     "reference set instead: a label naming a different part is still caught, "
-                     "but a truncation, a single-base difference or a fragment would not be.")
-        else:
-            _not_run("NCBI BLAST+ was not found on this computer "
-                     "(blastn/makeblastdb are not on PATH)")
-    else:
+    elif deep and _have_blast():
+        # Opt-in deep search. blastn does gapped local alignment, so it can find
+        # distant homologs the seeded path cannot. It is NOT the default.
         try:
             db = _write_ref_db(workdir)
             id_hits = _tile(_blast(seq, db, workdir))
         except Exception as exc:
-            # A BLAST+ that IS installed but fails to run is the same hole as one that is absent,
-            # and it is the harder of the two to notice. Name the error rather than swallowing it.
-            id_hits = []
-            _not_run(f"NCBI BLAST+ is installed but failed to run ({exc.__class__.__name__}: {exc})"
-                     .strip())
+            id_hits = _tile(kg_seedmatch.identify_hits(seq, kg_refs.REFERENCE_PARTS))
+            _deep_failed("--deep was requested but BLAST+ failed to run (%s: %s); the "
+                         "built-in identifier ran instead."
+                         % (exc.__class__.__name__, exc))
+    else:
+        if deep and not _have_blast():
+            _deep_failed("--deep was requested but NCBI BLAST+ is not installed "
+                         "(blastn/makeblastdb are not on PATH); the built-in "
+                         "identifier ran instead.")
+        id_hits = _tile(kg_seedmatch.identify_hits(seq, kg_refs.REFERENCE_PARTS))
 
     refs = kg_refs.by_id()
 

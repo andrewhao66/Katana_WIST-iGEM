@@ -56,15 +56,14 @@ minimal-deps:
     - pip install --no-cache-dir "PyYAML==6.0.2"
     - python test_determinism.py
 
-# Kagami is the tool the wiki invites a visitor to download and run, and until this job
-# existed the pipeline said nothing about it: the three jobs above never import it. This
-# image has no blastn, which is the point - it is the machine a stranger actually has. The
-# suite skips the handful of assertions that need the binary to search UNANNOTATED sequence
-# and runs everything else, including the one that matters here: a GenBank whose feature is
-# labelled B0032 while its bases are B0034 is still caught, by exact comparison against the
-# bundled reference set.
+# Kagami is the tool the wiki invites a visitor to download and run. This image has no
+# blastn, which is the point - it is the machine a stranger actually has. As of phase 1
+# that is no longer a degraded mode: identification is pure Python, so the FULL audit runs
+# here, including the one that matters - a GenBank whose feature is labelled B0032 while
+# its bases are B0034 is caught - and no assertion is skipped for want of a binary.
 kagami:
   stage: test
   script:
     - cd kagami
-    - python tests.py
+    - python3 tests.py
+    - python3 test_identify.py

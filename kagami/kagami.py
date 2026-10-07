@@ -78,14 +78,12 @@ def run(args):
 
     ident_status = {}
     with tempfile.TemporaryDirectory() as wd:
-        blocks = kg_identify.identify(record, wd, status=ident_status)
-    if not ident_status.get("ran", True):
-        # Say it here too, not only in the findings list. This is the line whose absence let a
-        # planted mislabel read "PASS — clean to order": the user's first run is the likeliest
-        # moment to hit it, before they have installed BLAST+.
-        print(f"identify : NOT RUN — {ident_status.get('reason', 'BLAST+ unavailable')}")
-        print("           Checks that do not need to name a part still ran; a MISLABEL CANNOT "
-              "BE CAUGHT without this step.")
+        blocks = kg_identify.identify(record, wd, status=ident_status,
+                                      deep=getattr(args, "deep", False))
+    if ident_status.get("deep_failed"):
+        # Only --deep can be unavailable now. The default identifier always runs, so there is
+        # no longer a line here saying a mislabel could not be caught.
+        print("deep     : %s" % ident_status["deep_failed"])
 
     cap = VENDOR_CAP.get(args.vendor) if args.vendor else None
     host_seq = _load_host(args.host) if args.host else None
@@ -447,13 +445,8 @@ def run_rebuild(args):
     _rb_status = {}
     with tempfile.TemporaryDirectory() as wd:
         blocks = kg_identify.identify(record, wd, status=_rb_status)
-    if not _rb_status.get("ran", True):
-        # The rebuild path needs this even more than the audit does: without identification every
-        # block is unresolved, so the rebuild can only stop. Say why, instead of letting it look
-        # like the construct is the problem.
-        print(f"identify : NOT RUN — {_rb_status.get('reason', 'BLAST+ unavailable')}")
-        print("           No block can be traced to a primary source without it, so the rebuild "
-              "below will stop on every part.")
+    if _rb_status.get("deep_failed"):
+        print("deep     : %s" % _rb_status["deep_failed"])
 
     lib = args.library or os.path.join(
         os.path.dirname(os.path.abspath(args.input)),
@@ -522,6 +515,10 @@ def main():
                    help="check labels that name an iGEM Registry part (BBa_*) against the Registry "
                         "itself. Needs the network. It verifies CLAIMS; it cannot identify an "
                         "unknown sequence, because the Registry API is addressed by name.")
+    a.add_argument("--deep", action="store_true",
+                   help="also run NCBI BLAST+ (if installed) for gapped, distant-homology "
+                        "search. The built-in identifier runs either way; this only adds "
+                        "sensitivity for homologs below about 90%% identity.")
     a.add_argument("--library", metavar="PATH",
                    help="a Katana parts library (the folder holding LOCK.tsv) to audit against, "
                         "in ADDITION to the shipped reference set. Every part is hash-checked "
