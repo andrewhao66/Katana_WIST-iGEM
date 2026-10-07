@@ -26,6 +26,106 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 
 DEFAULT_REMOTE = "https://github.com/andrewhao66/iGEM-katana-webtest.git"
 
+# Never, whatever is asked. The iGEM GitLab project holds the team's real work, and a
+# generated site force-pushed over its main branch is not something anybody recovers from
+# a command line. web_deploy's docstring used to promise this; a docstring is not a
+# control, and --remote was unrestricted.
+FORBIDDEN_HOSTS = ("gitlab.igem.org",)
+
+# Written into a staging directory so a later deploy knows the directory is ITS OWN
+# output and may replace it. Without this, stage() ran shutil.rmtree() on whatever --out
+# named: a directory holding one unrelated file came back holding eighteen staged ones,
+# and the unrelated file was gone. `katana deploy --out .` deleted the repository and
+# then failed because its own sources had gone with it.
+MARKER = ".katana-staging"
+
+
+class UnsafeTarget(Exception):
+    """This directory is not ours to delete, so deploy will not delete it."""
+
+
+def _host(url):
+    """The host part of a git remote, for https:// and git@host:path alike."""
+    u = str(url).strip()
+    if "://" in u:
+        u = u.split("://", 1)[1]
+    if "@" in u.split("/", 1)[0]:
+        u = u.split("@", 1)[1]
+    return u.split("/", 1)[0].split(":", 1)[0].lower()
+
+
+def remote_allowed(url, allow_other=False):
+    """May deploy push to `url`? Returns (allowed, reason).
+
+    Publishing is outward-facing and irreversible-ish: publish() force-pushes, because a
+    generated artifact's history is the bundle's history. Force-pushing somewhere
+    unintended is a different matter, so the destination is checked rather than trusted.
+    """
+    host = _host(url)
+    for bad in FORBIDDEN_HOSTS:
+        if host == bad or host.endswith("." + bad):
+            return False, ("REFUSED: %s is on %s. Katana's web deploy force-pushes a "
+                           "generated site, and the iGEM GitLab project holds the team's "
+                           "real work -- replacing its branch is not recoverable from "
+                           "here. Publish to the separate web repository instead:\n"
+                           "       %s" % (url, bad, DEFAULT_REMOTE))
+    if url.rstrip("/") == DEFAULT_REMOTE.rstrip("/"):
+        return True, "the sanctioned web repository"
+    if allow_other:
+        return True, "allowed explicitly with --allow-remote"
+    return False, ("REFUSED: %s is not the repository this deploy is set up for.\n"
+                   "       The default is  %s\n"
+                   "       If you really mean this one, say so: add --allow-remote.\n"
+                   "       It force-pushes, so it will replace whatever is on that "
+                   "branch." % (url, DEFAULT_REMOTE))
+
+
+def _refuse_unsafe(target):
+    """Raise unless `target` is ours to create or replace.
+
+    Deploy is allowed to destroy exactly one thing: a staging directory it made. Anything
+    else -- the repository, a home directory, a folder with somebody's week in it -- is
+    refused with its own name in the message.
+    """
+    t = os.path.abspath(target)
+    if not os.path.exists(t):
+        return                                  # nothing to destroy
+
+    if not os.path.isdir(t):
+        raise UnsafeTarget("REFUSED: %s is a file, not a directory." % t)
+
+    # Named places that are never a staging directory, however empty they look.
+    never = {os.path.abspath(os.sep), os.path.abspath(os.path.expanduser("~")),
+             os.path.abspath(HERE), os.path.abspath(os.path.dirname(HERE)),
+             os.path.abspath(os.getcwd())}
+    if t in never:
+        raise UnsafeTarget(
+            "REFUSED: %s is not a staging directory -- it is the repository, your home "
+            "directory, or the directory you are standing in.\n"
+            "       Deploy writes a throwaway copy of the site. Give it a path of its "
+            "own:\n"
+            "       ./katana deploy --out _site" % t)
+
+    # A directory that holds the engine is the repository under another name.
+    if os.path.isfile(os.path.join(t, "katana_build.py")):
+        raise UnsafeTarget(
+            "REFUSED: %s holds Katana's own files, so deploying into it would delete the "
+            "engine.\n       Give it a path of its own:  ./katana deploy --out _site" % t)
+
+    entries = [e for e in os.listdir(t) if e not in (".DS_Store",)]
+    if not entries:
+        return                                  # empty: ours to fill
+    if os.path.isfile(os.path.join(t, MARKER)):
+        return                                  # our own previous output: ours to replace
+
+    raise UnsafeTarget(
+        "REFUSED: %s is not empty and was not written by deploy, so it will not be "
+        "deleted.\n"
+        "       It holds %d item(s), starting with: %s\n"
+        "       Either empty it yourself, or give deploy a path of its own:\n"
+        "       ./katana deploy --out _site"
+        % (t, len(entries), ", ".join(sorted(entries)[:4])))
+
 # Where each served file lands in the published site. The page is served from the root,
 # so index.html and index.js move up out of ui/web/; everything else keeps its path,
 # because that is what the page's own fetches expect.
@@ -84,9 +184,18 @@ def stage(target):
         raise SystemExit("BLOCK: these files are missing, so the site would be "
                          "incomplete:\n  " + "\n  ".join(missing))
 
+    _refuse_unsafe(target)
     if os.path.isdir(target):
         shutil.rmtree(target)
     os.makedirs(target)
+    with open(os.path.join(target, MARKER), "w", encoding="utf-8") as f:
+        f.write("Written by web_deploy.py. Its presence is what allows a later deploy to\n"
+                "replace this directory; without it, deploy refuses rather than deleting\n"
+                "a directory it cannot prove is its own.\n")
+    # The marker is deploy's own bookkeeping and has no business on the published site,
+    # where `git add -A` would otherwise carry it.
+    with open(os.path.join(target, ".gitignore"), "w", encoding="utf-8") as f:
+        f.write("# web_deploy's own bookkeeping, not part of the site.\n%s\n" % MARKER)
 
     total = 0
     files = []
@@ -114,8 +223,16 @@ def stage(target):
     return files, total
 
 
-def publish(target, remote, branch="main"):
-    """Commit the staged site and push it. Outward-facing; only called with --push."""
+def publish(target, remote, branch="main", allow_other=False):
+    """Commit the staged site and push it. Outward-facing; only called with --push.
+
+    The destination is checked HERE as well as in main(), because this is the function
+    that force-pushes and a caller that reaches it directly must not get a free pass.
+    """
+    allowed, why = remote_allowed(remote, allow_other=allow_other)
+    if not allowed:
+        raise SystemExit(why)
+
     def git(*args):
         p = subprocess.run(["git"] + list(args), cwd=target,
                            capture_output=True, text=True)
@@ -145,6 +262,7 @@ def main(argv=None):
     target = os.path.join(HERE, "_site")
     remote = DEFAULT_REMOTE
     do_push = False
+    allow_other = False
     for i, tok in enumerate(argv):
         if tok == "--out" and i + 1 < len(argv):
             target = os.path.abspath(argv[i + 1])
@@ -152,8 +270,23 @@ def main(argv=None):
             remote = argv[i + 1]
         elif tok == "--push":
             do_push = True
+        elif tok == "--allow-remote":
+            allow_other = True
 
-    files, total = stage(target)
+    # Check the destination BEFORE staging. Staging copies 26 MB and deletes a directory;
+    # doing that work and then refusing to publish wastes it and, worse, leaves somebody
+    # believing the refusal came after something was sent.
+    if do_push:
+        allowed, why = remote_allowed(remote, allow_other=allow_other)
+        if not allowed:
+            print(why)
+            return 2
+
+    try:
+        files, total = stage(target)
+    except UnsafeTarget as exc:
+        print(str(exc))
+        return 2
     print("Staged the site in %s" % target)
     print()
     for rel, size in files:
@@ -173,7 +306,7 @@ def main(argv=None):
         return 0
 
     print("Publishing to %s ..." % remote)
-    rc = publish(target, remote)
+    rc = publish(target, remote, allow_other=allow_other)
     if rc == 0:
         print("Pushed. GitHub Pages serves it once the repository's Pages setting")
         print("points at the branch -- Settings -> Pages -> Deploy from a branch.")
