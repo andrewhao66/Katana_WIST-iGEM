@@ -45,19 +45,35 @@ Verdict roll-up: **FAIL** (any hard error) › **CONDITIONAL** (flags, no fail) 
 
 ## Usage
 
+From the bundle root, one command:
+
 ```bash
-python3 kagami.py audit INPUT.gb \
+./katana check INPUT.gb
+```
+
+That is the whole of it for most people. Nothing needs installing beyond Python 3.9 or
+newer — identification is pure Python.
+
+Every flag still works, and all of them are optional:
+
+```bash
+./katana check INPUT.gb \
     --vendor Twist \            # apply a vendor per-fragment size cap
     --host MG1655.fna \         # run the >40 bp host off-target scan
-    --html report.html \        # visual report (mirrors the concept one-pager)
+    --host-reca neg \           # recA- cloning strain: a host match drops to a note
+    --assembly BsaI \           # only flag sites the chosen enzyme would cut
+    --registry \                # check BBa_* labels against the iGEM Registry (network)
+    --library PATH \            # also identify against your own sealed parts library
+    --deep \                    # also use NCBI BLAST+, if installed, for distant homologs
+    --html report.html \        # visual report
     --json findings.json \      # machine-readable
     --emit-spec recovered.spec.yaml \   # draft Katana Spec (rebuild bridge)
     --emit-intake intake.txt            # per-part library intake requests
 ```
 
-Input may be **GenBank** (annotations are read as the construct's *claims* and
-checked against the sequence) or **FASTA** (blocks are discovered by searching the
-reference set). A spreadsheet or a pasted sequence works too.
+Input may be **GenBank** (annotations are read as the construct's *claims* and checked
+against the sequence), **FASTA**, a **spreadsheet**, or a sequence **pasted** into a text
+file. Dispatch is on content, not on the extension.
 
 Try it on the bundled demo (contains a deliberate B0032/B0034 mislabel):
 

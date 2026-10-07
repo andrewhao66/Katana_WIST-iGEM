@@ -25,23 +25,31 @@ This is what we did about it.
 
 ---
 
-## Try it first, read second
+## Run it
+
+Download, unzip, and from a terminal in that folder:
 
 ```
-python3 verify.py
+./katana
 ```
 
-No arguments, no install, no dependencies beyond Python 3.9+. It checks every part in this library
-against its manifest, then **deliberately corrupts a scratch copy eight ways to prove the checker
-would have caught it.**
+It asks what you want to do. **Nothing needs installing beyond Python 3.9 or newer** — no
+`pip`, no NCBI BLAST+, no genome download.
 
-The second half is the point. Anyone can print "verified".
+If you already know what you want:
 
----
+```
+./katana check someones-plasmid.gb      is this sequence what its labels say?
+./katana build my-design.spec.yaml      Design Spec → order-ready sequence
+./katana verify                         check the library, then try to break the checker
+./katana gui                            the same things, with buttons
+```
+
+On Windows it is `katana.bat` instead of `./katana`.
 
 ### On a Mac, run it from Terminal — do not double-click
 
-macOS refuses to open a downloaded script that is not code-signed, and these are not. Every
+macOS refuses to open a downloaded script that is not code-signed, and this one is not. Every
 browser marks a downloaded file as quarantined, and Gatekeeper then blocks it; the
 "Right-click → Open" trick that used to get past that was removed in macOS 15.
 
@@ -52,35 +60,27 @@ what the system actually launches is the signed `/bin/bash`. So open Terminal, t
 Nothing is wrong when you see that dialog, and nothing you did caused it. It is also why every
 command in this README is written to be run in a terminal rather than clicked.
 
-## Install, run, reproduce
+### Start with `./katana verify`
 
-**Install.** Python 3.9 or newer. **There is nothing to install beyond that** — no `pip`, no
-NCBI BLAST+. The YAML parser the engine needs is vendored in `_vendor/yaml/`, and part
-identification is pure Python.
+It checks every part in this library against its manifest, then **deliberately corrupts a
+scratch copy eight ways to prove the checker would have caught it.**
 
-That was not always true, and the change is the reason this section is three lines instead of
-thirty. The old instructions opened with `pip install -r requirements.txt`, which pulled fifteen
-packages including an OWL reasoner, and then asked for a 400 MB BLAST+ download and a `PATH` edit.
-Every member of this team who tried to follow it failed.
+The second half is the point. Anyone can print "verified".
 
-Two **optional** extras remain, and the engine runs without them — it just tells you, loudly, which
-checks it therefore did not run, because a silent skip would be worse than no check at all. Install
-them in a virtual environment if you want the codon-quality gate and SBOL export:
+---
 
-```
-python3 -m venv .venv && . .venv/bin/activate
-pip install -r requirements-optional.txt
-```
+## Reproduce the results
 
 **Build a construct.** A Design Spec plus the sealed library produce an annotated GenBank file, an
-order-ready FASTA, and a sequence hash:
+order-ready FASTA, an order table and a sequence hash:
 
 ```
-python3 katana_build.py specs/pSense-Nit.spec.yaml
+./katana build specs/pSense-Nit.spec.yaml
 ```
 
-Add `--sbol out.ttl` for SBOL 3, `--dry-run` to check without writing, and
-`--expect-root <sha256>` to bind the build to one exact library state.
+Add `--sbol out.ttl` for SBOL 3, `--dry-run` to check without writing, `--json` to get the whole
+result as data instead of text, and `--expect-root <sha256>` to bind the build to one exact
+library state.
 
 **Reproduce the main results.** This is the claim worth checking, so check it:
 
@@ -90,11 +90,27 @@ python3 test_determinism.py
 
 It rebuilds every Spec in `specs/` and asserts each one reproduces a **recorded hash of a construct
 we actually ordered from a synthesis vendor** — then confirms a repeat build matches, a wrong
-`--expect-root` is refused, an edited manifest row is refused, and the SBOL export reloads and still
-hashes to the same seal. Expect `ALL PASSED` in under a minute.
+`--expect-root` is refused, an edited manifest row is refused, and the SBOL export reloads and
+still hashes to the same seal. Expect `ALL PASSED` in under a minute.
 
 If those hashes stop reproducing, this is no longer the engine that built our DNA, and the suite
 says so rather than letting it pass quietly.
+
+**The optional extras.** Two checks need a package that is not bundled: the codon-quality gate
+needs `python-codon-tables`, and SBOL export needs `sbol3`. Without them the engine still builds
+and still audits — it tells you, loudly, which checks it therefore did not run, because a silent
+skip would be worse than no check at all. If you want them:
+
+```
+python3 -m venv .venv && . .venv/bin/activate
+pip install -r requirements-optional.txt
+```
+
+That was once the *first* step rather than an optional one, and it is worth saying why it moved.
+The old instructions opened with `pip install -r requirements.txt`, which pulled fifteen packages
+including an OWL reasoner, and then asked for a 400 MB BLAST+ download and a `PATH` edit. Every
+member of this team who tried to follow it failed. The YAML parser is now vendored in
+`_vendor/yaml/` and part identification is pure Python, so there is nothing left to install.
 
 ---
 
@@ -114,7 +130,7 @@ correct set to bundle: whichever handful we picked would be the wrong one for th
 *Vibrio*, or cyanobacteria, or something we never thought of. So fetch the one you actually use:
 
 ```
-python3 get_genome.py
+./katana genome
 ```
 
 A menu of 23 organisms with download sizes; type one letter. The list follows the **iGEM White
@@ -133,7 +149,7 @@ works. Replace all three capitalised words - pasted unchanged it refuses rather 
 something you did not choose:
 
 ```
-python3 get_genome.py --accession YOUR_ACCESSION --name a_name --key YourHost
+./katana genome --accession YOUR_ACCESSION --name a_name --key YourHost
 ```
 
 `YOUR_ACCESSION` is the identifier on the NCBI record (pUC19 is `M77789.2`), `a_name` is the
@@ -149,7 +165,7 @@ can go on being the reference you verified.
 **1. Make your own library.**
 
 ```
-python3 katana_init.py my-project
+./katana init my-project
 ```
 
 An empty manifest with a correct starting fingerprint, a folder for your host genome, and a
@@ -160,7 +176,7 @@ need the lactate-responsive repressor from *E. coli*" - and turning that into co
 mechanical work where mistakes are easy and invisible:
 
 ```
-python3 find_part.py lldR
+./katana find lldR
 ```
 
 It checks your own library first and stops if the part is already there. Otherwise it searches NCBI
@@ -171,7 +187,7 @@ one matched, it does not warn you about ambiguity that did not happen.
 
 `--seal` prints the block to paste into a Spec for a part you already hold. `--search-anyway`
 searches NCBI even when you have the part, which is how you find out the public record changed
-since you sealed your copy. `python3 find_part.py --have` lists the thirty parts already here.
+since you sealed your copy. `./katana find --have` lists the thirty parts already here.
 
 **3. Put it in your library.** A part enters one way: from its primary source, checked, written
 once, fingerprinted, recorded with where it came from.
@@ -180,7 +196,7 @@ Already sealed here (`B0015`, `B0032`, `J23116`, `sfGFP`, `P_hrpL`, `p15A`, `cat
 more)? Copy it rather than fetching a second, slightly different version:
 
 ```
-python3 add_part.py --library my-project/parts-library --from parts-library/ref_parts --id B0015
+./katana add --library my-project/parts-library --from parts-library/ref_parts --id B0015
 ```
 
 The copy re-reads and re-hashes the file rather than trusting the row it came from, and refuses if
@@ -189,19 +205,19 @@ the source library disagrees with itself.
 From NCBI:
 
 ```
-python3 add_part.py --library my-project/parts-library --id lacZ --accession NC_000913.3 --range 363231..366305 --strand -
+./katana add --library my-project/parts-library --id lacZ --accession NC_000913.3 --range 363231..366305 --strand -
 ```
 
 Designed yourself, or saved from a Registry page - point it at a local file:
 
 ```
-python3 add_part.py --library my-project/parts-library --id my_rbs --file my_rbs.fasta --class designed
+./katana add --library my-project/parts-library --id my_rbs --file my_rbs.fasta --class designed
 ```
 
 From the iGEM Registry, which needs no account:
 
 ```
-python3 add_part.py --library my-project/parts-library --registry BBa_B0015
+./katana add --library my-project/parts-library --registry BBa_B0015
 ```
 
 That records the part's **uuid** alongside its sequence - an identity check independent of the
