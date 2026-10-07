@@ -224,6 +224,33 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         claim = b.claim_label.strip()
         claim_norm = claim.replace("BBa_", "").upper()
         ident = b.ident_id.upper()
+
+        # The Registry holds the same bases under several part numbers. B0034's twelve
+        # bases are also J34801, J70591, K1325011 and six more -- not similar sequences,
+        # the SAME sequence. Which of them the identifier names is arbitrary, so a claim
+        # naming any of them is correct, and must not be called a mislabel.
+        #
+        # Before this check consulted the alternatives, an honest B0034 label was told
+        # 'Block labelled "B0034" is actually K1325011' -- an accusation of the one thing
+        # this tool exists to detect, levelled at a construct that was right, with B0034
+        # sitting in the block's own alternatives list at the time. A student who sees
+        # that on every correct RBS learns that mislabel FLAGs are noise, and the one
+        # real mislabel goes past them too.
+        synonyms = {str(a).replace("BBa_", "").upper()
+                    for a in (getattr(b, "alternatives", None) or [])}
+        if claim_norm and claim_norm in synonyms:
+            others = sorted(s for s in synonyms if s != claim_norm)
+            findings.append(Finding(
+                "identity-synonym", NOTE,
+                f'Block labelled "{claim}" is correct',
+                loc=f"{b.start}-{b.end}",
+                detail=f"These bases are registered under {len(others) + 1} part "
+                       f"numbers, which are the same sequence, not similar ones: "
+                       f"{', '.join([claim_norm] + others[:8])}"
+                       f"{' and more' if len(others) > 8 else ''}. The identifier "
+                       f"reported {b.ident_id}; naming any of them is right."))
+            continue
+
         if claim_norm and claim_norm != ident and ident not in claim_norm:
             # Is it a strength-class change? (the B0032→B0034 case)
             claim_ref = kg_refs.by_id().get(claim_norm)
