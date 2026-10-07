@@ -549,3 +549,93 @@ sealed filenames. The Design Spec schema, including the deliberate absence of an
 raw sequence can be written. The shipped sealed parts library. The audit's five-tier verdict model.
 The rule that a part enters a library only from its primary source, and that Kagami reports but
 never seals.
+
+---
+
+## 13. What was built, and what the review found
+
+Added after implementation. This section records the outcome, including the parts that
+turned out differently from the plan and the defects the review gate caught — because a
+spec that only describes the intention is a spec that cannot be checked against the thing
+that got built.
+
+### 13.1 Delivered
+
+| Step | Outcome |
+|---|---|
+| 1. Zero external dependencies | `kagami/kg_seedmatch.py` replaces blastn; PyYAML vendored at `_vendor/yaml/` (248 KB, `.so` removed). `pip install` is no longer part of using Katana. BLAST+ survives as an opt-in `--deep`. |
+| 2. Shared core | `core/hashing.py`, `core/lock.py`, `core/parts.py`, `core/result.py`. One implementation of the manifest, the hashes and the result object. |
+| 3. One front door | `./katana` and `katana.bat`, with a menu when asked nothing. 13 entry points became 1. |
+| 4. Browser front end | `ui/web/` runs the engine's own `.py` modules through Pyodide. `./katana web` serves it locally; `./katana deploy` stages the static site. |
+| 5. Packaging | `./katana bundle` writes a 5.3 MB zip: unzip, `cd`, `./katana`. Byte-identical across builds, so a release can be checksummed. |
+| 6. Review gate | Self-review and a Codex review, both acted on. See §13.3. |
+
+### 13.2 Measured, not asserted
+
+- **655 assertions across 25 suites**, all of them run by CI, with a test that checks that
+  claim against the filesystem in both directions.
+- Every suite passes on a bare interpreter with `blastn` hidden from `PATH` and no pip
+  packages installed, and on the **Python 3.9** that macOS ships.
+- All **7 bundled Specs reproduce their recorded ORACLE hashes**, and the order files are
+  **byte-identical between Python 3.9 and 3.13** — a seal that depends on the interpreter
+  is not a seal.
+- The browser path is verified in a **real Pyodide**, not a mock: 18,255 reference parts
+  load in 1.6 s and the demo audits in 5.8 s, catching its planted mislabel.
+- `parts-library/` and `specs/` are **byte-identical to `main`**.
+
+### 13.3 Defects the review gate found
+
+Twenty in total — four by self-review, sixteen by Codex. Every one was reproduced before
+being accepted. The six that would have mattered most to somebody using this:
+
+1. **A stage that refused came back as a PASS, and sealed.** `_Refused` subclassed
+   `Exception`, so the dry-lab gate's own `except Exception` caught the engine's refusal
+   and reported it as a missing tool. A blocking off-target hit of 240 bp at 99.1%
+   identity returned verdict PASS, exit code 0, and no FAIL finding — through the path the
+   GUI, the web page and `--json` all use. A refusal is control flow, not an error; it is
+   a `BaseException` now.
+2. **Circular topology was ignored.** A part sitting across a plasmid's origin read as two
+   truncated pieces, so a correct plasmid collected a false truncation FLAG. An iGEM
+   construct is a plasmid; this was the normal case, not an edge case.
+3. **An honest label was called a mislabel.** One sequence is registered under several
+   Registry numbers, and a correct `B0034` was told it "is actually K1325011". The check
+   that cries wolf is worse than no check, and it landed on the exact part family
+   `CLAUDE.md` uses as its worked example.
+4. **A nested claim was never audited.** A region labelled falsely inside a correctly
+   identified part disappeared from the report entirely, and the verdict read PASS. Greedy
+   decomposition must not decide which of the submitter's claims get verified.
+5. **A diverged end read as a perfect match.** Terminal substitutions were clipped by the
+   maximal-scoring segment, so a part mutated in its last eight bases reported 100%
+   identity — making the mutations invisible.
+6. **`deploy` could delete the repository and push to the iGEM GitLab.** `--out .`
+   recursively deleted whatever it was given, and `--remote` was unrestricted while
+   `publish()` force-pushes.
+
+Each is fixed, each fix is pinned by a test that was watched to fail first, and each was
+confirmed by mutation — reverting the fix turns the test red.
+
+### 13.4 Deliberately not fixed
+
+- **The dedup key** buckets coordinates by ten and ignores strand. The strand-agnostic
+  half is deliberate: one reference seeds on both strands at the same place for a
+  palindrome or a self-complementary terminator. Two occurrences within ten bases overlap
+  almost entirely and are far more likely one site found on two diagonals.
+- **`MAX_LOCI` is still 4.** Any cap drops the next one, so the cap is reported instead of
+  raised.
+- **The `forward/` and `reverse/` directory move** sketched in §6. The imports were
+  unified without it; moving files would have made every commit in this branch harder to
+  review for no behavioural gain.
+
+### 13.5 Not verified
+
+Stated rather than left to be assumed:
+
+- **Windows.** Nobody on the team runs it and this session had no Windows machine. The
+  launcher's double-click detection and interpreter probing are pinned by tests that
+  assert the *shape* of `katana.bat`, which is weaker than a run.
+- **Pixels in a browser.** The engine is verified in a real Pyodide and the rendering
+  functions are called for real under node, but no browser was driven.
+- **The subagent review pass.** Three subagents were dispatched across the session and
+  none delivered a report. The gate ran as self-review plus Codex; the third pass is
+  missing, and that is a gap against §10's three-pass requirement rather than a pass that
+  found nothing.
