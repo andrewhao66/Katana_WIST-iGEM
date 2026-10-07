@@ -147,6 +147,49 @@ try:
           [f for f in _fs if f.category == "truncation"],
           str([(f.category, f.summary) for f in _fs]))
 
+    # ---- a part across the origin AND elsewhere: BOTH must be reported ----
+    # My own first version of the circular fix dropped every other copy of a reference
+    # once any one copy reached full coverage. It was meant to stop a seam-spanning part
+    # being reported three times -- whole, plus the two halves either side of the seam --
+    # and it threw away genuine separate occurrences with them. Worst case measured: a
+    # plasmid with B0015 across the origin and a TRUNCATED B0015 in the middle reported
+    # only the whole one, so the truncated copy vanished from the report entirely. A
+    # truncated part not reported at all is this project's cardinal failure.
+    _plasmid = B15[65:] + "A" * 300 + B15 + "A" * 300 + B15[:65]
+    _h = [h for h in sm.identify_hits(_plasmid, ONLY15, circular=True)
+          if h["strand"] == 1]
+    check("a part across the origin AND again elsewhere is reported twice (%d)" % len(_h),
+          len(_h) == 2,
+          str([(round(h["cov"], 3), h["qstart"], h["qend"], h.get("wraps_origin"))
+               for h in _h]))
+    check("  one of them wraps the origin and one does not",
+          sorted(bool(h.get("wraps_origin")) for h in _h) == [False, True],
+          str([(h["qstart"], h["qend"], h.get("wraps_origin")) for h in _h]))
+    check("  and both are at full coverage",
+          _h and all(h["cov"] > 0.99 for h in _h),
+          str([round(h["cov"], 3) for h in _h]))
+
+    # And the truncated copy must survive, with its truncation intact.
+    _plasmid2 = B15[65:] + "A" * 300 + B15[:100] + "A" * 300 + B15[:65]
+    _h2 = sorted((h for h in sm.identify_hits(_plasmid2, ONLY15, circular=True)
+                  if h["strand"] == 1), key=lambda h: h["cov"])
+    check("a truncated copy is NOT swallowed by a whole one across the origin (%d)"
+          % len(_h2), len(_h2) == 2,
+          str([(round(h["cov"], 3), h["qstart"], h["qend"], h.get("wraps_origin"))
+               for h in _h2]))
+    if len(_h2) == 2:
+        check("  the truncated one still reads about 0.78 coverage",
+              abs(_h2[0]["cov"] - 0.78) < 0.05, round(_h2[0]["cov"], 3))
+        check("  and the whole one still reads 1.0",
+              _h2[1]["cov"] > 0.99, round(_h2[1]["cov"], 3))
+
+    # A part crossing the seam must still be reported ONCE, not three times.
+    _one = [h for h in sm.identify_hits(B15[65:] + "A" * 300 + B15[:65], ONLY15,
+                                        circular=True) if h["strand"] == 1]
+    check("a part crossing the seam alone is reported once, not three times (%d)"
+          % len(_one), len(_one) == 1,
+          str([(round(h["cov"], 3), h["qstart"], h["qend"]) for h in _one]))
+
     # ---- the cap on reported occurrences must be stated, not silent ----
     for n in (4, 5, 7):
         hits = sm.identify_hits(B15 * n, ONLY15)

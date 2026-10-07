@@ -299,15 +299,34 @@ def identify_hits(query, refs, k=K, circular=False):
                 continue                 # wholly inside the appended tail: a duplicate
             h = dict(h, wraps_origin=h["qend"] > real)
             mapped.append(h)
-        # A part found whole across the seam and also found split either side of it would
-        # be reported three times. Keep the whole reading.
-        best = {}
-        for h in mapped:
-            key = h["sid"]
-            cur = best.get(key)
-            if cur is None or (h["cov"], h["pident"]) > (cur["cov"], cur["pident"]):
-                best[key] = h
-        whole = {sid: h for sid, h in best.items() if h["cov"] > 0.99}
+        # A part found whole across the seam is ALSO found as the two halves either side
+        # of it, so it would be reported three times. Only those two halves are dropped.
+        #
+        # Keying this by sid alone -- which is what I wrote first -- discards every other
+        # copy of that reference once any one copy reaches full coverage. Measured: a
+        # plasmid with B0015 across the origin and a complete B0015 in the middle reported
+        # one of them, and a plasmid with a whole copy across the origin and a TRUNCATED
+        # copy in the middle reported only the whole one, so the truncated part vanished
+        # from the report entirely. A truncated part not reported at all is this project's
+        # cardinal failure, and the fix for one defect had introduced it.
+        #
+        # So the test is overlap, not identity of reference: a hit is superseded only if
+        # it lies within the span of a whole wrapping hit of the same reference.
+        def _pieces(h):
+            """The hit's span in plasmid coordinates, as one or two intervals."""
+            if h["qend"] <= real:
+                return [(h["qstart"], h["qend"])]
+            return [(h["qstart"], real), (1, h["qend"] - real)]
+
+        def _covered_by(inner, outer):
+            for a, b in _pieces(inner):
+                if not any(c <= a and b <= d for c, d in _pieces(outer)):
+                    return False
+            return True
+
+        wholes = [h for h in mapped
+                  if h.get("wraps_origin") and h["cov"] > 0.99]
         out = [h for h in mapped
-               if h["sid"] not in whole or h is whole[h["sid"]]]
+               if not any(w is not h and w["sid"] == h["sid"] and _covered_by(h, w)
+                          for w in wholes)]
     return out
