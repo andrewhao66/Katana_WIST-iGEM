@@ -113,9 +113,17 @@ async function ensureGenome() {
   genomeLoaded = true;
 }
 
+// The engine's kind -> the pill's class. PASS is the only thing that may look like a
+// pass; everything else, including anything this page does not recognise, does not.
+const PILL = { FAIL: "bad", REVIEW: "cond", PASS: "ok" };
+
 const STAT = { PASS: ["p", "✓"], FLAG: ["w", "!"], FAIL: ["f", "✕"],
                NOTE: ["n", "○"], SKIP: ["s", "–"] };
+// Unrecognised statuses sort FIRST, not last. An old page meeting a newer engine's tier
+// must surface it, not bury it below the passes where nobody scrolls -- the same reason
+// SKIP exists at all: "we did not check" must never read as "checked and fine".
 const ORDER = { FAIL: 0, FLAG: 1, NOTE: 2, SKIP: 3, PASS: 4 };
+const UNKNOWN_FIRST = -1;
 
 function esc(s) {
   return String(s == null ? "" : s).replace(/[&<>"]/g,
@@ -126,10 +134,17 @@ function render(report) {
   el("rname").textContent = report.name + " · " + report.length.toLocaleString()
     + " bp · " + report.topology;
 
-  const kind = report.verdict.startsWith("FAIL") ? "bad"
-    : report.verdict.startsWith("REVIEW") ? "cond" : "ok";
+  // The colour comes from the engine's kind, never from the headline. verdict_kind() is
+  // documented as "the canonical verdict token for logic, colour and exit codes"; the
+  // headline beside it is a human sentence and will be reworded. Sniffing the sentence to
+  // decide the colour is the project's own central failure -- a name and a fact that can
+  // drift apart -- and it drifted the optimistic way: the ternary chain this replaces
+  // fell through to "ok", so a reworded FAIL headline rendered GREEN.
+  //
+  // An unrecognised kind, from an engine newer than this page, renders as review: we do
+  // not know what it is, so a person should look at it. It must never render as pass.
   const pill = el("pill");
-  pill.className = "vpill " + kind;
+  pill.className = "vpill " + (PILL[report.kind] || "cond");
   pill.textContent = report.verdict;
 
   let html = '<table class="blocks"><tr><th>where</th><th>role</th>'
@@ -151,9 +166,11 @@ function render(report) {
   el("blocks").innerHTML = html + "</table>";
 
   const sorted = report.findings.slice().sort(
-    (a, b) => (ORDER[a.status] ?? 9) - (ORDER[b.status] ?? 9));
+    (a, b) => (ORDER[a.status] ?? UNKNOWN_FIRST) - (ORDER[b.status] ?? UNKNOWN_FIRST));
   el("findings").innerHTML = sorted.map((f) => {
-    const [cls, gly] = STAT[f.status] || ["n", "○"];
+    // An unrecognised status gets the flag's glyph, not the note's circle: an unknown
+    // tier needs attention, and a neutral circle is a claim that it does not.
+    const [cls, gly] = STAT[f.status] || ["w", "?"];
     const note = f.detail ? '<span class="note">' + esc(f.detail) + "</span>" : "";
     const fix = (f.fix && f.status !== "PASS" && f.status !== "SKIP")
       ? '<span class="fix">→ ' + esc(f.fix) + "</span>" : "";
