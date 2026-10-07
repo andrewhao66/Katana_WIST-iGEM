@@ -220,6 +220,55 @@ check("the two occurrences are at the two expected positions",
       and _b15[1]["qstart"] == len(B0015) + len(_pad2) + 1,
       ", ".join(str(h["qstart"]) for h in _b15))
 
+# ---- coverage must be right wherever the part sits ----
+# The maximal-scoring-segment extension computes coordinates four ways at once (query
+# window clamping, reference offset, strand, and the clipped segment's own bounds), and
+# an error in any one of them shows up as a wrong coverage. These pin each case
+# separately, so a future change that breaks one of them names which.
+_UN = "CGTACGTTGCAACGATCAGTTGCAACGTACGATCAGT" * 3          # 111 bp, not a part
+
+
+def _cov(query, part_id, strand=None):
+    """Greatest coverage reported for part_id, optionally on one strand."""
+    got = [h for h in kg_seedmatch.identify_hits(query, kg_refs.REFERENCE_PARTS)
+           if h["sid"] == part_id and (strand is None or h["strand"] == strand)]
+    return max((h["cov"] for h in got), default=None)
+
+
+for _name, _query, _part, _strand, _want in (
+        ("at the very start of the query", B0015 + _UN, "B0015", 1, 1.0),
+        ("with its 5' end cut off", B0015[26:] + _UN, "B0015", 1, 103 / 129.0),
+        ("cut off by the end of the query", _UN + B0015[:90], "B0015", 1, 90 / 129.0),
+        ("truncated on the reverse strand",
+         _UN + kg_seedmatch.revcomp(B0015[:103]) + _UN, "B0015", -1, 103 / 129.0),
+        ("that is long and truncated internally", _UN + SFGFP[:500] + _UN, "sfGFP", 1,
+         500 / 720.0),
+        ("full length with unrelated sequence on both sides", _UN + B0015 + _UN,
+         "B0015", 1, 1.0)):
+    _got = _cov(_query, _part, _strand)
+    check("coverage is right for a part %s" % _name,
+          _got is not None and abs(_got - _want) < 0.06,
+          "want %.3f got %s" % (_want, "none" if _got is None else "%.3f" % _got))
+
+# Identity must fall as mutations accumulate while coverage stays pinned at 1.0. A part
+# that is merely mutated is not truncated, and conflating the two is the error the
+# maximal-scoring segment exists to avoid in both directions.
+_prev_id = 101.0
+_grad_ok = True
+for _nmut in (0, 5, 15, 30, 60, 100):
+    _hits = [h for h in kg_seedmatch.identify_hits(
+        _UN + mutate(SFGFP, _nmut, seed=_nmut) + _UN, kg_refs.REFERENCE_PARTS)
+        if h["sid"] == "sfGFP"]
+    if not _hits:
+        _grad_ok = False
+        break
+    _h = max(_hits, key=lambda h: h["cov"])
+    if abs(_h["cov"] - 1.0) > 0.02 or _h["pident"] > _prev_id + 0.1:
+        _grad_ok = False
+        break
+    _prev_id = _h["pident"]
+check("identity falls with mutations while coverage stays 1.0", _grad_ok)
+
 # ---- Review Focus 1: a query shorter than the seed length ----
 for tiny in ("", "A", "ATGC", "ATGCATGCA"):
     try:
