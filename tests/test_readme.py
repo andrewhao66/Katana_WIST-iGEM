@@ -31,9 +31,14 @@ PLACEHOLDERS = ("my-design", "someones-plasmid", "<your", "my-project", "YOUR_",
 # rude to a public service.
 NETWORK = ("katana add", "katana find", "katana genome")
 
-# Opens a window and waits for the person to close it. Headless-testable only through
-# ui_menu.run, which tests/test_entry.py already does.
-INTERACTIVE = ("katana gui",)
+# Runs until the person stops it, or reaches outward. A smoke test that waits for one of
+# these waits forever -- which it did, twice, before they were listed here.
+#   gui     opens a window and waits to be closed
+#   web     serves until Ctrl-C
+#   deploy  writes a staging directory, and with --push publishes
+# All three are covered headlessly: gui and web through ui_menu.run and web_serve in
+# tests/test_entry.py and tests/test_web.py, deploy through web_deploy.stage.
+INTERACTIVE = ("katana gui", "katana web", "katana deploy")
 
 # Longer than this and something is waiting for input that will never come.
 TIMEOUT = 240

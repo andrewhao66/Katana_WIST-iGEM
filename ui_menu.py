@@ -27,6 +27,7 @@ COMMANDS = [
      "re-hash everything, then try to break the checker"),
     ("add", "Add a part to my library", "from NCBI, the iGEM Registry, or a file"),
     ("gui", "Open the window", "the same things, with buttons"),
+    ("web", "Open it in a browser", "the sequence check, with nothing to install"),
 ]
 
 
@@ -99,6 +100,10 @@ def _dispatch(name, argv, stdout):
         return _run_module(os.path.join(HERE, "find_part.py"), list(argv), stdout)
     if name == "init":
         return _run_module(os.path.join(HERE, "katana_init.py"), list(argv), stdout)
+    if name == "web":
+        return _run_module(os.path.join(HERE, "web_serve.py"), list(argv), stdout)
+    if name == "deploy":
+        return _run_module(os.path.join(HERE, "web_deploy.py"), list(argv), stdout)
     if name == "gui":
         try:
             import tkinter  # noqa: F401
@@ -120,7 +125,7 @@ def _dispatch(name, argv, stdout):
 
 def _ask_and_run(name, stdin, stdout):
     """Ask for what the chosen command needs, one question at a time."""
-    if name in ("verify", "gui"):
+    if name in ("verify", "gui", "web"):
         return _dispatch(name, [], stdout)
 
     prompts = {

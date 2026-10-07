@@ -7,9 +7,13 @@ This is the "identify" half of Kagami. The audit (kg_audit) then compares the
 identity to the claim — that comparison, not the identification, is the point.
 """
 import os
-import shutil
-import subprocess
-import tempfile
+
+# shutil, subprocess and tempfile are imported INSIDE the --deep helpers below, not here.
+# They exist only on the blastn path, and this module is loaded by Pyodide in the browser
+# front end, which has no process tools. Pyodide does ship a `subprocess` that exists and
+# raises when used, so a module-level import happens to survive today -- but relying on
+# that is relying on a stub's politeness, and tests/test_web_importable.py blocks the
+# modules outright to make the stricter claim.
 
 from kg_parse import revcomp
 import kg_refs
@@ -53,10 +57,16 @@ class Block:
 
 
 def _have_blast():
+    """Is NCBI BLAST+ on PATH? Only the opt-in --deep path asks."""
+    try:
+        import shutil
+    except ImportError:
+        return False
     return bool(shutil.which("blastn") and shutil.which("makeblastdb"))
 
 
 def _write_ref_db(workdir):
+    import subprocess
     fa = os.path.join(workdir, "refs.fasta")
     with open(fa, "w", encoding="utf-8") as fh:
         for p in kg_refs.REFERENCE_PARTS:
@@ -70,6 +80,7 @@ def _write_ref_db(workdir):
 
 
 def _blast(construct_seq, dbpath, workdir):
+    import subprocess
     q = os.path.join(workdir, "query.fasta")
     with open(q, "w", encoding="utf-8") as fh:
         fh.write(f">construct\n{construct_seq}\n")

@@ -43,9 +43,27 @@ If you already know what you want:
 ./katana build my-design.spec.yaml      Design Spec → order-ready sequence
 ./katana verify                         check the library, then try to break the checker
 ./katana gui                            the same things, with buttons
+./katana web                            the sequence check, in a browser
 ```
 
 On Windows it is `katana.bat` instead of `./katana`.
+
+### Or use it in a browser, with nothing installed at all
+
+```
+./katana web
+```
+
+That starts a local server and opens a page you can drop a file onto. The audit runs
+**inside the browser** — Katana's own modules, unmodified, through Pyodide — so the
+sequence never leaves your machine. Useful on a school computer where you cannot install
+anything, and on a Chromebook.
+
+It needs the local server rather than just opening the file, because a browser refuses to
+let a `file://` page fetch its own files. One command avoids that.
+
+The same page can be published as a static site with `./katana deploy`; it stages by
+default and only publishes with `--push`.
 
 ### On a Mac, run it from Terminal — do not double-click
 
