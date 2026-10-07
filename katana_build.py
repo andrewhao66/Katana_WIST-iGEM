@@ -100,13 +100,6 @@ DEFAULT_EXPECT_ROOT = None
 def sha256_hex(data: bytes) -> str:
     return _hashing.sha256_hex(data)
 
-def seq_sha256(seq: str, topology: str = "linear") -> str:
-    """Normalised sequence hash. `topology` is accepted and ignored: KATANA_SPEC v2
-    section 3.4 specifies a topology tag, the sealed library predates it, and the
-    convention now lives in core.hashing as the single definition."""
-    return _hashing.seq_sha256(seq)
-
-
 def extract_gb_sequence(text: str) -> str:
     """Delegates to core.parts, which is the one reader. There were four."""
     return _parts.extract_sequence(text, ".gb")
@@ -258,8 +251,9 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
                 raw_seq = "".join(l.strip() for l in lines if not l.startswith(">")).upper()
 
         # Stage 2: verify-on-read — recompute seq_sha256
-        part_topo = "linear"  # parts are always linear sequences
-        computed = seq_sha256(raw_seq, part_topo)
+        # Parts are always linear. The topology tag KATANA_SPEC v2 section 3.4
+        # specifies is not part of the sealed convention -- see core.hashing.seq_sha256.
+        computed = _hashing.seq_sha256(raw_seq)
         if computed != lock_sha:
             sys.exit(f"BLOCK Stage-2: part '{pid}' recomputed hash {computed[:12]} ≠ LOCK {lock_sha[:12]}\n"
                      f"       The part file on disk does not match what the manifest sealed it\n"
@@ -705,7 +699,7 @@ def main():
     # ── Stage 3: assemble ───────────────────────────────────────────────────
     print("── Stage 3: Assemble ──")
     insert_seq, features, consumed = assemble_insert(spec, resolved)
-    insert_hash = seq_sha256(insert_seq, "linear")
+    insert_hash = _hashing.seq_sha256(insert_seq)
     print(f"  Insert assembled: {len(insert_seq)} bp")
     print(f"  seq_sha256: {insert_hash}")
     print(f"  Parts in order: {' → '.join(spec['architecture']['order'])}")
@@ -794,7 +788,7 @@ def main():
 
     # Verify the written .gb reproduces the hash
     written_seq = extract_gb_sequence(gb_path.read_text(encoding="utf-8"))
-    written_hash = seq_sha256(written_seq, "linear")
+    written_hash = _hashing.seq_sha256(written_seq)
     if written_hash != insert_hash:
         sys.exit(f"BLOCK Stage-5: written .gb hash {written_hash[:12]} ≠ assembled {insert_hash[:12]}")
     print(f"  .gb round-trip hash verified ✓")
@@ -845,7 +839,7 @@ def main():
 
             order_records.append({
                 "name": fname, "role": "fragment", "length_bp": len(fseq),
-                "sequence": fseq.upper(), "seq_sha256": seq_sha256(fseq, "linear"),
+                "sequence": fseq.upper(), "seq_sha256": _hashing.seq_sha256(fseq),
                 "note": f"pos {fstart}-{fend}, {args.gibson_overlap} bp overlap"})
 
     # ── Vendor order table (CSV) ─────────────────────────────────

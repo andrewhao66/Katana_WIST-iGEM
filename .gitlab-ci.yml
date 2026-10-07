@@ -44,6 +44,9 @@ verify:
     # Exits non-zero if any part mismatches its manifest, or if any of the eight
     # deliberate corruptions goes UNcaught.
     - python3 verify.py
+    - python3 tests/test_core_lock.py
+    - python3 tests/test_engine_gates.py
+    - python3 tests/test_one_core.py
 
 determinism:
   <<: *full
@@ -69,6 +72,9 @@ no-deps:
     - |
       python3 -c "import yaml" && exit 1 || echo "confirmed - no PyYAML installed"
     - python3 verify.py
+    - python3 tests/test_core_lock.py
+    - python3 tests/test_engine_gates.py
+    - python3 tests/test_one_core.py
     - python3 test_determinism.py
     - cd kagami && python3 tests.py && python3 test_identify.py
 
