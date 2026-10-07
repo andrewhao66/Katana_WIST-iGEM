@@ -129,6 +129,29 @@ _liar = [dict(_v2, outfile="HrpS.Ec-opt__v2__ffffffffffff.gb")]
 check("a row whose filename hash disagrees with its seq_sha256 is refused",
       _raises(lambda: lock.resolve(_liar, "HrpS.Ec-opt", version=2)))
 
+# ---- core.parts: one sequence reader ----
+from core import parts as core_parts
+
+_gb_path = os.path.join(_shipped, "B0015__v1__696c73e5a7a8.gb")
+_seq = core_parts.read_sequence(_gb_path)
+check("a sealed GenBank part reads back as its sealed length", len(_seq) == 129,
+      str(len(_seq)))
+check("and hashes to the fingerprint in its own filename",
+      hashing.seq_sha256(_seq)[:12] == "696c73e5a7a8",
+      hashing.seq_sha256(_seq)[:12])
+check("the extracted sequence is uppercase", _seq == _seq.upper())
+check("a FASTA body reads too",
+      core_parts.extract_sequence(">x\nacgt\nACGT\n", ".fasta") == "ACGTACGT")
+check("an unknown extension still finds an ORIGIN block",
+      core_parts.extract_sequence("ORIGIN\n  1 acgt\n//\n") == "ACGT")
+check("a rendered record round-trips to the sequence it was given",
+      core_parts.extract_sequence(
+          core_parts.render_genbank("t", 1, "ACGTACGTACGT", "test", "designed")
+      ) == "ACGTACGTACGT")
+check("the shipped library audits as sealed",
+      core_parts.verify_library(os.path.join(_shipped, "LOCK.tsv")) == [],
+      "; ".join(core_parts.verify_library(os.path.join(_shipped, "LOCK.tsv")))[:200])
+
 # core/ is what Pyodide loads in the browser front end, so an import of subprocess or
 # shutil.which here would silently cost the web version. Assert it rather than trusting
 # a convention nobody can see.
