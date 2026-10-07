@@ -33,6 +33,11 @@ import urllib.parse
 import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import vendor_path                                              # noqa: E402
+vendor_path.ensure()
+from core.lock import read as _core_read                        # noqa: E402
+
 EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/"
 UA = {"User-Agent": "katana-find-part/1.0"}
 
@@ -54,9 +59,12 @@ def find_local_library(here: Path) -> Path | None:
 
 
 def read_rows(lock: Path) -> list[dict]:
-    lines = [l for l in lock.read_text(encoding="utf-8").splitlines() if l.strip()]
-    head = lines[0].split("\t")
-    return [dict(zip(head, l.split("\t"))) for l in lines[1:]]
+    """The manifest's rows, through core.lock.
+
+    core.lock.read refuses a manifest missing a column the row hashes are taken over,
+    which this function used to accept and then index into blindly.
+    """
+    return _core_read(lock)[1]
 
 
 def rel(p: Path) -> str:
