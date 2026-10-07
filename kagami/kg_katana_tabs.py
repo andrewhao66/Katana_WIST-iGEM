@@ -300,7 +300,83 @@ class BuildPane(_Pane):
                 return
             args += ["--outdir", out]
         self.open_dir.configure(state="disabled"); self.open_csv.configure(state="disabled")
-        self._start(args, lambda rc, output: self._finished(rc, output, dry, out))
+        if self._engine_importable():
+            self._start_inprocess(spec, lib, out, dry)
+        else:
+            self._start(args, lambda rc, output: self._finished(rc, output, dry, out))
+
+    def _engine_importable(self):
+        """True when katana_build can be imported from the engine directory.
+
+        The subprocess path is KEPT as the fallback rather than deleted: Kagami can be
+        unzipped on its own beside an engine it cannot import, and a window that works
+        is worth more than one code path. When it can import, the in-process path reads
+        a BuildResult instead of greping prose, so rewording an engine message cannot
+        turn a sealed build into REVIEW.
+        """
+        import importlib.util
+        if self.engine not in sys.path:
+            sys.path.insert(0, self.engine)
+        try:
+            return importlib.util.find_spec("katana_build") is not None
+        except Exception:
+            return False
+
+    def _start_inprocess(self, spec, lib, out, dry):
+        """Call katana_build.build() on a worker thread and render its result."""
+        if self.busy:
+            return
+        self.busy = True
+        self.lines = []
+        self._clear()
+        for w in self.extra.winfo_children():
+            w.destroy()
+        for b in self._buttons:
+            b.configure(state="disabled")
+        self.spin.pack(side="left", padx=(12, 0))
+        self.spin.start(12)
+
+        def work():
+            try:
+                import katana_build
+                res = katana_build.build(spec, library=(lib or None),
+                                         outdir=(None if dry else out), dry_run=dry)
+                self.q.put(("result", res))
+            except Exception as exc:
+                self.q.put(("err", "%s: %s" % (type(exc).__name__, exc)))
+
+        threading.Thread(target=work, daemon=True).start()
+        self.frame.after(60, self._drain_result, dry, out)
+
+    def _drain_result(self, dry, out):
+        try:
+            while True:
+                kind, val = self.q.get_nowait()
+                self.busy = False
+                self.spin.stop()
+                self.spin.pack_forget()
+                for b in self._buttons:
+                    b.configure(state="normal")
+                if kind == "err":
+                    self._show("FAIL", "COULD NOT RUN", str(val))
+                    return
+                res = val
+                for line in (res.log or "").splitlines():
+                    self._say(line + "\n", self._tag_for(line))
+                kindw, head, detail = from_result(res)
+                self._show(kindw, head, detail)
+                if not dry and res.verdict != "FAIL":
+                    self._last_out = out
+                    self.open_dir.configure(state="normal")
+                    csv_path = res.outputs.get("csv")
+                    if csv_path and os.path.isfile(csv_path):
+                        self._last_csv = csv_path
+                        self.open_csv.configure(state="normal")
+                        self._order_table(csv_path)
+                return
+        except queue.Empty:
+            pass
+        self.frame.after(60, self._drain_result, dry, out)
 
     def _finished(self, rc, output, dry, out):
         kind, head, detail = classify(rc, output, dry)

@@ -896,6 +896,8 @@ def _run_pipeline(args, res):
                                      sbol_target, fmt=args.sbol_format)
             for _m in _msgs:
                 print(f"  {_m}")
+            if _ok:
+                res.outputs["sbol"] = str(sbol_target)
             if not _ok:
                 _block("seal", "BLOCK Stage-5: SBOL export requested but not produced (see above)")
         except SystemExit:
@@ -939,6 +941,7 @@ def _run_pipeline(args, res):
         for _m in write_order_csv(order_records, spec, csv_path):
             print(f"  {_m}")
         print(f"  .csv:   {csv_path}  ({len(order_records)} row(s))")
+        res.outputs["csv"] = str(csv_path)
     except Exception as _e:
         _block("seal", f"BLOCK Stage-5: order table not written ({_e!r})")
 
@@ -981,10 +984,12 @@ def build(spec_path, library=None, **opts):
     args = _ap.Namespace(
         spec=Path(spec_path), library=library,
         oracle=opts.get("oracle"), expect_root=opts.get("expect_root"),
-        prior=opts.get("prior"), outdir=opts.get("outdir"),
+        prior=(Path(opts["prior"]) if opts.get("prior") else None),
+        outdir=(Path(opts["outdir"]) if opts.get("outdir") else None),
+        sbol=(Path(opts["sbol"]) if opts.get("sbol") else None),
         dry_run=bool(opts.get("dry_run")),
         gibson_overlap=opts.get("gibson_overlap", 30),
-        sbol=opts.get("sbol"), sbol_format=opts.get("sbol_format", "turtle"),
+        sbol_format=opts.get("sbol_format", "turtle"),
         json=False)
 
     buf = _io.StringIO()
