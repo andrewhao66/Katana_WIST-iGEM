@@ -170,5 +170,94 @@ else:
     shutil.rmtree(_outdir, ignore_errors=True)
     shutil.rmtree(_outdir2, ignore_errors=True)
 
+# ---- a stage that REFUSES must never come back as a pass ----
+# The worst defect this review found. _Refused subclassed Exception, and the dry-lab
+# gate's own `except Exception` caught it -- so the engine's refusal was reported as
+# "dry-lab gate unavailable ... NOT enforced this run" and the build carried on to
+# Stage 5 and sealed. Measured: a 240 bp off-target hit at 99.1% identity to the host
+# genome, which the engine's own comment calls "never chance", came back as
+#     verdict PASS, exit_code 0, no FAIL finding
+# through the exact path the GUI, the web page and --json all use. The CLI escaped it
+# only because _block() there raises SystemExit, which the handler re-raised.
+#
+# A refusal is CONTROL FLOW, not an error -- the same category as SystemExit and
+# KeyboardInterrupt, and for the same reason. So _Refused must not be reachable by a
+# generic handler at all, present or future.
+check("a refusal is not catchable by `except Exception`",
+      not issubclass(katana_build._Refused, Exception),
+      katana_build._Refused.__mro__[1].__name__)
+check("and it is still raisable", issubclass(katana_build._Refused, BaseException))
+
+
+def _caught_by_generic():
+    try:
+        raise katana_build._Refused("x", "y")
+    except Exception:
+        return True
+    except katana_build._Refused:
+        return False
+
+
+check("proved by raising one through a generic handler", _caught_by_generic() is False)
+
+import katana_drylab
+
+_real_gate = katana_drylab.run_drylab_gate
+
+
+def _blocking_gate(*a, **k):
+    return (["BLOCK OFF-TARGET: 240 bp at 99.1% identity to the host genome"], [], [])
+
+
+katana_drylab.run_drylab_gate = _blocking_gate
+try:
+    _r = katana_build.build(SPEC, dry_run=True)
+    check("a blocking dry-lab result does NOT report PASS", _r.verdict != "PASS",
+          "%s / exit %s" % (_r.verdict, _r.exit_code))
+    check("and its exit code is non-zero", _r.exit_code != 0, _r.exit_code)
+    _fails = [f.summary for s in _r.stages for f in s.findings if f.status == "FAIL"]
+    check("and there is a FAIL finding carrying the reason", _fails,
+          str([(s.name, [f.status for f in s.findings]) for s in _r.stages]))
+    check("and the reason is the off-target hit, not a missing tool",
+          any("OFF-TARGET" in f or "dry-lab" in f for f in _fails)
+          and "unavailable" not in (_r.log or ""),
+          "; ".join(_fails)[:200])
+    check("and blocked_stage() names the stage that refused",
+          _r.blocked_stage() == "drylab", str(_r.blocked_stage()))
+
+    # The --json path cannot be tested with this injection: it runs in a SUBPROCESS,
+    # which does not inherit a monkeypatched gate. Rather than add a test hook to the
+    # engine for it, the same guarantee is covered twice over by real refusals a
+    # subprocess CAN see: the LOCK.root mismatch earlier in this file, which reports FAIL
+    # in its JSON and exits non-zero, and the structural assertion below.
+    _src = open(os.path.join(ROOT, "katana_build.py"), encoding="utf-8").read()
+    check("main()'s --json path catches _Refused explicitly, as build() does",
+          _src.count("except _Refused as refusal:") == 2,
+          "%d handler(s)" % _src.count("except _Refused as refusal:"))
+    check("and every handler that could sit between a stage and those two re-raises it",
+          "except (SystemExit, _Refused):" in _src,
+          "no re-raising handler found")
+finally:
+    katana_drylab.run_drylab_gate = _real_gate
+
+# A gate that genuinely cannot run is still a SKIP, not a block and not a pass.
+def _unavailable_gate(*a, **k):
+    raise RuntimeError("blastn exploded")
+
+
+katana_drylab.run_drylab_gate = _unavailable_gate
+try:
+    _r = katana_build.build(SPEC, dry_run=True)
+    check("a dry-lab gate that genuinely fails is reported, not silently passed",
+          "unavailable" in (_r.log or "") or _r.verdict != "PASS",
+          "%s | log has 'unavailable': %s"
+          % (_r.verdict, "unavailable" in (_r.log or "")))
+finally:
+    katana_drylab.run_drylab_gate = _real_gate
+
+_r = katana_build.build(SPEC, dry_run=True)
+check("and with the real gate the build still passes", _r.verdict == "PASS",
+      "%s / exit %s" % (_r.verdict, _r.exit_code))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

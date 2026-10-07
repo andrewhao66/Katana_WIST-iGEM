@@ -108,11 +108,32 @@ DEFAULT_EXPECT_ROOT = None
 _REFUSE = False
 
 
-class _Refused(Exception):
-    """A stage refused to continue. Carries the stage name and the message."""
+class _Refused(BaseException):
+    """A stage refused to continue. Carries the stage name and the message.
+
+    BaseException, NOT Exception, and that is the whole point of this class.
+
+    A refusal is CONTROL FLOW -- the engine deciding not to proceed -- in the same
+    category as SystemExit and KeyboardInterrupt, and for the same reason: a generic
+    `except Exception` written somewhere else must not be able to swallow it.
+
+    One did. The dry-lab gate wrapped its own `_block()` call in
+        except SystemExit: raise
+        except Exception as _e:
+            print("WARN Stage-4b: dry-lab gate unavailable ... NOT enforced this run")
+    so a BLOCKING off-target hit -- measured: 240 bp at 99.1% identity to the host
+    genome, which the comment beside it calls "never chance" -- was reported as a missing
+    tool, and the build carried on to Stage 5 and SEALED. verdict PASS, exit_code 0, no
+    FAIL finding, through the exact path build(), the GUI, the web page and --json all
+    use. The command line escaped it only by accident: there _block() raises SystemExit,
+    which that handler re-raised.
+
+    Subclassing BaseException fixes the whole class of it, including handlers nobody has
+    written yet. build() and main() catch _Refused explicitly, which still works.
+    """
 
     def __init__(self, stage, message):
-        Exception.__init__(self, message)
+        BaseException.__init__(self, message)
         self.stage = stage
         self.message = message
 
@@ -920,7 +941,11 @@ def _run_pipeline_inner(args, res):
             print("           The off-target check did not run: the genome it needs for")
             print("           this construct is not here. The line above says which.")
             print("           To fetch it:  python3 get_genome.py")
-    except SystemExit:
+    except (SystemExit, _Refused):
+        # The engine's own decisions, re-raised. _Refused is a BaseException so this
+        # handler could not catch it anyway; it is named here so a reader can see the
+        # intent without having to know that, and so moving the class back under
+        # Exception would not silently reopen the hole.
         raise
     except Exception as _e:
         print(f"  WARN Stage-4b: dry-lab gate unavailable ({_e!r}) — NOT enforced this run")
@@ -978,8 +1003,8 @@ def _run_pipeline_inner(args, res):
                 res.outputs["sbol"] = str(sbol_target)
             if not _ok:
                 _block("seal", "BLOCK Stage-5: SBOL export requested but not produced (see above)")
-        except SystemExit:
-            raise
+        except (SystemExit, _Refused):
+            raise                    # as above: a refusal is not an export failure
         except Exception as _e:
             _block("seal", f"BLOCK Stage-5: SBOL export failed ({_e!r})")
 
