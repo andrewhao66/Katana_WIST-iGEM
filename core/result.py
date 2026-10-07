@@ -85,6 +85,9 @@ class BuildResult(object):
         self.features = []
         self.consumed = {}
         self.stages = []
+        # The text the pipeline printed. A renderer that captured it can
+        # replay it; a wrapper that wants only data can ignore it.
+        self.log = ""
 
     # ---- building it up -------------------------------------------------------
     def add(self, stage):
@@ -171,4 +174,5 @@ class BuildResult(object):
             "consumed": dict(self.consumed),
             "stages": [s.to_dict() for s in self.stages],
             "findings": [f.to_dict() for f in self.findings],
+            "log": self.log,
         }

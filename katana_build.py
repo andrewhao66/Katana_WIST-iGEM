@@ -22,7 +22,7 @@ Usage:
   py katana_build.py specs/pSense-Nit-dual.spec.yaml --oracle f93cd751...
   py katana_build.py specs/pSense-Lac-dual.spec.yaml --gibson-overlap 30
 """
-import argparse, hashlib, re, sys, textwrap, csv, io
+import argparse, hashlib, json, re, sys, textwrap, csv, io
 from pathlib import Path
 from datetime import datetime
 
@@ -81,6 +81,7 @@ sys.path.insert(0, str(HERE))
 import vendor_path
 vendor_path.ensure()
 from core import hashing as _hashing
+from core import result as _result
 from core import lock as _lock
 from core import parts as _parts
 
@@ -94,6 +95,30 @@ LOCK_ROOT_PATH = LIB / "LOCK.root"
 # external guard that catches a stale-but-internally-consistent copy of the library
 # (e.g. an out-of-date sync of a shared drive). Pin your builds in CI.
 DEFAULT_EXPECT_ROOT = None
+
+# ── refusal: a stage stopping, as data rather than as an exit ────────────────
+# The stage functions called sys.exit, which is right for a CLI and wrong for everything
+# else: a GUI worker thread got SystemExit and a web page got nothing at all. _block()
+# raises instead when a caller asked for a result, and still exits when the CLI is the
+# caller -- so the terminal output is unchanged to the byte.
+_REFUSE = False
+
+
+class _Refused(Exception):
+    """A stage refused to continue. Carries the stage name and the message."""
+
+    def __init__(self, stage, message):
+        Exception.__init__(self, message)
+        self.stage = stage
+        self.message = message
+
+
+def _block(stage, message):
+    """Refuse. Raises for build(), exits for main()."""
+    if _REFUSE:
+        raise _Refused(stage, message)
+    sys.exit(message)
+
 
 # ── helpers ─────────────────────────────────────────────────────────────────
 
@@ -192,7 +217,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
         expected_len = seal.get("length")
 
         if not lib_file or not expected_sha12:
-            sys.exit(f"BLOCK Stage-1: part '{pid}' has no seal/pin — bare id rejected (v2)\n"
+            _block("source", f"BLOCK Stage-1: part '{pid}' has no seal/pin — bare id rejected (v2)\n"
                      f"       Your Spec names this part but does not say WHICH version of it,\n"
                      f"       so the engine cannot check it is the one you meant.\n"
                      f"       Every part needs a seal block. add_part.py prints the exact one\n"
@@ -213,7 +238,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
         # follow is gone: enforcing one rule in two places is how the engine's copy and
         # katana_lock's copy came to disagree in the first place.
         if not any(r.get("id") == pid for r in lock):
-            sys.exit(f"BLOCK Stage-1: part '{pid}' is not in your Parts Library yet.\n"
+            _block("source", f"BLOCK Stage-1: part '{pid}' is not in your Parts Library yet.\n"
                      f"       Your Spec asks for it, but the library has never been given it.\n"
                      f"       Nothing is broken - you just need to add it first.\n"
                      f"       See what you have:      python3 find_part.py --have\n"
@@ -223,7 +248,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
         try:
             lock_row = _lock.resolve(lock, pid, pin=expected_sha12, lib=lib_file)
         except _lock.LockError as exc:
-            sys.exit(f"BLOCK Stage-1: {exc}\n"
+            _block("source", f"BLOCK Stage-1: {exc}\n"
                      f"       This is the check doing its job, not a bug.\n"
                      f"       Look at what the library actually holds:\n"
                      f"           python3 find_part.py {pid}\n"
@@ -236,7 +261,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
             # Try the outfile from LOCK
             gb_path = LIB / lock_row["outfile"]
         if not gb_path.exists():
-            sys.exit(f"BLOCK Stage-1: part '{pid}' file not found: {gb_path}\n"
+            _block("source", f"BLOCK Stage-1: part '{pid}' file not found: {gb_path}\n"
                      f"       The manifest lists this part but its file is missing, so the\n"
                      f"       library is incomplete. If you cloned this repository, the\n"
                      f"       simplest repair is a fresh copy of it.")
@@ -255,7 +280,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
         # specifies is not part of the sealed convention -- see core.hashing.seq_sha256.
         computed = _hashing.seq_sha256(raw_seq)
         if computed != lock_sha:
-            sys.exit(f"BLOCK Stage-2: part '{pid}' recomputed hash {computed[:12]} ≠ LOCK {lock_sha[:12]}\n"
+            _block("source", f"BLOCK Stage-2: part '{pid}' recomputed hash {computed[:12]} ≠ LOCK {lock_sha[:12]}\n"
                      f"       The part file on disk does not match what the manifest sealed it\n"
                      f"       as. Something edited it after it was sealed.\n"
                      f"       This is exactly what the engine is for, so it has stopped.\n"
@@ -264,7 +289,7 @@ def resolve_parts(spec: dict, lock: dict) -> dict:
 
         # Length check
         if expected_len and len(raw_seq) != int(expected_len):
-            sys.exit(f"BLOCK Stage-2: part '{pid}' length {len(raw_seq)} ≠ expected {expected_len}\n"
+            _block("source", f"BLOCK Stage-2: part '{pid}' length {len(raw_seq)} ≠ expected {expected_len}\n"
                      f"       Your Spec says this part is {expected_len} bases; the library\n"
                      f"       holds {len(raw_seq)}. A part that changed length is a different\n"
                      f"       part. Check the length in the Spec's seal block against:\n"
@@ -293,12 +318,12 @@ def apply_trims(seq: str, trims_for_part: dict) -> str:
         if seq.upper().endswith(trim_3p):
             seq = seq[:-len(trim_3p)]
         else:
-            sys.exit(f"BLOCK Stage-3: 3' trim '{trim_3p}' not found at end of sequence")
+            _block("assemble", f"BLOCK Stage-3: 3' trim '{trim_3p}' not found at end of sequence")
     if trim_5p:
         if seq.upper().startswith(trim_5p):
             seq = seq[len(trim_5p):]
         else:
-            sys.exit(f"BLOCK Stage-3: 5' trim '{trim_5p}' not found at start of sequence")
+            _block("assemble", f"BLOCK Stage-3: 5' trim '{trim_5p}' not found at start of sequence")
     return seq
 
 def assemble_insert(spec: dict, resolved: dict) -> tuple:
@@ -310,7 +335,7 @@ def assemble_insert(spec: dict, resolved: dict) -> tuple:
     topology = arch.get("topology", "linear-insert")
 
     if not order:
-        sys.exit("BLOCK Stage-3: architecture.order is empty.\n"
+        _block("assemble", "BLOCK Stage-3: architecture.order is empty.\n"
                  "       You have listed parts, but not the ORDER they go in. The engine\n"
                  "       will not guess an arrangement of DNA for you.\n"
                  "       Add the ids, left to right, e.g.\n"
@@ -325,7 +350,7 @@ def assemble_insert(spec: dict, resolved: dict) -> tuple:
 
     for pid in order:
         if pid not in resolved:
-            sys.exit(f"BLOCK Stage-3: '{pid}' appears in architecture.order but is not in your\n"
+            _block("assemble", f"BLOCK Stage-3: '{pid}' appears in architecture.order but is not in your\n"
                      f"       Spec's parts list. Usually this is a typo in one of the two, or a\n"
                      f"       part you meant to add and did not.\n"
                      f"       This and other Spec problems are all reported at once by:\n"
@@ -633,7 +658,9 @@ def diff_vs_prior(insert_seq: str, prior_path: Path) -> list:
 
 # ── main ────────────────────────────────────────────────────────────────────
 
-def main():
+def _parse_args(argv=None):
+    """The CLI's own argument parsing. Separate from the pipeline, so build() can be
+    called with keyword arguments instead of a fabricated namespace."""
     parser = argparse.ArgumentParser(description="Katana deterministic build engine (Stages 1-6)")
     parser.add_argument("spec", type=Path, help="Path to .spec.yaml file")
     parser.add_argument("--oracle", type=str, default=None,
@@ -657,7 +684,23 @@ def main():
     parser.add_argument("--sbol-format", type=str, default="turtle",
                         choices=["turtle", "nt", "jsonld", "rdfxml"],
                         help="SBOL serialisation (default: turtle)")
-    args = parser.parse_args()
+    parser.add_argument("--json", action="store_true",
+                        help="emit the whole result as JSON instead of text. Everything "
+                             "the text output says, in a form a wrapper can read "
+                             "without parsing sentences.")
+    args = parser.parse_args(argv)
+    return args
+
+
+def _run_pipeline(args, res):
+    """The pipeline. Prints as it goes, and records what happened into `res`.
+
+    ONE implementation. main() renders the printing; build() captures it and reads the
+    result. The printed lines are unchanged to the byte, because this IS the code that
+    always printed them -- test_determinism greps seq_sha256:, kg_rebuild greps .gb:,
+    and anyone reading a log reads all of it.
+    """
+
 
     if not args.spec.exists():
         sys.exit(f"BLOCK: spec file not found: {args.spec}\n"
@@ -684,6 +727,12 @@ def main():
     if not ok:
         sys.exit(f"BLOCK: {msg}")
     print(f"  LOCK.root {msg}")
+    try:
+        res.library_root = LOCK_ROOT_PATH.read_text(encoding="utf-8").strip()
+    except Exception:
+        res.library_root = ""
+    res.pinned = bool(expect_root)
+    res.add(_result.StageResult("library", True, data={"message": msg}))
     if not expect_root:
         print("  NOTE: no --expect-root given. Library integrity is enforced, but this build")
         print("        is not bound to a specific library state. Pin it for reproducible CI.")
@@ -694,6 +743,8 @@ def main():
     lock = load_lock(LOCK_PATH)
     resolved = resolve_parts(spec, lock)
     print(f"  All {len(resolved)} distinct parts resolved and verified.")
+    res.add(_result.StageResult("source", True,
+                                data={"parts": sorted(resolved)}))
     print()
 
     # ── Stage 3: assemble ───────────────────────────────────────────────────
@@ -703,6 +754,14 @@ def main():
     print(f"  Insert assembled: {len(insert_seq)} bp")
     print(f"  seq_sha256: {insert_hash}")
     print(f"  Parts in order: {' → '.join(spec['architecture']['order'])}")
+    res.construct_id = sid
+    res.version = version
+    res.insert_len = len(insert_seq)
+    res.seq_sha256 = insert_hash
+    res.features = list(features)
+    res.consumed = dict(consumed)
+    res.add(_result.StageResult("assemble", True,
+                                data={"order": list(spec["architecture"]["order"])}))
     for feat in features:
         trim_info = ""
         if feat["trimmed_len"] != feat["original_len"]:
@@ -715,6 +774,8 @@ def main():
         print("── Oracle validation ──")
         if insert_hash == args.oracle:
             print(f"  ✓ ORACLE MATCH: {insert_hash[:16]}…")
+            res.add(_result.StageResult("oracle", True,
+                                        data={"expected": args.oracle}))
         else:
             print(f"  ✗ ORACLE MISMATCH!")
             print(f"    Expected: {args.oracle[:32]}…")
@@ -731,7 +792,14 @@ def main():
     for iss in issues:
         print(f"  {iss}")
     if blocks:
-        sys.exit(f"BLOCK Stage-4: {len(blocks)} blocking issue(s)")
+        _block("validate", f"BLOCK Stage-4: {len(blocks)} blocking issue(s)")
+    _vf = []
+    for _iss in issues:
+        _st = (_result.FLAG if _iss.startswith("WARN")
+               else _result.NOTE if _iss.startswith("INFO")
+               else _result.FAIL)
+        _vf.append(_result.Finding("validate", _st, _iss))
+    res.add(_result.StageResult("validate", True, _vf))
     if not issues:
         print("  PASS — all checks clean")
     else:
@@ -746,7 +814,22 @@ def main():
         for _m in _di + _dw + _db:
             print(f"  {_m}")
         if _db:
-            sys.exit(f"BLOCK Stage-4b: {len(_db)} dry-lab blocking issue(s)")
+            _block("drylab", f"BLOCK Stage-4b: {len(_db)} dry-lab blocking issue(s)")
+        _df = []
+        for _m in _db:
+            _df.append(_result.Finding("drylab", _result.FAIL, _m))
+        for _m in _dw:
+            # "NOT enforced this run" is a gate that did not RUN, which is SKIP rather
+            # than FLAG: the whole reason SKIP is a separate tier is that "we did not
+            # check" must never read as "checked and fine".
+            if "NOT enforced" in _m:
+                _cat = "offtarget" if "OFF-TARGET" in _m else "cai"
+                _df.append(_result.Finding(_cat, _result.SKIP, _m))
+            else:
+                _df.append(_result.Finding("drylab", _result.FLAG, _m))
+        for _m in _di:
+            _df.append(_result.Finding("drylab", _result.NOTE, _m))
+        res.add(_result.StageResult("drylab", True, _df))
         print("  Stage-4b PASS" + (f" — {len(_dw)} warning(s) to review" if _dw else " — clean"))
         _skipped = [w for w in _dw if "OFF-TARGET SKIPPED" in w]
         _hits = [w for w in _dw if "off-target" in w and w not in _skipped]
@@ -790,9 +873,12 @@ def main():
     written_seq = extract_gb_sequence(gb_path.read_text(encoding="utf-8"))
     written_hash = _hashing.seq_sha256(written_seq)
     if written_hash != insert_hash:
-        sys.exit(f"BLOCK Stage-5: written .gb hash {written_hash[:12]} ≠ assembled {insert_hash[:12]}")
+        _block("seal", f"BLOCK Stage-5: written .gb hash {written_hash[:12]} ≠ assembled {insert_hash[:12]}")
     print(f"  .gb round-trip hash verified ✓")
     print(f"  SEALED: {insert_hash}")
+    res.outputs["gb"] = str(gb_path)
+    res.outputs["fasta"] = str(fasta_path)
+    res.add(_result.StageResult("seal", True, data={"sha256": insert_hash}))
 
     # ── SBOL 3 export (optional, standards interchange) ─────────────────────
     sbol_target = args.sbol
@@ -811,11 +897,11 @@ def main():
             for _m in _msgs:
                 print(f"  {_m}")
             if not _ok:
-                sys.exit("BLOCK Stage-5: SBOL export requested but not produced (see above)")
+                _block("seal", "BLOCK Stage-5: SBOL export requested but not produced (see above)")
         except SystemExit:
             raise
         except Exception as _e:
-            sys.exit(f"BLOCK Stage-5: SBOL export failed ({_e!r})")
+            _block("seal", f"BLOCK Stage-5: SBOL export failed ({_e!r})")
 
     # Gibson split if needed
     frag_cap = spec.get("constraints", {}).get("fragment_bp_max", 5000)
@@ -854,7 +940,7 @@ def main():
             print(f"  {_m}")
         print(f"  .csv:   {csv_path}  ({len(order_records)} row(s))")
     except Exception as _e:
-        sys.exit(f"BLOCK Stage-5: order table not written ({_e!r})")
+        _block("seal", f"BLOCK Stage-5: order table not written ({_e!r})")
 
     print()
 
@@ -873,6 +959,93 @@ def main():
     print(f"  Hash:      {insert_hash}")
     print(f"  Verdict:   SEALED")
     print(f"  Output:    {gb_path}")
+
+
+def build(spec_path, library=None, **opts):
+    """Run the pipeline and RETURN what happened. Never exits, never prints.
+
+    opts: oracle, expect_root, prior, outdir, dry_run, gibson_overlap, sbol,
+    sbol_format, and `capture` (default True) to suppress the text.
+
+    This is what a GUI worker thread, a web page and `--json` all call. The CLI calls
+    the same pipeline through main(); there is no second implementation.
+    """
+    global _REFUSE
+    import argparse as _ap
+    import io as _io
+
+    res = _result.BuildResult()
+    res.dry_run = bool(opts.get("dry_run"))
+    res.library = str(library or LIB)
+
+    args = _ap.Namespace(
+        spec=Path(spec_path), library=library,
+        oracle=opts.get("oracle"), expect_root=opts.get("expect_root"),
+        prior=opts.get("prior"), outdir=opts.get("outdir"),
+        dry_run=bool(opts.get("dry_run")),
+        gibson_overlap=opts.get("gibson_overlap", 30),
+        sbol=opts.get("sbol"), sbol_format=opts.get("sbol_format", "turtle"),
+        json=False)
+
+    buf = _io.StringIO()
+    old_stdout, old_refuse = sys.stdout, _REFUSE
+    if opts.get("capture", True):
+        sys.stdout = buf
+    _REFUSE = True
+    try:
+        _run_pipeline(args, res)
+    except _Refused as refusal:
+        res.add(_result.StageResult(
+            refusal.stage, False,
+            [_result.Finding("block", _result.FAIL,
+                             refusal.message.splitlines()[0],
+                             detail="\n".join(refusal.message.splitlines()[1:]))]))
+    except SystemExit as exc:
+        # A path that still exits -- the spec-not-found check and the YAML reader run
+        # before any stage exists. Record it rather than letting it escape a GUI thread.
+        res.add(_result.StageResult(
+            "spec", False,
+            [_result.Finding("block", _result.FAIL,
+                             str(exc).splitlines()[0] if str(exc) else "the engine stopped",
+                             detail="\n".join(str(exc).splitlines()[1:]))]))
+    finally:
+        sys.stdout, _REFUSE = old_stdout, old_refuse
+    res.log = buf.getvalue()
+    return res
+
+
+def main(argv=None):
+    args = _parse_args(argv)
+    res = _result.BuildResult()
+    res.dry_run = bool(args.dry_run)
+    if getattr(args, "json", False):
+        import io as _io
+        buf, old = _io.StringIO(), sys.stdout
+        sys.stdout = buf
+        global _REFUSE
+        _REFUSE = True
+        try:
+            _run_pipeline(args, res)
+        except _Refused as refusal:
+            res.add(_result.StageResult(
+                refusal.stage, False,
+                [_result.Finding("block", _result.FAIL,
+                                 refusal.message.splitlines()[0],
+                                 detail="\n".join(refusal.message.splitlines()[1:]))]))
+        except SystemExit as exc:
+            res.add(_result.StageResult(
+                "spec", False,
+                [_result.Finding("block", _result.FAIL,
+                                 str(exc).splitlines()[0] if str(exc) else "stopped")]))
+        finally:
+            sys.stdout, _REFUSE = old, False
+        res.log = buf.getvalue()
+        json.dump(res.to_dict(), sys.stdout, indent=2)
+        sys.stdout.write("\n")
+        return res.exit_code
+    _run_pipeline(args, res)
+    return res.exit_code
+
 
 if __name__ == "__main__":
     main()
