@@ -17,11 +17,37 @@ WIST iGEM team on this basis. To expand, re-run build_refs.py (never paste a
 sequence out of a construct you are auditing — circular provenance).
 """
 import os
+import sys
 
 _DIR = os.path.dirname(os.path.abspath(__file__))
 _FASTA = os.path.join(_DIR, "refs", "reference_parts.fasta")
 _TSV = os.path.join(_DIR, "refs", "reference_parts.tsv")
 _GENOMES = os.path.join(_DIR, "genomes")
+
+def _import_core():
+    """core/ lives at the repository root, one level above kagami/.
+
+    Kagami deliberately imports NOTHING from the forward ENGINE and drives it as
+    subprocesses instead, so the two stay decoupled. core/ is a different thing: not the
+    engine, but the shared definition of what a manifest and a part file ARE. Four
+    Kagami modules each had their own copy of that, and the point of core/ is that there
+    is one.
+
+    Returns (hashing, lock, parts), or (None, None, None) when core/ is absent -- Kagami
+    unzipped on its own must keep working, because it is the tool the wiki invites a
+    stranger to download.
+    """
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if os.path.isdir(os.path.join(root, "core")) and root not in sys.path:
+        sys.path.insert(0, root)
+    try:
+        from core import hashing, lock, parts
+        return hashing, lock, parts
+    except ImportError:
+        return None, None, None
+
+
+_hashing, _lock, _core_parts = _import_core()
 
 STRENGTH_ORDER = {"weak": 1, "medium": 2, "strong": 3}
 
@@ -148,50 +174,63 @@ def load_katana_library(root):
     root = os.path.abspath(root)
     lock = os.path.join(root, "LOCK.tsv")
     if not os.path.isfile(lock):
-        return [], [f"no LOCK.tsv in {root}"]
+        return [], ["no LOCK.tsv in %s" % root]
+
+    # Through core.lock when the bundle is present: it refuses a manifest missing a
+    # column the row hashes are taken over, which the inline parser below accepted and
+    # then indexed into blindly. Falls back when Kagami was unzipped on its own.
+    if _lock is not None:
+        try:
+            rows = _lock.read(lock)[1]
+        except _lock.LockError as exc:
+            return [], [str(exc)]
+        seq_hash = _hashing.seq_sha256
+    else:
+        with open(lock, "r", encoding="utf-8") as fh:
+            header = fh.readline().rstrip("\n").split("\t")
+            rows = []
+            for line in fh:
+                if line.strip():
+                    cells = line.rstrip("\n").split("\t")
+                    rows.append(dict(zip(header, cells)))
+        def seq_hash(s):
+            return hashlib.sha256(s.encode()).hexdigest()
 
     parts, problems = [], []
-    with open(lock, "r", encoding="utf-8") as fh:
-        header = fh.readline().rstrip("\n").split("\t")
-        idx = {h: i for i, h in enumerate(header)}
-        for line in fh:
-            if not line.strip():
-                continue
-            c = line.rstrip("\n").split("\t")
+    for row in rows:
+        pid, outfile = row.get("id", ""), row.get("outfile", "")
+        if not pid or not outfile:
+            continue
+        path = os.path.join(root, outfile.replace("\\", os.sep).replace("/", os.sep))
+        if not os.path.isfile(path):
+            problems.append("%s: %s missing" % (pid, outfile))
+            continue
+        try:
+            seq = normalise(kg_parse.parse(path).seq)
+        except Exception as exc:
+            problems.append("%s: unreadable (%s)" % (pid, exc))
+            continue
+        if not seq:
+            problems.append("%s: empty sequence" % pid)
+            continue
 
-            def g(k):
-                return c[idx[k]] if k in idx and idx[k] < len(c) else ""
+        recomputed = seq_hash(seq)
+        if row.get("seq_sha256") and recomputed != row["seq_sha256"]:
+            problems.append("%s: seq_sha256 %s != LOCK %s"
+                            % (pid, recomputed[:12], row["seq_sha256"][:12]))
+            continue
+        fn12 = os.path.basename(path).rsplit(".", 1)[0].split("__")[-1]
+        if len(fn12) == 12 and recomputed[:12] != fn12:
+            problems.append("%s: seq_sha256 %s != filename %s"
+                            % (pid, recomputed[:12], fn12))
+            continue
 
-            pid, outfile = g("id"), g("outfile")
-            if not pid or not outfile:
-                continue
-            path = os.path.join(root, outfile.replace("\\", os.sep).replace("/", os.sep))
-            if not os.path.isfile(path):
-                problems.append(f"{pid}: {outfile} missing")
-                continue
-            try:
-                seq = normalise(kg_parse.parse(path).seq)
-            except Exception as exc:
-                problems.append(f"{pid}: unreadable ({exc})")
-                continue
-            if not seq:
-                problems.append(f"{pid}: empty sequence")
-                continue
-
-            recomputed = hashlib.sha256(seq.encode()).hexdigest()
-            if g("seq_sha256") and recomputed != g("seq_sha256"):
-                problems.append(f"{pid}: seq_sha256 {recomputed[:12]} != LOCK {g('seq_sha256')[:12]}")
-                continue
-            fn12 = os.path.basename(path).rsplit(".", 1)[0].split("__")[-1]
-            if len(fn12) == 12 and recomputed[:12] != fn12:
-                problems.append(f"{pid}: seq_sha256 {recomputed[:12]} != filename {fn12}")
-                continue
-
-            parts.append(dict(
-                id=pid, registry="", name=pid, role=_infer_role(pid, g("source")),
-                variant=None, seq=seq,
-                provenance=f"your library {os.path.basename(path)} "
-                           f"[seq_sha256 verified vs LOCK] | {g('source')[:100]}"))
+        parts.append(dict(
+            id=pid, registry="", name=pid,
+            role=_infer_role(pid, row.get("source", "")),
+            variant=None, seq=seq,
+            provenance="your library %s [seq_sha256 verified vs LOCK] | %s"
+                       % (os.path.basename(path), row.get("source", "")[:100])))
     return parts, problems
 
 
