@@ -35,20 +35,19 @@ import sys
 from datetime import date
 from pathlib import Path
 
-# Must match katana_lock.FIELDS exactly. The manifest header is not decoration: row_sha256 is
-# computed over these keys in this order, so a header that disagrees with the hashing code
-# produces rows whose hashes nobody can reproduce.
-FIELDS = ["id", "version", "seq_sha256", "file_sha256", "length",
-          "source", "date", "class", "outfile"]
+# The header and the empty root come from core.hashing, so they cannot disagree with
+# the hashing code. This file's comment used to warn that FIELDS "must match
+# katana_lock.FIELDS exactly" because row_sha256 is computed over those keys in that
+# order, and that a header disagreeing with the hashing code produces rows nobody can
+# reproduce. That is now structurally impossible.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import vendor_path                                              # noqa: E402
+vendor_path.ensure()
+from core.hashing import FIELDS, HEADER, lock_root               # noqa: E402
 
-# The manifest HEADER is FIELDS plus row_sha256. The distinction matters and cost a build:
-# FIELDS is what row_sha256 is computed OVER, so it cannot contain row_sha256 itself, but the
-# column still has to exist in the file or the engine cannot read the row back.
-HEADER = FIELDS + ["row_sha256"]
-
-# lock_root over zero rows: sha256 of the empty string. Written rather than hard-coded so it
-# stays correct if the rule ever changes.
-EMPTY_ROOT = hashlib.sha256("".join([]).encode()).hexdigest()
+# lock_root over zero rows. Computed rather than written down, so it stays correct if
+# the rule ever changes.
+EMPTY_ROOT = lock_root([])
 
 SPEC_TEMPLATE = '''\
 # A Katana Design Spec: what you MEANT, not what the DNA is.
