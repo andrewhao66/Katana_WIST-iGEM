@@ -23,3 +23,6 @@ __pycache__/
 desktop.ini
 .DS_Store
 Thumbs.db
+
+katana.zip
+_site/

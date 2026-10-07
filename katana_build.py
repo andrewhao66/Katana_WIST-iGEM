@@ -22,6 +22,10 @@ Usage:
   py katana_build.py specs/pSense-Nit-dual.spec.yaml --oracle f93cd751...
   py katana_build.py specs/pSense-Lac-dual.spec.yaml --gibson-overlap 30
 """
+# NOTE: annotations are evaluated at runtime here, so `str | None` is a Python 3.10+
+# construct and this file must not use it -- the README promises 3.9, and macOS ships
+# 3.9 with the Xcode command line tools. One such annotation made the engine crash on
+# import on a freshly unzipped bundle, which tests/test_py39.py now catches.
 import argparse, hashlib, json, re, sys, textwrap, csv, io
 from pathlib import Path
 from datetime import datetime
@@ -189,7 +193,7 @@ def load_lock(lock_path: Path) -> list:
         sys.exit("BLOCK: %s" % exc)
 
 
-def verify_lock_root(lock_path: Path, lock_root_path: Path, pinned: str | None = None):
+def verify_lock_root(lock_path: Path, lock_root_path: Path, pinned=None):
     """Delegates to core.lock.verify_root, which RECOMPUTES every row hash from the
     row's own fields before checking the root.
 

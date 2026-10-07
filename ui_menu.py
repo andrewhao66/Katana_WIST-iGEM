@@ -102,6 +102,8 @@ def _dispatch(name, argv, stdout):
         return _run_module(os.path.join(HERE, "katana_init.py"), list(argv), stdout)
     if name == "web":
         return _run_module(os.path.join(HERE, "web_serve.py"), list(argv), stdout)
+    if name == "bundle":
+        return _run_module(os.path.join(HERE, "make_bundle.py"), list(argv), stdout)
     if name == "deploy":
         return _run_module(os.path.join(HERE, "web_deploy.py"), list(argv), stdout)
     if name == "gui":

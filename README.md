@@ -65,6 +65,27 @@ let a `file://` page fetch its own files. One command avoids that.
 The same page can be published as a static site with `./katana deploy`; it stages by
 default and only publishes with `--push`.
 
+### Packaging it for your team
+
+```
+./katana bundle
+```
+
+Writes `katana.zip` — one folder, 5 MB, nothing to install. Building the same tree twice
+gives byte-identical zips, so you can publish a checksum with a release. What the person
+who receives it does is:
+
+```
+unzip katana.zip
+cd katana
+./katana
+```
+
+`tests/test_bundle.py` does exactly that — unzips the real artifact and runs verify,
+build and check inside it with `PATH` cut back to the system directories, so no installed
+package and no `blastn` can be reached. It is the only suite that tests what a person
+actually receives.
+
 ### On a Mac, run it from Terminal — do not double-click
 
 macOS refuses to open a downloaded script that is not code-signed, and this one is not. Every
