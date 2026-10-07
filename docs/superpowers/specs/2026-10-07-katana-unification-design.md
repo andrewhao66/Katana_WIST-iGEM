@@ -703,10 +703,17 @@ Stated rather than left to be assumed:
   assert the *shape* of `katana.bat`, which is weaker than a run.
 - **Pixels in a browser.** The engine is verified in a real Pyodide and the rendering
   functions are called for real under node, but no browser was driven.
-- **The subagent review pass.** Three subagents were dispatched across the session and
-  none delivered a report. The gate ran as self-review plus Codex; the third pass is
-  missing, and that is a gap against §10's three-pass requirement rather than a pass that
-  found nothing.
+- **Windows, still.** The launcher now detects a double-click and probes each interpreter
+  before using it, but no Windows machine ran any of it. Those assertions pin the *shape*
+  of `katana.bat`, which is weaker than a run.
+- **The 26–42 bp reference band and the stride prefilter.** Both measured, both real, both
+  accepted rather than fixed — see §13.4 for the numbers and why.
+
+Superseded: an earlier draft of this section recorded the subagent review pass as missing.
+It was not missing, only late. All four reviewers eventually delivered, after this document
+first said they had not, and between them they found six further defects including the two
+Criticals in §13.3b. The lesson is recorded rather than quietly corrected: I concluded a
+pass had failed because it had not answered yet, and wrote that conclusion down.
 
 ### 13.6 Published
 
