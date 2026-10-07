@@ -127,7 +127,10 @@ else:
     p = subprocess.run([old, "katana_build.py",
                         "specs/pSense-Nit.spec.yaml", "--dry-run"],
                        cwd=ROOT, capture_output=True, text=True)
-    check("a construct builds on Python %d.%d" % ver, p.returncode == 0,
+    # 0 or 5: 5 is REVIEW, which is the honest verdict for this spec now that the
+    # off-target gate finds the genome the bundle ships and reports real matches. It used
+    # to be 0 only because that gate never ran.
+    check("a construct builds on Python %d.%d" % ver, p.returncode in (0, 5),
           (p.stdout + p.stderr)[-250:])
     check("and it reproduces the sealed hash",
           "796e94a0ea2452edd2ce59ca30b8f28fea232b37ab2a036714239069fd1196f5"

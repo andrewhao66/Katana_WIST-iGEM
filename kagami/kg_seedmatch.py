@@ -224,10 +224,110 @@ def _extend(sid, q, s, d, L, n, strand):
     # Bases that are present but different is a diverged end; bases that run off the end
     # of the sequence are genuinely absent. Reporting "only 121/129 present" for the
     # first is a false statement about the construct.
+    # rstart/rend are the slice of the REFERENCE this piece aligned, 0-based half-open.
+    # Merging two pieces of one gapped alignment needs them: the pieces' query intervals
+    # say where they sit, and only the reference intervals say how much of the part is
+    # actually accounted for.
     return dict(sid=sid, pident=round(pident, 1), core_pident=round(core_pident, 1),
                 length=span, qstart=cs + best_lo + 1, qend=cs + best_hi, strand=strand,
                 cov=span / float(L), bit=2.0 * matches,
-                ref_in_query=(ws >= 0 and we <= n))
+                ref_in_query=(ws >= 0 and we <= n),
+                diag=d, matches=matches, aligned=span,
+                rstart=cs + best_lo - ws, rend=cs + best_hi - ws)
+
+
+# The largest shift the merge will bridge. An indel from cloning or synthesis is one to a
+# few bases; a few tens covers a sloppy primer or a small deletion. Two SEPARATE
+# occurrences of a part differ in diagonal by the distance between them -- 129 for
+# adjacent B0015 copies -- which is far above this, so they are never merged into one.
+MAX_INDEL = 30
+
+
+def _group_by_sid_strand(hits):
+    """(sid, strand) -> its hits. Merging only ever joins pieces of the same reading."""
+    groups = {}
+    for h in hits:
+        groups.setdefault((h["sid"], h["strand"]), []).append(h)
+    return list(groups.items())
+
+
+def _merge_indels(hits, reflen):
+    """Join hits of one reference that are pieces of a single GAPPED alignment.
+
+    _extend scores one diagonal, and an insertion or deletion SHIFTS the diagonal, so the
+    true alignment arrives here as two pieces -- each covering about half the reference.
+    _tile then dropped both at its 0.6 coverage floor, and the part vanished from the
+    report entirely.
+
+    Measured before this existed, on real AmCyan bases labelled "sfGFP": intact, the
+    mislabel FLAG fired at coverage 1.000; with ONE base deleted the block came back with
+    no identity at all and the mislabel finding count went to zero. A block with no
+    identity is never compared against its claim, so the one check this software exists to
+    perform was silently skipped -- by the single most common cloning artifact there is.
+
+    Two pieces are one alignment when they are the same reference and strand, their
+    diagonals differ by no more than MAX_INDEL, their reference intervals barely overlap
+    (they are different parts of the same part), and they sit next to each other in the
+    query. The merged reading reports the union of the reference covered and carries the
+    shift as `indel`, so the audit can say a base is missing rather than implying the part
+    is short.
+    """
+    out = []
+    by_group = {}
+    for h in hits:
+        by_group.setdefault((h["sid"], h["strand"]), []).append(h)
+
+    for _key, group in by_group.items():
+        if len(group) < 2:
+            out.extend(group)
+            continue
+        group = sorted(group, key=lambda h: h["qstart"])
+        used = [False] * len(group)
+        for i, a in enumerate(group):
+            if used[i]:
+                continue
+            merged = dict(a)
+            used[i] = True
+            for j in range(i + 1, len(group)):
+                b = group[j]
+                if used[j]:
+                    continue
+                shift = abs(b.get("diag", 0) - merged.get("diag", 0))
+                if not 0 < shift <= MAX_INDEL:
+                    continue
+                # Reference intervals must be largely disjoint: two pieces of one part,
+                # not the same stretch found twice on neighbouring diagonals.
+                lo = max(merged["rstart"], b["rstart"])
+                hi = min(merged["rend"], b["rend"])
+                overlap = max(0, hi - lo)
+                shorter = min(merged["rend"] - merged["rstart"],
+                              b["rend"] - b["rstart"])
+                if shorter <= 0 or overlap > 0.5 * shorter:
+                    continue
+                # And they must be adjacent in the query, allowing for the shift itself.
+                gap = max(merged["qstart"], b["qstart"]) - min(merged["qend"], b["qend"])
+                if gap > MAX_INDEL + 1:
+                    continue
+
+                rs = min(merged["rstart"], b["rstart"])
+                re_ = max(merged["rend"], b["rend"])
+                matches = merged["matches"] + b["matches"]
+                aligned = merged["aligned"] + b["aligned"]
+                merged.update(
+                    qstart=min(merged["qstart"], b["qstart"]),
+                    qend=max(merged["qend"], b["qend"]),
+                    rstart=rs, rend=re_,
+                    matches=matches, aligned=aligned,
+                    # Identity over the reference accounted for, with the shifted bases
+                    # counted as the mismatches they are.
+                    pident=round(100.0 * matches / float(re_ - rs), 1),
+                    core_pident=round(100.0 * matches / aligned, 1),
+                    cov=(re_ - rs) / float(reflen),
+                    length=aligned, bit=2.0 * matches,
+                    indel=merged.get("indel", 0) + shift)
+                used[j] = True
+            out.append(merged)
+    return out
 
 
 def identify_hits(query, refs, k=K, circular=False):
@@ -283,6 +383,16 @@ def identify_hits(query, refs, k=K, circular=False):
     # One reference can seed on both strands at the same place (a palindrome, or a
     # self-complementary terminator). Keep the better reading rather than reporting
     # the same block twice.
+    # Join pieces of one gapped alignment BEFORE anything judges coverage. Doing it after
+    # the dedup, or after _tile's floor, is too late: the pieces are already gone.
+    reflens = {}
+    for r in refs:
+        reflens[r["id"]] = len(kg_refs.normalise(r.get("seq") or ""))
+    merged = []
+    for (sid, _strand), grp in _group_by_sid_strand(hits):
+        merged.extend(_merge_indels(grp, reflens.get(sid) or 1))
+    hits = merged
+
     keep = {}
     for h in hits:
         key = (h["sid"], h["qstart"] // 10, h["qend"] // 10)

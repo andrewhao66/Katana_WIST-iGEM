@@ -45,6 +45,7 @@ class Block:
         self.core_pident = None       # % identity over the best-supported segment only
         self.ref_in_query = None      # did the whole reference fit inside this sequence?
         self.wraps_origin = False     # on a plasmid, does this part cross the origin?
+        self.indel = 0                # bases inserted or deleted inside the part
         self.coverage = None          # matched_len / reference_len
         self.ref_len = None
         self.matched_len = None
@@ -318,6 +319,10 @@ def identify(record, workdir, status=None, deep=False):
         # can describe a shortfall instead of guessing at its cause.
         b.core_pident = h.get("core_pident")
         b.wraps_origin = bool(h.get("wraps_origin"))
+        # How many bases the alignment had to shift to fit. Non-zero means an
+        # insertion or a deletion inside the part, which is a frameshift risk in a
+        # CDS and is not the same thing as the part being short.
+        b.indel = h.get("indel") or 0
         b.ref_in_query = h.get("ref_in_query")
         b.alternatives = h.get("alternatives") or []
         b.ref_len = len(kg_refs.normalise(r["seq"])); b.matched_len = h["length"]

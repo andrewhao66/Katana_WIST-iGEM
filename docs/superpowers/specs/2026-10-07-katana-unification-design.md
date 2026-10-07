@@ -614,6 +614,64 @@ being accepted. The six that would have mattered most to somebody using this:
 Each is fixed, each fix is pinned by a test that was watched to fail first, and each was
 confirmed by mutation — reverting the fix turns the test red.
 
+### 13.3b The second round: what the reviewers found that I did not
+
+The three independent reviewers delivered hours after I had recorded their pass as
+missing. They found six more defects, two of them Critical, and one of them refuted this
+document's central claim.
+
+1. **A single indel destroyed identification.** §4 said deleting BLAST+ lost nothing. For
+   insertions and deletions that was **false**. `_extend` scores one diagonal, and an
+   indel shifts it, so the true alignment arrived as two pieces each covering about half
+   the reference — and the 0.6 coverage floor dropped both. Measured end to end on real
+   AmCyan bases labelled `sfGFP`: intact, the mislabel FLAG fired at coverage 1.000; with
+   **one base deleted**, the identification came back empty and the mislabel finding count
+   went to **zero**. A block with no identity is never compared against its claim, so the
+   one check this software exists to perform was skipped — by the commonest cloning
+   artifact there is.
+
+   It got through because the 58 identification assertions covered truncation,
+   substitutions, reverse strand, lowercase, N, IUPAC, repeats and low-complexity traps,
+   and **not one insertion or deletion**. The suite written to prove the removal lost
+   nothing omitted the only thing it lost.
+
+   Pieces of one gapped alignment are now joined before any coverage floor, and the shift
+   is reported as its own FLAG naming the frameshift risk. §4's claim is corrected here
+   rather than left standing.
+
+2. **The off-target gate never ran for anybody using the bundle.** The 4.7 MB genome ships
+   at `kagami/genomes/`, put there for the web front end; `katana_drylab` looked only in
+   `parts-library/ref_genomes/`, which is empty in every bundle. Every build of every
+   E. coli construct printed `OFF-TARGET SKIPPED — no genome here` and offered a network
+   download of a file already on the student's disk. The **browser** could scan a host the
+   command line could not. One extra search path; the gate now reports real results.
+
+3. **A crashed stage reported PASS.** Distinct from the refusal defect above: a genuine
+   exception in the gate recorded no stage and no finding, so `not_run()` came back empty
+   and the window said "Stages 1-4b passed" about a stage that had raised. My own test let
+   it through because the assertion was satisfied by a log line.
+
+4. **A labelled block that could not be identified vanished.** No FLAG, no SKIP, nothing —
+   and the nested-claim check added earlier in this branch handles the identical case with
+   a SKIP, ten lines further down. The asymmetry was mine. The demo immediately surfaced
+   one such label that had never been checked.
+
+5. **`kg_rebuild` resolved a discrepancy and then wrote.** A manifest `core.lock` refuses
+   became "the library is empty", and every part was re-fetched and re-sealed into it.
+
+6. **The first five minutes.** The prompt told people to drag a file onto the window and
+   could not read what dragging produces — macOS escapes spaces with backslashes, not
+   quotes. The menu's "Build a construct → order-ready sequence" silently added
+   `--dry-run` and delivered no files. The bundled 843 bp demo shipped all along and was
+   mentioned nowhere.
+
+**A behaviour change worth stating plainly:** with the off-target gate alive, the shipped
+example build now exits **5 (REVIEW)** rather than 0, because `pSense-Nit` genuinely
+carries 80 bp matches at 100% identity to the host genome away from any expected locus. It
+still seals and writes all three order files — REVIEW means glance before ordering, not
+refused. Seven assertions across five suites had to be updated, and every one of them had
+been pinning the behaviour of a dead gate as expected.
+
 ### 13.4 Deliberately not fixed
 
 - **The dedup key** buckets coordinates by ten and ignores strand. The strand-agnostic
@@ -622,6 +680,16 @@ confirmed by mutation — reverting the fix turns the test red.
   almost entirely and are far more likely one site found on two diagonals.
 - **`MAX_LOCI` is still 4.** Any cap drops the next one, so the cap is reported instead of
   raised.
+- **The 26–42 bp reference band.** `MIN_HIT = 25` means the minimum detectable coverage
+  for a reference in that band is 0.60 to 0.96 depending on its length, far above the
+  advertised 0.6 floor — below that the part is not reported as truncated, it is not
+  reported at all. 799 of the 18,255 shipped references are in that band: RBSs, operators,
+  scars, short promoters, the B0032/B0034 class. Measured separately, the stride prefilter
+  misses a 40 bp reference carrying three substitutions in **15 of 200** random trials, and
+  four substitutions in **48 of 200**. Both are real and both are **accepted, not fixed**:
+  each needs a threshold chosen against biology this session cannot verify, and guessing
+  one is worse than recording the limit with its numbers. The `identity-unchecked` SKIP
+  added in this round is what surfaces these cases now, instead of silence.
 - **The `forward/` and `reverse/` directory move** sketched in §6. The imports were
   unified without it; moving files would have made every commit in this branch harder to
   review for no behavioural gain.

@@ -59,7 +59,12 @@ print("engine integrity gates")
 # ---- a sandbox builds cleanly, or nothing below measures anything ----
 _d = sandbox()
 _p = build(_d, "pSense-Nit.spec.yaml")
-check("the sandboxed engine builds a Spec at all", _p.returncode == 0,
+# 0 or 5. The sandbox copies the engine, not the 4.7 MB genome, so the off-target gate
+# reports itself as not-run and the verdict is REVIEW -- which is the correct answer for a
+# sandbox and exactly what the SKIP tier is for. This suite tests PIN REFUSALS; the gate's
+# own behaviour is tests/test_drylab_gate.py's job. The assertion read == 0 before, which
+# passed only because the gate was dead everywhere.
+check("the sandboxed engine builds a Spec at all", _p.returncode in (0, 5),
       _p.stdout + _p.stderr)
 
 # ---- CODE-REPORT finding A, through the engine ----
@@ -99,7 +104,7 @@ with open(_spec, "w", encoding="utf-8") as _f:
 
 _p = build(_d, "pAP-Logic.spec.yaml")
 _out = _p.stdout + _p.stderr
-check("a Spec pinned to an older sealed version BUILDS", _p.returncode == 0,
+check("a Spec pinned to an older sealed version BUILDS", _p.returncode in (0, 5),
       _out[-500:])
 check("and it loads v2, not v3",
       "cc3f6c1ec6ef" in _out and "5093ea792057" not in _out, _out[-500:])

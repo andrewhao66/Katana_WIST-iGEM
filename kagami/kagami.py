@@ -209,7 +209,14 @@ def print_text(record, blocks, findings, v):
     nflag = kg_audit.count(findings, "FLAG")
     nnote = kg_audit.count(findings, "NOTE")
     print("\n" + "-" * 72)
-    print(f"VERDICT: {v}   ({nfail} fail, {nflag} to resolve, {nnote} note)")
+    # The not-run count belongs in this line. It is the one line that LOOKS like a
+    # complete accounting, and leaving the skips out of it meant the only place a reader
+    # could see "a check did not run" was a row further up that scrolls past.
+    nskip = sum(1 for f in findings if f.status == "SKIP")
+    _tally = f"{nfail} fail, {nflag} to resolve, {nnote} note"
+    if nskip:
+        _tally += f", {nskip} NOT CHECKED"
+    print(f"VERDICT: {v}   ({_tally})")
     if kind == "REVIEW":
         print("  Nothing failed outright, but there are items to resolve before ordering/building.")
     elif kind == "FAIL":
@@ -470,9 +477,17 @@ def run_rebuild(args):
         os.path.dirname(os.path.abspath(args.input)),
         os.path.splitext(os.path.basename(args.input))[0] + "_katana", "parts-library")
     print(f"\nRebuilding {record.name}: {len(blocks)} block(s) identified.\n")
-    res = kg_rebuild.rebuild(record, blocks, library=lib, engine=engine,
-                             vendor=args.vendor or "Twist", outdir=args.outdir,
-                             progress=lambda m: print("  " + m))
+    try:
+        res = kg_rebuild.rebuild(record, blocks, library=lib, engine=engine,
+                                 vendor=args.vendor or "Twist", outdir=args.outdir,
+                                 progress=lambda m: print("  " + m))
+    except kg_rebuild.UnreadableLibrary as exc:
+        # The library refused to be read, so nothing was fetched and nothing was
+        # sealed. Rule 4: report the discrepancy, do not resolve it -- and the old
+        # code resolved "unreadable" into "empty" and then WROTE to it.
+        print("Katana stopped before writing anything.\n", file=sys.stderr)
+        print("  " + str(exc), file=sys.stderr)
+        return 2
     print()
     st = res["status"]
     if st == "rebuilt":

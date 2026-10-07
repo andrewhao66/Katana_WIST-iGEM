@@ -47,7 +47,19 @@ check("a NOTE does not hold back PASS", _r.verdict == "PASS", _r.verdict)
 check("but it is counted", _r.count(R.NOTE) == 1, str(_r.count(R.NOTE)))
 
 _r.add(R.StageResult("drylab", True, [R.Finding("cai", R.SKIP, "not run")]))
-check("a SKIP does not hold back PASS either", _r.verdict == "PASS", _r.verdict)
+# A SKIP DOES hold back PASS on a BUILD, and this assertion used to say the opposite.
+# The two readings of the same result disagreed: verdict / exit_code / --json said PASS
+# while kg_verdict.from_result escalated the same SKIP to REVIEW, so a CI step gated on
+# the exit code was told PASS on a build where a gate never ran. One of them had to be
+# wrong and the project's own rule says which: "we did not check" must never read as
+# "checked and fine".
+#
+# This is a different judgement from kg_audit.verdict_kind, which keeps SKIP at PASS, and
+# that difference is deliberate -- an audit's SKIP is the default (no host given) and
+# escalating it would fire on nearly every run. A build's SKIP means a gate the engine
+# was supposed to run did not. Both are documented where they live.
+check("a SKIP DOES hold back PASS on a build -- a gate that did not run is not a pass",
+      _r.verdict == "REVIEW", _r.verdict)
 
 _r.add(R.StageResult("validate", True, [R.Finding("hp", R.FLAG, "homopolymer 11")]))
 check("a FLAG makes the verdict REVIEW", _r.verdict == "REVIEW", _r.verdict)
@@ -108,8 +120,15 @@ check("it records the stages it ran in order",
       [s.name for s in _res.stages][:4] == ["library", "source", "assemble", "validate"],
       str([s.name for s in _res.stages]))
 check("a clean dry run does not read FAIL", _res.verdict != "FAIL", _res.verdict)
-check("the off-target gate with no genome is recorded as NOT RUN, not as passed",
-      "offtarget" in _res.not_run(), str(_res.not_run()))
+# This used to assert that the off-target gate was NOT RUN, and it passed -- because the
+# 4.7 MB genome ships at kagami/genomes/ and the gate looked only in
+# parts-library/ref_genomes/, which is empty in every bundle. The engine's most
+# substantive dry-lab check was dead for everybody who unzipped the download, and a test
+# was pinning that as expected behaviour.
+check("the off-target gate RAN -- nothing is recorded as not-run",
+      not _res.not_run(), str(_res.not_run()))
+check("and the verdict reflects what it found rather than a missing gate",
+      _res.verdict in ("PASS", "REVIEW"), _res.verdict)
 check("build() prints nothing -- it captures its own log",
       len(_res.log) > 100, str(len(_res.log)))
 check("and the log still contains the line other tools grep",

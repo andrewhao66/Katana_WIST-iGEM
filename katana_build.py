@@ -929,7 +929,19 @@ def _run_pipeline_inner(args, res):
         for _m in _di:
             _df.append(_result.Finding("drylab", _result.NOTE, _m))
         res.add(_result.StageResult("drylab", True, _df))
-        print("  Stage-4b PASS" + (f" — {len(_dw)} warning(s) to review" if _dw else " — clean"))
+        # Not "PASS" when nothing in 4b ran. On the shipped repo this printed
+        # "Stage-4b PASS — 2 warning(s) to review" on a build where BOTH sub-gates had
+        # been skipped, and "PASS" is the word a reader scanning output takes away.
+        _nskip = sum(1 for _f in _df if _f.status == _result.SKIP)
+        if _nskip and _nskip == len([_f for _f in _df if _f.status in
+                                     (_result.SKIP, _result.FLAG)]):
+            print(f"  Stage-4b DID NOT RUN — {_nskip} check(s) skipped, see above")
+        elif _nskip:
+            print(f"  Stage-4b PARTIAL — {_nskip} check(s) skipped, "
+                  f"{len(_dw) - _nskip} warning(s) to review")
+        else:
+            print("  Stage-4b PASS" + (f" — {len(_dw)} warning(s) to review"
+                                       if _dw else " — clean"))
         _skipped = [w for w in _dw if "OFF-TARGET SKIPPED" in w]
         _hits = [w for w in _dw if "off-target" in w and w not in _skipped]
         if _hits:
@@ -948,7 +960,27 @@ def _run_pipeline_inner(args, res):
         # Exception would not silently reopen the hole.
         raise
     except Exception as _e:
+        # A stage that CRASHED must be recorded as not-run. This handler used to print a
+        # line and add nothing: no stage, no finding, not_run() empty -- so the build came
+        # back verdict PASS, exit 0, and the window said "Stages 1-4b passed" about a
+        # stage that had raised. The SKIP tier was bypassed in the exact case it exists
+        # for.
+        #
+        # It happened because the SKIP decision lived twice: once by grepping
+        # `"NOT enforced" in _m` over the gate's own warnings, and once here, where that
+        # same phrase was printed into a channel the grep never reads. One decision now,
+        # recorded as data.
         print(f"  WARN Stage-4b: dry-lab gate unavailable ({_e!r}) — NOT enforced this run")
+        res.add(_result.StageResult(
+            "drylab", True,
+            [_result.Finding(
+                "drylab", _result.SKIP,
+                "The dry-lab gate did not run",
+                detail=f"It raised {_e!r}. Off-target and codon-quality were NOT "
+                       f"checked on this build. This is a not-run check, not a finding "
+                       f"about your sequence -- and not a pass either.",
+                fix="Report this: the gate itself is broken, which is a bug in Katana "
+                    "rather than anything about your design.")]))
     print()
 
     if args.dry_run:

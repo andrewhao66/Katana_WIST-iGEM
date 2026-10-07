@@ -53,12 +53,17 @@ check("there is tracked Python to check", len(_files) > 10, str(len(_files)))
 # pattern that would also exempt a real copy.
 _SHIMS = {"katana_lock.py"}
 _engine = [f for f in _files
-           if not f.startswith("kagami/") and f not in _SHIMS]
+           if f not in _SHIMS]
 _defs = []
 for f in _engine:
     with open(os.path.join(ROOT, f), encoding="utf-8") as fh:
         src = fh.read()
-    for fn in ("def seq_sha256", "def row_sha256", "def lock_root", "def row_manifest"):
+    # Exact definitions, with the opening paren. A prefix match flagged
+    # kagami/build_refs.py's `seq_sha256_of`, which is a DIFFERENT name that
+    # delegates to core and only falls back when core is absent -- a tool for
+    # regenerating the reference set, not the engine.
+    for fn in ("def seq_sha256(", "def row_sha256(", "def lock_root(",
+               "def row_manifest("):
         if fn in src:
             _defs.append("%s: %s" % (f, fn))
 check("only core/ defines the hashing conventions in the engine (%s)"
@@ -162,6 +167,39 @@ _phantom = sorted(n for n in _run
                   and not os.path.isfile(os.path.join(ROOT, n)))
 check("and CI names no suite that does not exist (%s)"
       % (", ".join(_phantom) or "none"), not _phantom)
+
+# ---- and every fallback must AGREE with core, measured rather than greped ----
+# Kagami ships on its own, so it keeps standalone fallbacks for the hashing convention.
+# A grep cannot tell a faithful fallback from one that drifted: kg_refs's read
+# `hashlib.sha256(s.encode())` with no .upper() and no codec, and matched the engine only
+# because normalise() happens to uppercase first -- one normalise() change away from
+# disagreeing in silence, on the project's central convention.
+sys.path.insert(0, ROOT)
+sys.path.insert(0, os.path.join(ROOT, "kagami"))
+from core import hashing as _core_hashing
+
+_SAMPLES = ["ATGCATGC", "atgcatgc", "ATGCatgcATGC", "", "ACGTN", "aCgT" * 20]
+
+import re as _re
+
+_src = open(os.path.join(ROOT, "kagami", "kg_refs.py"), encoding="utf-8").read()
+_m = _re.search(r"def seq_hash\(s\):\n(?:\s*#[^\n]*\n)*\s*return ([^\n]+)", _src)
+check("kg_refs's standalone fallback is findable", _m is not None)
+if _m:
+    import hashlib
+
+    _fallback = eval("lambda s: " + _m.group(1), {"hashlib": hashlib})
+    _bad = [s for s in _SAMPLES if _fallback(s) != _core_hashing.seq_sha256(s)]
+    check("and it produces exactly core's hash for every sample (%s)"
+          % (", ".join(repr(s) for s in _bad) or "all agree"), not _bad)
+
+import build_refs as _br
+
+_bad2 = [s for s in _SAMPLES
+         if _br.seq_sha256_of(s) != _core_hashing.seq_sha256(
+             "".join(c for c in s if c.isalpha()))]
+check("build_refs's hash agrees with core too (%s)"
+      % (", ".join(repr(s) for s in _bad2) or "all agree"), not _bad2)
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

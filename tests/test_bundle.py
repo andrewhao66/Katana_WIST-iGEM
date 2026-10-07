@@ -126,8 +126,16 @@ check("and reports the library intact and the checker working",
       "8/8 checks passed" in _p.stdout, _p.stdout[-250:])
 
 _p = run(["./katana", "build", "specs/pSense-Nit.spec.yaml", "--dry-run"])
-check("./katana build runs with nothing installed", _p.returncode == 0,
+# Exit 5 is REVIEW, not a failure, and it is the honest answer for this spec: the
+# off-target gate now finds the genome the bundle ships, and reports 80 bp matches at
+# 100% identity to the host genome away from any expected locus. It used to exit 0
+# because that gate never ran at all.
+check("./katana build runs with nothing installed", _p.returncode in (0, 5),
       (_p.stdout + _p.stderr)[-300:])
+check("and the off-target gate RAN, rather than skipping for a missing genome",
+      "OFF-TARGET SKIPPED" not in (_p.stdout + _p.stderr),
+      [l.strip() for l in (_p.stdout + _p.stderr).splitlines()
+       if "OFF-TARGET" in l][:2])
 check("and reproduces the sealed construct hash",
       "796e94a0ea2452edd2ce59ca30b8f28fea232b37ab2a036714239069fd1196f5" in _p.stdout,
       _p.stdout[-250:])

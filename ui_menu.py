@@ -16,6 +16,7 @@ also what makes the no-TTY case -- a double-click, a pipe, a CI step -- somethin
 tests pin rather than something a user discovers.
 """
 import os
+import re
 import sys
 
 
@@ -50,11 +51,30 @@ def _print(out, text=""):
     out.write(text + "\n")
 
 
+# Everything else the front door dispatches. Deliberately NOT in the numbered menu: six
+# entries is a menu somebody reads, twelve is a wall, and these are the ones you go
+# looking for rather than stumble into. But --help listed only the six, so init, find,
+# design, genome, bundle and deploy were invisible -- four of them documented in the
+# README and all of them working.
+MORE_COMMANDS = [
+    ("init", "start a parts library of your own"),
+    ("find", "look up a part, in your library or on NCBI"),
+    ("design", "check a Design Spec without building it"),
+    ("genome", "fetch a host genome for the off-target check"),
+    ("bundle", "write the zip you hand to someone else"),
+    ("deploy", "stage the browser version as a static site"),
+]
+
+
 def _usage(out):
     _print(out, "Katana - build DNA constructs you can check, and check ones you did not.")
     _print(out)
     _print(out, "  katana                      ask me what I want to do")
     for name, _title, hint in COMMANDS:
+        _print(out, "  katana %-21s %s" % (name, hint))
+    _print(out)
+    _print(out, "Less often needed:")
+    for name, hint in MORE_COMMANDS:
         _print(out, "  katana %-21s %s" % (name, hint))
     _print(out)
     _print(out, "Every underlying tool's own flags still work, for example")
@@ -140,30 +160,105 @@ def _dispatch(name, argv, stdout):
     return 2
 
 
+def _clean_path(line):
+    """Turn whatever the terminal gave us into a path we can actually open.
+
+    macOS Terminal inserts a DRAGGED path with its spaces backslash-escaped, not quoted --
+    and the prompt above tells people to drag. So a file in a folder called "My Drive",
+    "Google Drive" or "iGEM 2026" produced `input not found` on a path that was right,
+    which is the most likely first-contact failure in the whole flow and was caused by the
+    instruction the prompt itself gives.
+
+    Also handles the file:// URL some applications drop, and the quotes other terminals
+    add.
+    """
+    s = (line or "").strip()
+    if not s:
+        return ""
+    if s[:1] in "\"'" and s[-1:] == s[:1]:
+        s = s[1:-1]
+    else:
+        s = s.strip('"').strip("'")
+    if s.lower().startswith("file://"):
+        from urllib.parse import unquote
+        s = unquote(s[7:])
+    # A backslash before anything means "this character is literal", which is what the
+    # shell would have done with it.
+    s = re.sub(r"\\(.)", r"\1", s)
+    return s.strip()
+
+
 def _ask_and_run(name, stdin, stdout):
     """Ask for what the chosen command needs, one question at a time."""
     if name in ("verify", "gui", "web"):
         return _dispatch(name, [], stdout)
 
+    # No --dry-run on build. The entry says "Design Spec -> order-ready sequence" and it
+    # used to silently add --dry-run, so the run ended "Dry run - no output files", with
+    # no sequence, no file, and no line saying how to get one. The menu promised the
+    # opposite of what it delivered, to the one person least able to work out why. The
+    # engine refuses to seal anything that fails a gate, so a real build is the safe
+    # thing as well as the honest one.
     prompts = {
         "check": ("Which file? (drag it onto this window, then press Return)", []),
-        "build": ("Which Design Spec? (drag it on, then press Return)", ["--dry-run"]),
+        "build": ("Which Design Spec? (drag it on, then press Return)", []),
         "add": ("Which iGEM Registry part? e.g. BBa_B0015", []),
     }
     question, extra = prompts[name]
-    stdout.write(question + "\n> ")
-    try:
-        line = stdin.readline()
-    except EOFError:
-        line = ""
-    answer = (line or "").strip().strip('"').strip("'")
-    if not answer:
+
+    demo = os.path.join(HERE, "kagami", "examples", "demo.gb")
+    offer_demo = name == "check" and os.path.isfile(demo)
+
+    for attempt in (1, 2):
+        stdout.write(question + "\n")
+        if offer_demo:
+            # Somebody who has just unzipped this has no sequence of their own, and the
+            # very first menu entry asks for one. The bundle ships an 843 bp example with
+            # a planted B0032 mislabel -- the README's own worked example -- and nothing
+            # mentioned it, so nobody knew it was there.
+            stdout.write("(or press Return to try the bundled example, "
+                         "kagami/examples/demo.gb)\n")
+        stdout.write("> ")
+        try:
+            line = stdin.readline()
+        except EOFError:
+            line = ""
+        answer = _clean_path(line)
+
+        if not answer:
+            if offer_demo:
+                _print(stdout)
+                _print(stdout, "Using the bundled example: kagami/examples/demo.gb")
+                _print(stdout)
+                return _dispatch(name, [demo] + extra, stdout)
+            _print(stdout)
+            _print(stdout, "Nothing given, so nothing was done.")
+            return 0
+
+        if name == "add":
+            return _dispatch("add", ["--registry", answer], stdout)
+
+        if os.path.exists(answer):
+            return _dispatch(name, [answer] + extra, stdout)
+
+        # A wrong path used to print one line on stderr and exit, so the person was back
+        # at the shell and had to re-run ./katana and re-navigate the menu for every
+        # attempt. Ask again, once, and say what was actually looked for.
         _print(stdout)
-        _print(stdout, "Nothing given, so nothing was done.")
-        return 0
-    if name == "add":
-        return _dispatch("add", ["--registry", answer], stdout)
-    return _dispatch(name, [answer] + extra, stdout)
+        _print(stdout, "  There is no file at:")
+        _print(stdout, "    " + answer)
+        if attempt == 1:
+            _print(stdout)
+            _print(stdout, "  Let us try again. Drag the file onto this window rather "
+                           "than typing the path,")
+            _print(stdout, "  then press Return.")
+            _print(stdout)
+        else:
+            _print(stdout)
+            _print(stdout, "  Nothing was done. Run ./katana again when you have the "
+                           "file to hand.")
+            return 2
+    return 2
 
 
 def _menu(stdin, stdout):

@@ -59,18 +59,48 @@ def from_result(result):
             detail = "%s (stage: %s)" % (detail, stage)
         return "FAIL", "BLOCKED", detail
 
-    if d.get("dry_run"):
+    # The kind comes from the verdict the engine computed, and ONLY from it. This used to
+    # decide for itself, by looking at not_run alone -- so a build with real FLAG findings
+    # (off-target matches away from any expected locus) was shown as "CHECKED / Stages
+    # 1-4b passed", while BuildResult.verdict said REVIEW. The same result read two ways,
+    # in both directions depending on what the finding was.
+    #
+    # One decision now. not_run only words the reason, because "a gate did not run" and
+    # "a gate ran and found something" need different sentences even though both are
+    # REVIEW.
+    def _why():
         if not_run:
-            return ("REVIEW", "CHECKED - a gate did not run",
-                    "Not enforced this run: " + ", ".join(not_run))
+            return "a gate did not run", "Not enforced this run: " + ", ".join(not_run)
+        flags = [f.get("summary", "") for f in (d.get("findings") or [])
+                 if f.get("status") == "FLAG"]
+        n = len(flags)
+        return ("%d to resolve" % n if n else "to resolve",
+                flags[0] if n == 1 else
+                "; ".join(flags[:2]) + (" (+%d more)" % (n - 2) if n > 2 else ""))
+
+    # A FLOOR, not a second decision. The kind comes from `verdict` -- but this function
+    # also accepts a plain dict, from an older --json file or another tool, and such a
+    # dict can be self-contradictory: verdict PASS with a non-empty not_run. Trusting
+    # `verdict` alone there would report a pass for a build where a gate did not run,
+    # which is the failure this whole tier exists to prevent, re-entering through the one
+    # door that takes input from outside. Two sources disagreeing get the more cautious
+    # reading AND the reason, rather than the optimistic one in silence.
+    if verdict == "PASS" and not_run:
+        verdict = "REVIEW"
+
+    if d.get("dry_run"):
+        if verdict == "REVIEW":
+            tag, detail = _why()
+            return "REVIEW", "CHECKED - " + tag, detail
         return "PASS", "CHECKED", "Stages 1-4b passed. Dry run: nothing was written."
 
     if not d.get("seq_sha256"):
         return ("REVIEW", "FINISHED - no seal",
                 "The engine exited cleanly but recorded no sealed hash.")
 
-    if not_run:
-        return ("REVIEW", "SEALED - a gate did not run",
-                "Not enforced this run: " + ", ".join(not_run))
+    if verdict == "REVIEW":
+        tag, detail = _why()
+        return ("REVIEW", "SEALED - " + tag,
+                detail + " | seq_sha256 " + d["seq_sha256"])
 
     return "PASS", "SEALED", "seq_sha256 " + d["seq_sha256"]

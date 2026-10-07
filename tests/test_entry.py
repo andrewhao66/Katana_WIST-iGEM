@@ -77,8 +77,14 @@ check("an out-of-range choice says so rather than crashing",
 check("and exits non-zero", _rc != 0, str(_rc))
 
 _rc, _out = run([], stdin_text="1\n")
-check("choosing 'check' then giving nothing does nothing",
-      "nothing given" in _out.lower(), _out[-200:])
+# Giving nothing now RUNS THE BUNDLED EXAMPLE, which is the point: somebody who has just
+# unzipped this has no sequence of their own, and the first menu entry asks for one. The
+# 843 bp demo with its planted B0032 mislabel ships in the bundle and nothing mentioned
+# it. This assertion used to pin "does nothing", which was true and useless.
+check("choosing 'check' then pressing Return runs the bundled example",
+      "demo" in _out.lower(), _out[-300:])
+check("and it shows the point on the first try -- the planted mislabel",
+      "identity-mislabel" in _out or "B0032" in _out, _out[-400:])
 
 _rc, _out = run([], stdin_text="1\n%s\n"
                 % os.path.join(ROOT, "kagami", "examples", "demo.gb"))

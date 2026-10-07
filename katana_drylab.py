@@ -87,7 +87,28 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
                     break
     if gfile is None:
         gfile = HOST_GENOME.get(host)
-    genome = (ref_parts.parent / "ref_genomes" / gfile) if (ref_parts and gfile) else None
+    # Where to look, in order. parts-library/ref_genomes/ is where get_genome.py writes,
+    # and kagami/genomes/ is where the bundle already ships one -- it was put there for
+    # the web front end, and this gate looked only in the first directory, which is empty
+    # in every bundle. So the engine's most substantive dry-lab check was dead by default
+    # for everybody who unzipped the download, and the remedy it offered was a network
+    # fetch of a file already on their disk. The browser could scan a host the command
+    # line could not.
+    #
+    # A second search path rather than a second copy: 4.7 MB duplicated in the bundle is
+    # 4.7 MB that can drift, and a genome is primary-source data.
+    _dirs = []
+    if ref_parts:
+        _dirs.append(ref_parts.parent / "ref_genomes")
+    _dirs.append(here / "kagami" / "genomes")
+    _dirs.append(here / "genomes")
+    genome = None
+    if gfile:
+        for _d in _dirs:
+            _cand = _d / gfile
+            if _cand.exists():
+                genome = _cand
+                break
     if not genome or not genome.exists():
         _present = []
         if ref_parts:
@@ -95,6 +116,11 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
             if _reg.exists():
                 _present = [l.split("\t")[0] for l in
                             _reg.read_text(encoding="utf-8").splitlines()[1:] if l.strip()]
+        # Name the .fna files actually on disk too. Saying "no genome here" while one sits
+        # in the next directory is how somebody runs the fetcher twice and gives up.
+        for _d in _dirs:
+            if _d.is_dir():
+                _present += [f.name for f in sorted(_d.glob("*.fna"))]
         if _present:
             # A reader who has just downloaded a genome reads "no genome" as "no genomes at
             # all", runs the fetcher again, and gets the same result. Name what IS here.

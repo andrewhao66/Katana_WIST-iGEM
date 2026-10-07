@@ -456,6 +456,12 @@ class App:
             res = kg_rebuild.rebuild(record, blocks, library=lib, engine=engine,
                                      progress=lambda m: self.q.put(("rbstep", m)))
             self.q.put(("rbdone", res))
+        except kg_rebuild.UnreadableLibrary as exc:
+            # Its own status, not "seal-failed". Nothing was sealed and nothing was
+            # attempted: the library's manifest could not be read, which is a different
+            # problem with a different fix, and labelling it a seal failure sent people
+            # looking at the wrong thing.
+            self.q.put(("rbdone", {"status": "library-unreadable", "detail": str(exc)}))
         except Exception as exc:
             self.q.put(("rbdone", {"status": "seal-failed",
                                    "detail": f"{type(exc).__name__}: {exc}"}))

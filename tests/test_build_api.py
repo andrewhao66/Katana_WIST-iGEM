@@ -71,13 +71,20 @@ check("and it says the library is the problem",
       any("librar" in s.lower() for s in _blocking), "; ".join(_blocking)[:200])
 
 # The shipped library must still build, through the same argument.
+# REVIEW, not PASS, and exit 5, not 0. The off-target gate now finds the genome the
+# bundle ships, and pSense-Nit genuinely carries 80 bp matches at 100% identity to the
+# host genome away from any expected locus -- recombination substrates worth a human
+# glance before ordering, which is what REVIEW means. These assertions read PASS/0
+# before, and passed only because that gate never ran at all.
 res_ok = katana_build.build(SPEC, library=os.path.join(ROOT, "parts-library",
                                                        "ref_parts"),
                             dry_run=True)
-check("build() with the real library still passes", res_ok.verdict == "PASS",
-      "%s / exit %s" % (res_ok.verdict, res_ok.exit_code))
-check("and passing no library at all still passes",
-      katana_build.build(SPEC, dry_run=True).verdict == "PASS")
+check("build() with the real library builds, with findings to review",
+      res_ok.verdict == "REVIEW" and not res_ok.not_run(),
+      "%s / exit %s / not_run %s"
+      % (res_ok.verdict, res_ok.exit_code, res_ok.not_run()))
+check("and passing no library at all does the same",
+      katana_build.build(SPEC, dry_run=True).verdict == "REVIEW")
 
 # A library directory that exists but holds no manifest is a different error, and must
 # also not pass.
@@ -105,16 +112,19 @@ check("and the two agree", p.returncode == report.get("exit_code"),
 
 p = run([SPEC, "--dry-run", "--json"])
 ok_report = json.loads(p.stdout)
-check("--json on a clean dry run reports PASS", ok_report.get("verdict") == "PASS",
-      ok_report.get("verdict"))
-check("and exits 0", p.returncode == 0, p.returncode)
+check("--json on a clean dry run reports REVIEW, for findings it measured",
+      ok_report.get("verdict") == "REVIEW", ok_report.get("verdict"))
+check("and exits 5, which a script can tell from a block", p.returncode == 5,
+      p.returncode)
+check("and nothing is recorded as not-run", not ok_report.get("not_run"),
+      str(ok_report.get("not_run")))
 
 # The plain text path already exited correctly; it must keep doing so.
 p = run([SPEC, "--dry-run", "--expect-root", WRONG_ROOT])
 check("the plain path still exits non-zero on a root mismatch", p.returncode != 0,
       p.returncode)
 p = run([SPEC, "--dry-run"])
-check("and 0 on a clean dry run", p.returncode == 0, p.returncode)
+check("and 5 on a clean dry run with findings", p.returncode == 5, p.returncode)
 
 # ---- 3. a REAL build -- not a dry run -- on the oldest promised Python ----
 # The README promises 3.9. --dry-run never reaches the file writes, which is exactly why
@@ -135,8 +145,8 @@ def old_python():
 _old, _ver = old_python()
 _outdir = tempfile.mkdtemp(prefix="realbuild_")
 p = run([SPEC, "--outdir", _outdir])
-check("a real build (not a dry run) succeeds on this interpreter", p.returncode == 0,
-      (p.stdout + p.stderr)[-300:])
+check("a real build (not a dry run) succeeds on this interpreter",
+      p.returncode in (0, 5), (p.stdout + p.stderr)[-300:])
 _files = os.listdir(_outdir) if os.path.isdir(_outdir) else []
 check("and it wrote its output files (%d)" % len(_files), len(_files) >= 2,
       ", ".join(_files))
@@ -148,7 +158,7 @@ else:
     print("  ---- using %s (Python %s) for the old-interpreter build" % (_old, _ver))
     _outdir = tempfile.mkdtemp(prefix="realbuild39_")
     p = run([SPEC, "--outdir", _outdir], py=_old)
-    check("a real build succeeds on Python %s" % _ver, p.returncode == 0,
+    check("a real build succeeds on Python %s" % _ver, p.returncode in (0, 5),
           (p.stdout + p.stderr)[-300:])
     check("and it is not a TypeError from a 3.10-only keyword",
           "TypeError" not in (p.stdout + p.stderr),
@@ -256,8 +266,10 @@ finally:
     katana_drylab.run_drylab_gate = _real_gate
 
 _r = katana_build.build(SPEC, dry_run=True)
-check("and with the real gate the build still passes", _r.verdict == "PASS",
-      "%s / exit %s" % (_r.verdict, _r.exit_code))
+check("and with the real gate the build runs and reviews, rather than refusing",
+      _r.verdict == "REVIEW" and _r.blocked_stage() is None,
+      "%s / exit %s / blocked %s"
+      % (_r.verdict, _r.exit_code, _r.blocked_stage()))
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

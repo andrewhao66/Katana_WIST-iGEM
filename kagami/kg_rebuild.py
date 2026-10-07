@@ -79,6 +79,22 @@ def _run(cmd, cwd=None):
     return p.returncode == 0, (p.stdout or "") + (p.stderr or "")
 
 
+class UnreadableLibrary(Exception):
+    """core.lock refused this manifest, and that refusal must reach the human.
+
+    It used to be swallowed: `except Exception: return {}`. A manifest core.lock declares
+    untrustworthy -- missing a column the row hashes are taken over, say -- became "the
+    library is empty", and the LockError naming exactly what disagreed was discarded.
+
+    The caller then proceeded on that answer: nothing is sealed, so every part gets
+    re-fetched from the iGEM Registry and RE-SEALED into the library whose manifest had
+    just been declared unreadable. A WRITE, on a discrepancy, where the fourth rule says
+    to stop and report. And the error the person finally saw was "seal-failed: could not
+    seal B0015", which never mentions LOCK.tsv -- the wrong diagnosis as well as the
+    wrong action.
+    """
+
+
 def _lock_path(library):
     """Locate ref_parts/LOCK.tsv. `--library` may point at the parts-library dir itself or at the
     project root that holds it (katana_init makes <root>/parts-library/ref_parts), so check both."""
@@ -104,8 +120,16 @@ def _lock_rows(library):
     if core_lock is not None:
         try:
             rows = core_lock.read(lock)[1]
-        except Exception:
-            return {}
+        except Exception as exc:
+            # Not {}. "I cannot read this" is not "this is empty", and resolving the one
+            # into the other destroys the information that there was a disagreement.
+            raise UnreadableLibrary(
+                "The parts library's manifest could not be read, so nothing here can be "
+                "trusted and nothing will be written.\n"
+                "    %s\n"
+                "    %s\n"
+                "  Nothing was changed. Fix the manifest, or take a fresh copy of the "
+                "library, and run this again." % (lock, exc))
         return {r["id"]: {"version": r["version"], "seq_sha256": r["seq_sha256"],
                           "length": r["length"], "outfile": r["outfile"]}
                 for r in rows if r.get("id")}

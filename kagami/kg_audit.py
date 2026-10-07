@@ -249,7 +249,31 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
 
     # ---- IDENTITY: claim vs sequence (the headline check) ----
     for b in blocks:
-        if not b.claim_label or not b.ident_id:
+        if not b.claim_label:
+            continue
+        if not b.ident_id:
+            # A block that HAS a label and no identity was dropped here in silence: no
+            # FLAG, no SKIP, no finding of any kind. A construct with four identified
+            # blocks and one labelled-but-unidentified block reported PASS without
+            # mentioning it -- "a label we did not check" reading as nothing at all.
+            #
+            # The asymmetry was mine: the nested-claim loop below handles the identical
+            # case with an identity-nested SKIP, and I wrote that one without noticing
+            # this one was right above it. The existing identification FLAGs do not
+            # cover it -- one fires only when the caller says identification never ran,
+            # the other only when NOTHING matched anywhere.
+            findings.append(Finding(
+                "identity-unchecked", SKIP,
+                f'The label "{b.claim_label.strip()}" was not checked',
+                loc=f"{b.start}-{b.end}",
+                detail=("Nothing in the reference set matches these bases well enough to "
+                        "compare the label against, so whether the label is true is not "
+                        "known. Not checked -- which is not the same as checked and "
+                        "fine. A part not in the public set, a heavily diverged one, or "
+                        "a region with an indel too large to bridge all look like this."),
+                fix=("If this part is one of yours, pass your library with --library so "
+                     "it can be compared. If it should be a public part, check it "
+                     "against the Registry by hand.")))
             continue
         claim = b.claim_label.strip()
         claim_norm = claim.replace("BBa_", "").upper()
@@ -374,6 +398,38 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                     f"{nc['pident']}% identity over {int((nc['coverage'] or 0) * 100)}% "
                     f"of that reference."),
             fix=f"Re-label it {nc['ident_id']}, or put the real {claim} sequence there."))
+
+    # ---- INDEL: a base inserted or deleted inside a part ----
+    # The identifier joins the two pieces a shifted diagonal produces, so the part is
+    # found and its label still gets checked. That must not make the indel INVISIBLE:
+    # before the join the part vanished from the report entirely, and a silent repair is
+    # the other half of the same mistake. One base out of a CDS shifts every codon after
+    # it.
+    for b in blocks:
+        n_indel = getattr(b, "indel", 0) or 0
+        if not b.ident_id or not n_indel:
+            continue
+        frame = n_indel % 3 != 0
+        role = (b.ident_role or b.claim_role or "").lower()
+        coding = "cds" in role or "orf" in role
+        findings.append(Finding(
+            "indel", FLAG,
+            f"{b.ident_id} has {n_indel} base(s) inserted or deleted inside it",
+            loc=f"{b.start}-{b.end}",
+            detail=("The sequence matches this reference on either side of a shift of "
+                    f"{n_indel} base(s): the part is all there, but one stretch does not "
+                    "line up with the rest. An insertion or deletion is the commonest "
+                    "cloning and synthesis artifact."
+                    + (f" {n_indel} is not a multiple of three, so in a reading frame it "
+                       "SHIFTS every codon after it and the protein downstream is wrong."
+                       if frame else
+                       " It is a multiple of three, so a reading frame survives it, but "
+                       "the residues there are not what the reference encodes.")
+                    + (" This block is coding, so that applies directly."
+                       if coding else "")),
+            fix=("Compare this region against the Registry entry base by base. If the "
+                 "indel is deliberate, say so in the design; if it came from a primer or "
+                 "a synthesis error, the part is not the one the label claims.")))
 
     # ---- FULL-LENGTH: truncated reference parts ----
     for b in blocks:
@@ -633,7 +689,20 @@ def count(findings, status):
 
 def verdict_kind(findings):
     """Canonical verdict token for logic, colour and exit codes: FAIL / REVIEW / PASS.
-    NOTE and SKIP never make a construct anything other than a PASS."""
+
+    NOTE and SKIP never make a construct anything other than a PASS here, and that is a
+    DELIBERATE difference from core.result.BuildResult, where a SKIP does force REVIEW.
+    The two are not drifting; they answer different questions.
+
+    An audit's SKIP is usually unavoidable and usually the default: host-homology skips
+    whenever no host is given, which is most runs. Escalating that would put REVIEW on
+    nearly every audit, and a warning that fires every time is the cry-wolf failure, not
+    a safeguard. A BUILD's SKIP means a gate the engine was supposed to run did not --
+    rare, and worth holding back the verdict for.
+
+    What makes this safe is that the audit's SKIPs stay VISIBLE: rendered as [----] and
+    never a tick, sorted above PASS, and counted in the verdict line's tally as
+    "N NOT CHECKED". Not escalating is not the same as not saying."""
     if any(f.status == FAIL for f in findings):
         return FAIL
     if any(f.status == FLAG for f in findings):

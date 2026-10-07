@@ -139,6 +139,20 @@ class BuildResult(object):
         for f in self.findings:
             if f.status == FLAG:
                 return "REVIEW"
+        # A SKIP means a check did not run, and that is not a pass. The two readings of
+        # the same result used to disagree: verdict / exit_code / --json said PASS while
+        # kg_verdict.from_result escalated the same SKIP to REVIEW, so a CI step gated on
+        # the exit code was told PASS on a build where a gate never ran, with the window
+        # beside it saying one had not. One of the two had to be wrong, and this project's
+        # rule says which: "we did not check" must never read as "checked and fine".
+        #
+        # This is only safe to enforce because the off-target gate now actually finds the
+        # genome the bundle ships. While it did not, every single build carried a SKIP and
+        # making that REVIEW would have been noise on every run -- which is the cry-wolf
+        # failure, not a fix for it.
+        for f in self.findings:
+            if f.status == SKIP:
+                return "REVIEW"
         return PASS
 
     @property

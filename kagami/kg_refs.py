@@ -194,7 +194,12 @@ def load_katana_library(root):
                     cells = line.rstrip("\n").split("\t")
                     rows.append(dict(zip(header, cells)))
         def seq_hash(s):
-            return hashlib.sha256(s.encode()).hexdigest()
+            # The SAME convention core.hashing.seq_sha256 uses, spelled out rather than
+            # merely agreeing by accident. This read `s.encode()` with no .upper() and no
+            # explicit codec, and matched the engine only because normalise() happens to
+            # uppercase first -- a second definition of the project's central convention,
+            # one normalise() change away from disagreeing silently.
+            return hashlib.sha256(s.upper().encode("ascii")).hexdigest()
 
     parts, problems = [], []
     for row in rows:

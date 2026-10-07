@@ -172,7 +172,11 @@ function render(report) {
     // tier needs attention, and a neutral circle is a claim that it does not.
     const [cls, gly] = STAT[f.status] || ["w", "?"];
     const note = f.detail ? '<span class="note">' + esc(f.detail) + "</span>" : "";
-    const fix = (f.fix && f.status !== "PASS" && f.status !== "SKIP")
+    // A SKIP's `fix` is the ACTIONABLE line -- "Choose a host to run the >40 bp
+    // recombination-substrate check" -- and suppressing it meant the CLI showed the one
+    // thing a person could do about a not-run check and the web page did not. A SKIP is
+    // the tier that most needs its next step shown, not least.
+    const fix = (f.fix && f.status !== "PASS")
       ? '<span class="fix">→ ' + esc(f.fix) + "</span>" : "";
     const loc = f.loc ? '<span class="loc">' + esc(f.loc) + "</span>"
       : '<span class="loc">—</span>';
