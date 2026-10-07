@@ -42,10 +42,19 @@ import urllib.request
 from datetime import date
 from pathlib import Path
 
-# Must match katana_lock.FIELDS and the LOCK.tsv header, in this order: row_sha256 is computed
-# over these keys in sequence, so any disagreement produces unreproducible rows.
-FIELDS = ["id", "version", "seq_sha256", "file_sha256", "length",
-          "source", "date", "class", "outfile"]
+# The hashing conventions, the manifest reader and the record renderer all live in
+# core/ now. This file used to carry its own copies, with a comment saying the
+# duplication of seq_sha256 was "deliberate and load-bearing" because a drift would make
+# every part this tool admits unbuildable. The danger was real; one definition is the
+# remedy.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import vendor_path                                              # noqa: E402
+vendor_path.ensure()
+from core.hashing import (FIELDS, HEADER, file_sha256, lock_root,  # noqa: E402
+                          row_sha256, seq_sha256, sha256_hex)
+from core.lock import LockError                                 # noqa: E402
+from core.lock import read as read_lock                         # noqa: E402
+from core.parts import extract_sequence, render_genbank          # noqa: E402
 
 EFETCH = ("https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
           "?db=nuccore&rettype=fasta&retmode=text&id={acc}")
@@ -55,56 +64,10 @@ COMPLEMENT = str.maketrans("ACGTNRYKMSWBDHVacgtnrykmswbdhv",
                            "TGCANYRMKSWVHDBtgcanyrmkswvhdb")
 
 
-# ── hashing: must match the build engine exactly ────────────────────────────
-def sha256_hex(b: bytes) -> str:
-    return hashlib.sha256(b).hexdigest()
-
-
-def seq_sha256(seq: str) -> str:
-    """The engine's canonical sequence hash: uppercase letters, ASCII, nothing else.
-
-    Deliberately identical to katana_build.seq_sha256. If these two ever drift, every part this
-    tool admits becomes unbuildable, so the duplication is on purpose and load-bearing.
-    """
-    return sha256_hex(seq.upper().encode("ascii"))
-
-
-def row_sha256(row: dict) -> str:
-    return sha256_hex("\n".join(f"{k}={row.get(k, '')}" for k in FIELDS).encode())
-
-
-def lock_root(rows: list[dict]) -> str:
-    """SHA-256 over the ordered row hashes, recomputed rather than read from the column."""
-    return sha256_hex("\n".join(row_sha256(r) for r in rows).encode())
-
-
-def extract_gb_sequence(text: str) -> str:
-    """Byte-for-byte the same logic as katana_build.extract_gb_sequence."""
-    in_origin, parts = False, []
-    for line in text.splitlines():
-        if line.startswith("ORIGIN"):
-            in_origin = True
-            continue
-        if in_origin:
-            if line.startswith("//"):
-                break
-            parts.append(re.sub(r"[^A-Za-z]", "", line))
-    return "".join(parts).upper()
-
-
-def read_fasta(text: str) -> str:
-    return "".join(re.sub(r"[^A-Za-z]", "", l)
-                   for l in text.splitlines() if not l.startswith(">")).upper()
-
-
 # ── the manifest ────────────────────────────────────────────────────────────
-def read_lock(path: Path) -> tuple[list[str], list[dict]]:
-    lines = [l for l in path.read_text(encoding="utf-8").splitlines() if l.strip()]
-    header = lines[0].split("\t")
-    return header, [dict(zip(header, l.split("\t"))) for l in lines[1:]]
-
-
-def write_lock(path: Path, header: list[str], rows: list[dict]) -> None:
+def write_lock(path: Path, header: list, rows: list) -> None:
+    """Rewrite the manifest. Writing stays here: core.lock is a reader, and admitting a
+    part is this tool's job. Explicit LF, because file_sha256 is over the bytes."""
     out = ["\t".join(header)]
     out += ["\t".join(r.get(k, "") for k in header) for r in rows]
     with open(path, "wb") as f:
@@ -144,7 +107,7 @@ def fetch_ncbi(acc: str, rng: str | None, strand: str,
     if len(heads) != 1:
         raise SystemExit(f"BLOCK: expected exactly 1 record from NCBI, got {len(heads)}. "
                          f"NCBI may have returned an error page rather than sequence.")
-    seq = read_fasta(data)
+    seq = extract_sequence(data, ".fasta")
     if not seq:
         raise SystemExit("BLOCK: NCBI returned a record with no sequence in it.")
 
@@ -285,9 +248,9 @@ def read_local(path: Path) -> str:
     text = path.read_text(encoding="utf-8", errors="strict")
     ext = path.suffix.lower()
     if ext in (".gb", ".gbk", ".genbank"):
-        seq = extract_gb_sequence(text)
+        seq = extract_sequence(text, ".gb")
     elif ext in (".fa", ".fasta", ".fna", ".txt", ".seq"):
-        seq = read_fasta(text)
+        seq = extract_sequence(text, ".fasta")
     else:
         raise SystemExit(f"BLOCK: unknown file type {ext!r}. Use .fasta or .gb.")
     if not seq:
@@ -325,7 +288,7 @@ def copy_from_library(src: Path, pid: str) -> tuple[str, str, str]:
     if not part_file.exists():
         raise SystemExit(f"BLOCK: {lock} lists {row['outfile']} but the file is missing.")
 
-    seq = extract_gb_sequence(part_file.read_text(encoding="utf-8"))
+    seq = extract_sequence(part_file.read_text(encoding="utf-8"), ".gb")
     if seq_sha256(seq) != row["seq_sha256"]:
         raise SystemExit(f"BLOCK: {pid} in the SOURCE library does not match its own hash. "
                          f"That library is damaged - do not copy from it. Run verify.py there.")
@@ -481,7 +444,7 @@ def main() -> int:
     with open(out_path, "wb") as f:
         f.write(render_genbank(a.id, version, seq, source, klass).encode("utf-8"))
 
-    reread = extract_gb_sequence(out_path.read_text(encoding="utf-8"))
+    reread = extract_sequence(out_path.read_text(encoding="utf-8"), ".gb")
     if seq_sha256(reread) != shex or len(reread) != len(seq):
         out_path.unlink(missing_ok=True)
         return _block("the file written does not read back as the sequence fetched. "
