@@ -23,7 +23,45 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-LIB = HERE / "parts-library" / "ref_parts"
+
+
+def _target(argv):
+    """Which library to check: the one named on the command line, or the shipped one.
+
+    This used to be a hard-coded path with no look at sys.argv, so a path handed to it was
+    SILENTLY IGNORED. Measured:
+
+        $ python3 verify.py /nonexistent/path/LOCK.tsv
+           8/8 checks passed
+        OK -- the library is intact, and the checker catches tampering.
+        exit 0
+
+    A clean bill of health, for a path that does not exist, about a library the caller had
+    not asked about. Worse with a path that does exist: a team running their own library
+    with --library got this command reporting on the SHIPPED one, which is always intact,
+    and concluded theirs was fine. The one command whose whole job is to be believed was
+    answering a question it had not been asked.
+
+    Two sources disagreeing about which library is meant -- the argument and the built-in
+    path -- resolved silently in favour of the one that passes. That is the fourth rule,
+    at the level of the tool's interface.
+
+    Accepts either the library directory or its LOCK.tsv, because people point at a
+    library and not at a manifest.
+    """
+    args = [a for a in argv[1:] if not a.startswith("-")]
+    if not args:
+        return HERE / "parts-library" / "ref_parts"
+    given = Path(args[0]).expanduser()
+    if given.name == "LOCK.tsv":
+        return given.parent
+    for cand in (given / "ref_parts", given / "parts-library" / "ref_parts", given):
+        if (cand / "LOCK.tsv").exists():
+            return cand
+    return given          # does not hold a manifest; main() refuses and names it
+
+
+LIB = _target(sys.argv)
 LOCK = LIB / "LOCK.tsv"
 VERIFIER = HERE / "verify_library_v2.py"
 SUITE = HERE / "test_seal_gaps.py"
@@ -48,10 +86,19 @@ def run(script: Path, *args: str) -> tuple[int, str]:
 def main() -> int:
     print("Katana parts library — integrity check\n" + "─" * 42)
 
-    for p, what in ((LIB, "parts-library/ref_parts"), (LOCK, "LOCK.tsv"),
+    print(f"Library: {LIB}")
+    for p, what in ((LIB, str(LIB)), (LOCK, str(LOCK)),
                     (VERIFIER, "verify_library_v2.py"), (SUITE, "test_seal_gaps.py")):
         if not p.exists():
-            print(f"\nMissing: {what}\nRun this from the folder that contains it.")
+            print(f"\nMissing: {what}")
+            if p in (LIB, LOCK):
+                # Naming the path matters: the whole point of the fix above is that this
+                # command must say WHICH library it is talking about.
+                print("There is no sealed parts library there, so nothing was checked.")
+                print("Give the library directory, or its LOCK.tsv, or no argument at all")
+                print("to check the one shipped beside this script.")
+            else:
+                print("Run this from the folder that contains it.")
             return 2
 
     n_parts = sum(1 for _ in LOCK.read_text(encoding="utf-8").splitlines()) - 1
