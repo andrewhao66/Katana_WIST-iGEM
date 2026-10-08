@@ -147,7 +147,7 @@ def serve(port=8731, open_browser=True, once=False):
         return 2
 
     url = "http://127.0.0.1:%d/" % httpd.server_address[1]
-    print("Katana is running in your browser at")
+    print("katana-kagami is running in your browser at")
     print()
     print("    " + url)
     print()

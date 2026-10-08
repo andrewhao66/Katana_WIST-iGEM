@@ -176,8 +176,32 @@ html = open(os.path.join(ROOT, "ui", "web", "index.html"), encoding="utf-8").rea
 check("the page says nothing is uploaded", "Nothing is uploaded" in html)
 check("the page says it does not seal, because a library must live in git",
       "does not seal" in html)
+import web_deploy
+
 check("the loader explains the file:// restriction rather than failing silently",
       "file://" in js)
+
+# ---- the page names itself consistently ----
+# Three places say the name and they must agree: the browser tab, the heading somebody
+# reads, and the README that goes out with the published site. They were all "Katana"
+# and drifted apart the moment one of them changed.
+NAME = "katana-kagami"
+check("the browser tab says %s" % NAME, "<title>%s" % NAME in html,
+      [l for l in html.splitlines() if "<title>" in l])
+# The heading itself, not the CSS rule that styles it -- which is what the first match
+# for "eyebrow" in the file actually is.
+_head = [l for l in html.splitlines() if 'class="eyebrow"' in l]
+check("and so does the heading on the page", _head and NAME in _head[0], _head)
+check("and the published README's own title",
+      ("# " + NAME) in web_deploy.README, web_deploy.README.splitlines()[0])
+check("and `katana web` says which page it just opened",
+      NAME in open(os.path.join(ROOT, "web_serve.py"), encoding="utf-8").read())
+check("the README tells somebody what the page is called",
+      NAME in open(os.path.join(ROOT, "README.md"), encoding="utf-8").read())
+# The engine keeps its own name. The page runs Katana's modules, and saying otherwise
+# would rename the engine rather than the page.
+check("and the page still credits the engine as Katana's",
+      "Katana's own audit modules" in html, "")
 
 # ---- the deploy staging produces a site that is the engine, byte for byte ----
 import hashlib

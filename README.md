@@ -54,9 +54,12 @@ On Windows it is `katana.bat` instead of `./katana`.
 ./katana web
 ```
 
-That starts a local server and opens a page you can drop a file onto. The audit runs
-**inside the browser** — Katana's own modules, unmodified, through Pyodide — so the
-sequence never leaves your machine. Useful on a school computer where you cannot install
+That starts a local server and opens **katana-kagami**, a page you can drop a file onto.
+The audit runs **inside the browser** — Katana's own modules, unmodified, through
+Pyodide — so the sequence never leaves your machine.
+
+The name is the two halves it joins: the check engine began as Kagami, the mirror that
+reads a sequence back, and it runs here on Katana's own sealed library. Useful on a school computer where you cannot install
 anything, and on a Chromebook.
 
 It needs the local server rather than just opening the file, because a browser refuses to
