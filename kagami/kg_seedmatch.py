@@ -155,16 +155,66 @@ def _long_hits(sid, ref, q, qidx, n, k, stride):
         # and fine". loci_capped rides on the hits so the audit can report it.
         ranked = sorted(diags.items(), key=lambda kv: kv[1], reverse=True)
         capped = len(ranked) > MAX_LOCI
+        _found = []
         for d, _seeds in ranked[:MAX_LOCI]:
-            hit = _extend(sid, q, s, d, L, n, strand)
+            hit = _extend(sid, q, s, d, L, n, strand, allow_short=True)
             if hit is not None:
                 if capped:
                     hit["loci_capped"] = len(ranked)
-                out.append(hit)
+                _found.append(hit)
+
+        # A provisional (sub-MIN_HIT) piece survives ONLY if it could actually merge:
+        # there has to be a real piece of this same reference on a diagonal within
+        # MAX_INDEL of it. Without this condition every diagonal of every reference
+        # yielded a short piece, and the cost was measured rather than guessed -- 40
+        # random 900 bp sequences went from 37 raw hits to 10,611, with one false
+        # positive reaching coverage 0.800 on pure noise. That is the cry-wolf failure
+        # this whole module is careful about, arriving through a fix for something else.
+        _real = [h for h in _found if not h.get("provisional")]
+        for h in _found:
+            if not h.get("provisional"):
+                out.append(h)
+                continue
+            _d = h.get("diag", 0)
+            if any(0 < abs(_d - r.get("diag", 0)) <= MAX_INDEL for r in _real):
+                out.append(h)
     return out
 
 
-def _extend(sid, q, s, d, L, n, strand):
+def _best_clean_segment(qseg, sseg, lo, hi):
+    """The longest sub-segment of [lo,hi) whose identity clears MIN_IDENT.
+
+    Kadane hands back the highest-SCORING segment, which for a part carrying two indels
+    spans the shifted middle and so fails the identity floor -- taking the whole diagonal
+    with it even though two clean stretches are plainly inside. This recovers the longer
+    of them.
+
+    Prefix sums over matches, then the longest window whose match ratio clears the floor.
+    Returns (lo, hi, matches) or None.
+    """
+    m = [1 if a == b else 0 for a, b in zip(qseg[lo:hi], sseg[lo:hi])]
+    n = len(m)
+    if n == 0:
+        return None
+    pre = [0] * (n + 1)
+    for i, v in enumerate(m):
+        pre[i + 1] = pre[i] + v
+    need = MIN_IDENT / 100.0
+    best = None
+    # Longest first: the first length that works anywhere is the answer, and lengths are
+    # tried descending so this stops early on the common case.
+    for ln in range(n, MIN_HIT - 1, -1):
+        for a in range(0, n - ln + 1):
+            mm = pre[a + ln] - pre[a]
+            if mm >= need * ln:
+                best = (lo + a, lo + a + ln, mm)
+                break
+        if best:
+            break
+    return best
+
+
+def _extend(sid, q, s, d, L, n, strand, allow_short=False):
     """Score one diagonal and return a hit dict, or None. d = query pos - reference pos.
 
     The diagonal fixes the correspondence between reference and query positions, so the
@@ -204,8 +254,21 @@ def _extend(sid, q, s, d, L, n, strand):
         return None
 
     span = best_hi - best_lo
+    # A segment shorter than MIN_HIT is not an identification on its own -- 20 bases of
+    # agreement is not evidence that a part is here. But it can be EVIDENCE FOR A MERGE,
+    # and destroying it here meant any indel within 25 bases of either end of a part was
+    # structurally unmergeable: B0015 with one deletion near each end lost both end
+    # pieces, came back at coverage 0.752 with no indel at all, lost the tile to an
+    # unrelated reference, and collected three confident false FLAGs -- mislabel, indel
+    # and truncation -- on a correctly labelled part.
+    #
+    # So it survives marked `provisional`, usable only as a merge partner. _merge_indels
+    # drops any that did not merge, so nothing short reaches a report by itself.
+    _provisional = False
     if span < MIN_HIT:
-        return None
+        if not allow_short:
+            return None
+        _provisional = True
     matches = sum(1 for a, b in zip(qseg[best_lo:best_hi], sseg[best_lo:best_hi])
                   if a == b)
     core_pident = 100.0 * matches / span
@@ -213,7 +276,27 @@ def _extend(sid, q, s, d, L, n, strand):
     # clears the floor and gets reported with low coverage instead of disappearing --
     # which is what happened before Phase 1, at 77 of 129 bases.
     if core_pident < MIN_IDENT:
-        return None
+        # DO NOT throw the diagonal away. Kadane maximises SCORE, not identity, so when
+        # two well-matching stretches sit either side of a shifted middle the maximal
+        # segment spans the middle: for B0015 with an insertion and a deletion 40 bases
+        # apart, a 68-point segment at ~76% identity beat either clean block's 40 or 48
+        # points, failed this floor, and the whole diagonal was discarded -- so the part
+        # fell to coverage 0.31, dropped out of the decomposition entirely, and the audit
+        # filled the gap with three confident falsehoods about a correctly labelled part.
+        #
+        # The evidence a stricter reading would have kept is still here. Fall back to the
+        # best segment that DOES clear the floor, found by sliding a window inward from
+        # each end of the maximal one. That is the sub-segment the score hid, not a new
+        # guess.
+        _alt = _best_clean_segment(qseg, sseg, best_lo, best_hi)
+        if _alt is None:
+            return None
+        best_lo, best_hi, matches = _alt
+        span = best_hi - best_lo
+        if span < MIN_HIT and not allow_short:
+            return None
+        _provisional = _provisional or span < MIN_HIT
+        core_pident = 100.0 * matches / span
 
     # Identity over the reference's own span, as far as the query holds it. This is the
     # number a person reads, so it is the one that must not hide a diverged end.
@@ -232,6 +315,7 @@ def _extend(sid, q, s, d, L, n, strand):
                 length=span, qstart=cs + best_lo + 1, qend=cs + best_hi, strand=strand,
                 cov=span / float(L), bit=2.0 * matches,
                 ref_in_query=(ws >= 0 and we <= n),
+                provisional=_provisional,
                 diag=d, matches=matches, aligned=span,
                 rstart=cs + best_lo - ws, rend=cs + best_hi - ws)
 
@@ -251,7 +335,7 @@ def _group_by_sid_strand(hits):
     return list(groups.items())
 
 
-def _merge_indels(hits, reflen):
+def _merge_indels(hits, reflen, qseq="", refseq=""):
     """Join hits of one reference that are pieces of a single GAPPED alignment.
 
     _extend scores one diagonal, and an insertion or deletion SHIFTS the diagonal, so the
@@ -323,21 +407,51 @@ def _merge_indels(hits, reflen):
 
                 rs = min(merged["rstart"], b["rstart"])
                 re_ = max(merged["rend"], b["rend"])
-                # Subtract the overlap. The two pieces' reference intervals are allowed
-                # to overlap by up to half the shorter one, and adding their match counts
-                # straight counted the shared bases TWICE -- so a duplicated base in
-                # B0015 reported 102.3% identity and a deleted one in sfGFP 100.7%. An
-                # identity above 100 is not a number: it means the numerator counted
-                # something more than once.
+                # TRIM AND RECOUNT at the junction, rather than estimate.
                 #
-                # Each piece's density of matches is the best estimate available for how
-                # many of its matches fall in the overlap, so the overlap is charged once
-                # at the better of the two densities rather than dropped or double-counted.
-                _dens_a = merged["matches"] / float(max(1, merged["aligned"]))
-                _dens_b = b["matches"] / float(max(1, b["aligned"]))
-                matches = merged["matches"] + b["matches"] - overlap * max(_dens_a,
-                                                                          _dens_b)
-                aligned = merged["aligned"] + b["aligned"] - overlap
+                # Kadane extends each piece PAST the indel so both pieces cover the
+                # junction, which means they overlap on BOTH axes and the two overlaps
+                # DIFFER. For AmCyan with one base deleted: reference overlap 10, query
+                # overlap 11, and the number of matches actually counted twice is 7.
+                # Charging `overlap x density` -- the first attempt at this -- subtracted
+                # 10 and landed 3 matches too low, so across 200 references with one base
+                # deleted the error ran from -3.81 to +0.50 and 64 of them reported
+                # EXACTLY 100.0% for a part with a base missing. The clamp removed the
+                # ">" and left the "=", and "=" is what decides which reference wins a
+                # tile.
+                #
+                # So the later piece is cut back to where the earlier one stops, on both
+                # axes, and its contribution is counted against the real bases. One zip
+                # over the trimmed piece; no heuristic, and the clamp below becomes an
+                # assertion rather than a correction.
+                # The cut has to satisfy BOTH axes, and they do not coincide: on this
+                # piece's diagonal q0 = r0 + diag, and the two pieces' diagonals differ
+                # by exactly the indel -- which is why the reference overlap (10) and the
+                # query overlap (11) were different numbers in the measured case.
+                # Trimming on the reference axis alone still let one query base be
+                # counted by both pieces, so a part with a base deleted came back at
+                # exactly 100.0%.
+                #
+                # Smallest r0 on this diagonal that is past where the earlier piece
+                # stopped on each axis: r0 >= merged.rend, and r0 + diag >= merged.qend.
+                _b_rs, _b_re = b["rstart"], b["rend"]
+                _d_b = b.get("diag", 0)
+                _cut_r = max(_b_rs, merged["rend"], merged["qend"] - _d_b)
+                _cut_q = _cut_r + _d_b
+                _tail_len = _b_re - _cut_r
+                _tail_matches = 0
+                if _tail_len > 0 and qseq and refseq:
+                    _qs = qseq[_cut_q:_cut_q + _tail_len]
+                    _rs_ = refseq[_cut_r:_cut_r + _tail_len]
+                    _tail_matches = sum(1 for _x, _y in zip(_qs, _rs_) if _x == _y)
+                    _tail_len = min(_tail_len, len(_qs), len(_rs_))
+                elif _tail_len > 0:
+                    # No sequences to recount against (a caller that passed none): fall
+                    # back to the piece's own density, which is what this replaced.
+                    _tail_matches = int(round(_tail_len * b["matches"]
+                                              / float(max(1, b["aligned"]))))
+                matches = merged["matches"] + _tail_matches
+                aligned = merged["aligned"] + max(0, _tail_len)
                 span = float(max(1, re_ - rs))
                 # And clamp. The arithmetic above is an estimate over two local
                 # alignments, not a global one, so it must not be able to express an
@@ -368,6 +482,12 @@ def _merge_indels(hits, reflen):
                     # this chain started.
                     diag=b.get("diag", merged.get("diag", 0)))
                 used[j] = True
+            # A provisional piece that found no partner is not a hit: MIN_HIT applies to
+            # anything that reaches a report on its own. One that DID merge is part of a
+            # full-length alignment now, so the mark comes off.
+            if merged.get("provisional") and not merged.get("indel_events"):
+                continue
+            merged.pop("provisional", None)
             out.append(merged)
     return out
 
@@ -427,12 +547,18 @@ def identify_hits(query, refs, k=K, circular=False):
     # the same block twice.
     # Join pieces of one gapped alignment BEFORE anything judges coverage. Doing it after
     # the dedup, or after _tile's floor, is too late: the pieces are already gone.
-    reflens = {}
+    refseqs = {}
     for r in refs:
-        reflens[r["id"]] = len(kg_refs.normalise(r.get("seq") or ""))
+        refseqs[r["id"]] = kg_refs.normalise(r.get("seq") or "")
     merged = []
-    for (sid, _strand), grp in _group_by_sid_strand(hits):
-        merged.extend(_merge_indels(grp, reflens.get(sid) or 1))
+    for (sid, strand), grp in _group_by_sid_strand(hits):
+        _ref = refseqs.get(sid) or ""
+        # The reference as the hit's strand read it, and the query it was read against.
+        # Both are needed to RECOUNT at a junction instead of estimating -- see
+        # _merge_indels.
+        merged.extend(_merge_indels(grp, len(_ref) or 1,
+                                    q if strand == 1 else qrc,
+                                    _ref if strand == 1 else revcomp(_ref)))
     hits = merged
 
     keep = {}

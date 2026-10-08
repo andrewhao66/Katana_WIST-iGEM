@@ -241,6 +241,51 @@ check("no hit reports an identity above 100%% or coverage above 1.0 (%s)"
       % ("; ".join(_IMPOSSIBLE[:3]) or "none of %d constructions" % 6),
       not _IMPOSSIBLE)
 
+# And not EXACTLY 100 either, for a part that is missing a base. The clamp removed the
+# ">" and left the "=", and "=" is the half that decides which reference wins a tile:
+# `_tile` ranks on pident, so an indel-bearing hit tying a genuine exact hit sends the
+# decision to a tiebreak. Measured across 200 references with one base deleted at the
+# midpoint, 64 of them reported exactly 100.0 before the junction was trimmed on BOTH
+# axes -- the reference overlap and the query overlap differ by the indel, and trimming
+# only the reference axis left one query base counted twice.
+_AT_100 = []
+for _pid in ("AmCyan", "sfGFP", "B0015", "lacZ", "KanR"):
+    _s = _by_id.get(_pid)
+    if not _s or len(_s) < 200:
+        continue
+    _m = len(_s) // 2
+    _hh = [h for h in sm.identify_hits(PAD + _s[:_m] + _s[_m + 1:] + PAD, FULL)
+           if h["sid"] == _pid]
+    if not _hh:
+        continue
+    _bb = max(_hh, key=lambda h: h["cov"])
+    _true = 100.0 * (len(_s) - 1) / len(_s)
+    if _bb["pident"] >= 100.0:
+        _AT_100.append("%s reported %s for %d of %d bases"
+                       % (_pid, _bb["pident"], len(_s) - 1, len(_s)))
+    elif abs(_bb["pident"] - _true) > 0.25:
+        _AT_100.append("%s reported %s, true %.1f" % (_pid, _bb["pident"], _true))
+check("a part with one base deleted reports LESS than 100%%, within 0.25 of the truth "
+      "(%s)" % ("; ".join(_AT_100) or "all five exact"), not _AT_100)
+
+# The query bases the hit claims to have aligned cannot exceed the reference's length,
+# and kg_audit prints this number verbatim as "N of its M bases match here".
+_LEN = []
+for _pid in ("AmCyan", "sfGFP", "B0015"):
+    _s = _by_id.get(_pid)
+    if not _s or len(_s) < 200:
+        continue
+    _m = len(_s) // 2
+    _hh = [h for h in sm.identify_hits(PAD + _s[:_m] + _s[_m + 1:] + PAD, FULL)
+           if h["sid"] == _pid]
+    if _hh:
+        _bb = max(_hh, key=lambda h: h["cov"])
+        if _bb["length"] > len(_s) - 1:
+            _LEN.append("%s: length %d, only %d bases can align"
+                        % (_pid, _bb["length"], len(_s) - 1))
+check("and the aligned length does not exceed what the query can supply (%s)"
+      % ("; ".join(_LEN) or "all three correct"), not _LEN)
+
 # ---- the indel COUNT, and the frameshift advice that rests on it ----
 # `shift` was measured against the growing merged dict rather than the previous piece,
 # so n single-base deletions reported n(n+1)/2. Two deletions reported 3, and the audit
@@ -359,6 +404,67 @@ check("three deletions raise one too", _f3, "none")
 if _f3:
     check("and THAT one says the frame survives, because three is a multiple of three",
           "survives" in (_f3[0].detail or ""), (_f3[0].detail or "")[:200])
+
+# ---- the cost of finding more must not be finding things that are not there ----
+# Both of the merge's reach-extending changes were measured against pure noise, because
+# the first version of one of them was a 287x regression I introduced while fixing
+# something else.
+#
+# Letting sub-MIN_HIT end pieces survive for merging made EVERY diagonal of EVERY
+# reference yield a short piece: 40 random 900 bp sequences went from 37 raw hits to
+# 10,611, with one false positive reaching coverage 0.800 on sequence that contains
+# nothing. A provisional piece now survives only when a real piece of the same reference
+# sits within MAX_INDEL of it, which is the condition under which it could actually
+# merge -- measured back down to 44.
+#
+# This assertion is the guard. A future change that widens the net pays for itself here
+# or not at all.
+import random as _rnd
+
+
+def _noise(n, seed):
+    _r = _rnd.Random(seed)
+    return "".join(_r.choice("ACGT") for _ in range(n))
+
+
+_raw = _reach = 0
+_worst = 0.0
+for _s in range(12):
+    _hs = sm.identify_hits(_noise(900, _s), FULL)
+    _raw += len(_hs)
+    _reach += sum(1 for _h in _hs if _h["cov"] >= 0.6)
+    _worst = max(_worst, max((_h["cov"] for _h in _hs), default=0.0))
+check("random sequence yields few raw hits (%d over 12 x 900 bp)" % _raw,
+      _raw < 400, _raw)
+check("and none of them reaches the coverage a tile needs (%d)" % _reach,
+      _reach == 0, _reach)
+check("and the best coverage on noise stays low (%.3f)" % _worst,
+      _worst < 0.35, _worst)
+
+# A short fragment of a part is not an identification of that part.
+check("a 20 bp fragment of B0015 alone is not reported as B0015",
+      not [h for h in sm.identify_hits(PAD + _by_id["B0015"][:20] + PAD, FULL)
+           if h["sid"] == "B0015"],
+      str([(h["sid"], h["cov"]) for h in
+           sm.identify_hits(PAD + _by_id["B0015"][:20] + PAD, FULL)
+           if h["sid"] == "B0015"]))
+
+# ---- and the two reach fixes must still reach ----
+_B = _by_id["B0015"]
+_h3a = [h for h in sm.identify_hits(PAD + _B[:20] + _B[21:105] + _B[106:] + PAD, FULL)
+        if h["sid"] == "B0015"]
+_b3a = max(_h3a, key=lambda h: h["cov"]) if _h3a else None
+check("an indel within 25 bases of each END is still merged (cov %s)"
+      % (round(_b3a["cov"], 3) if _b3a else "none"),
+      _b3a and _b3a["cov"] > 0.95 and _b3a.get("indel") == 2,
+      str({k: _b3a.get(k) for k in ("cov", "indel", "indel_net")} if _b3a else None))
+
+_h3b = [h for h in sm.identify_hits(PAD + _B[:40] + "A" + _B[40:80] + _B[81:] + PAD,
+                                    FULL) if h["sid"] == "B0015"]
+_b3b = max(_h3b, key=lambda h: h["cov"]) if _h3b else None
+check("and a part whose best-scoring segment fails the identity floor is not discarded "
+      "whole (cov %s)" % (round(_b3b["cov"], 3) if _b3b else "none"),
+      _b3b and _b3b["cov"] > 0.6, _b3b["cov"] if _b3b else None)
 
 import subprocess
 
