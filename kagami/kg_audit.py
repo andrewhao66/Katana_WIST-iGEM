@@ -406,10 +406,33 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         if (claim_ref_seq and block_bases and claim_norm != ident
                 and len(block_bases) >= 12 and block_bases in claim_ref_seq):
             at = claim_ref_seq.find(block_bases)
+            # How much of the CLAIMED part is here. Accepting the containment and
+            # stopping there traded a false accusation for a missed truncation: with only
+            # PyeaR[13:113] present and labelled PyeaR, the report said 'Block labelled
+            # "PyeaR" is correct', gave a verdict of PASS, and never mentioned that 62 of
+            # PyeaR's 162 bases were absent. The label IS correct; the part is not all
+            # there, and both of those have to be said.
+            _claim_missing = len(claim_ref_seq) - len(block_bases)
+            if _claim_missing > 0.05 * len(claim_ref_seq):
+                findings.append(Finding(
+                    "truncation", FLAG,
+                    f'{claim}: {len(block_bases)} of its {len(claim_ref_seq)} bases are '
+                    f'here, {_claim_missing} are not',
+                    loc=f"{b.start}-{b.end}",
+                    detail=(f"The label is right -- these bases are {claim}'s own, at its "
+                            f"position {at + 1}-{at + len(block_bases)}. But {claim} is "
+                            f"{len(claim_ref_seq)} bases long and only "
+                            f"{len(block_bases)} of them are in this sequence. The "
+                            f"identifier named {b.ident_id}, a shorter Registry entry "
+                            f"that covers exactly the part that IS here, which is why "
+                            f"the coverage beside it reads as complete."),
+                    fix=(f"If you meant the whole of {claim}, the rest of it is missing. "
+                         f"If you meant only this stretch, label it {b.ident_id} -- that "
+                         f"is what it is.")))
             findings.append(Finding(
                 "identity-subpart", NOTE,
-                f'Block labelled "{claim}" is correct — {b.ident_id} is a shorter '
-                f're-deposit of part of it',
+                f'Block labelled "{claim}" names the right part — {b.ident_id} is a '
+                f'shorter re-deposit of part of it',
                 loc=f"{b.start}-{b.end}",
                 detail=(f"These {len(block_bases)} bases are {claim}'s own, at its "
                         f"position {at + 1}-{at + len(block_bases)} of "
@@ -526,7 +549,21 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
 
     # ---- FULL-LENGTH: truncated reference parts ----
     for b in blocks:
-        if b.ident_id and b.coverage is not None and b.coverage < 0.95:
+        # How many of the reference's bases are MISSING, which is the question the
+        # threshold is about. Coverage alone counted a deleted base as covered, so a part
+        # with 652 of 687 bases present -- a true 0.9491 -- came through at 0.9520 and
+        # the FLAG never fired. A net deletion removes reference positions that have no
+        # query base at all, so they are missing on top of whatever coverage did not
+        # reach.
+        _missing = None
+        if b.ident_id and b.ref_len and b.matched_len is not None:
+            _del = max(0, -(getattr(b, "indel_net", 0) or 0))
+            _missing = max(0, b.ref_len - b.matched_len + _del)
+        _short_frac = (_missing / float(b.ref_len)) if (_missing is not None
+                                                        and b.ref_len) else None
+        if b.ident_id and ((_short_frac is not None and _short_frac > 0.05)
+                           or (_short_frac is None and b.coverage is not None
+                               and b.coverage < 0.95)):
             # "Only N/M bp present" was a claim about the construct, and for a part whose
             # END has diverged it is a false one: those bases ARE present, they just
             # differ. Sequence alone cannot tell a substitution from a replacement -- they

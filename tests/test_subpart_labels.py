@@ -128,8 +128,13 @@ if _gb:
               "PyeaR" in _sub[0].summary + (_sub[0].detail or "")
               and "K1799015" in _sub[0].summary + (_sub[0].detail or ""),
               _sub[0].summary)
-        check("  and says the label is correct",
-              "correct" in _sub[0].summary.lower(), _sub[0].summary)
+        # The wording moved from "is correct" to "names the right part" deliberately:
+        # with a truncation FLAG beside it, "correct" reads as a verdict on the whole
+        # block when it is only a verdict on the NAME. What is pinned is that it says
+        # the label is right, not which words say it.
+        check("  and says the label names the right part",
+              "right part" in _sub[0].summary or "correct" in _sub[0].summary.lower(),
+              _sub[0].summary)
         check("  and does NOT tell them to re-label anything",
               "re-label" not in (_sub[0].fix or "").lower(), _sub[0].fix)
 
@@ -182,6 +187,54 @@ _bl3, _fs3 = audit_gb(_b15 + _b34, [(1, len(_b15), "terminator", "NotAPartAnywhe
 _cats3 = [f.category for f in _fs3]
 check("a claim naming nothing in the set is not treated as a correct sub-part",
       "identity-subpart" not in _cats3, str(_cats3))
+
+# ---- the label being right does not mean the part is all there ----
+# Found by an independent Codex review, on the fix two commits above this one. Accepting
+# the containment and stopping there traded a false accusation for a MISSED TRUNCATION:
+# with only PyeaR[13:113] present and labelled PyeaR, the report said
+#
+#   NOTE  Block labelled "PyeaR" is correct
+#   VERDICT: PASS — 2 notes
+#
+# and never mentioned that 62 of PyeaR's 162 bases were absent. The coverage beside the
+# identification reads 1.000 because K1799015 -- the shorter Registry entry the identifier
+# named -- covers exactly the stretch that IS here. Both things have to be said: the label
+# names the right part, and the part is not all there.
+_PY = REFS.get("PyeaR", "")
+check("PyeaR is long enough for a fragment to be a real shortfall (%d bp)" % len(_PY),
+      len(_PY) > 150, len(_PY))
+
+_frag = _PY[13:113]
+_bl4, _fs4 = audit_gb(_frag + REFS["B0015"],
+                      [(1, len(_frag), "promoter", "PyeaR"),
+                       (len(_frag) + 1, len(_frag) + len(REFS["B0015"]),
+                        "terminator", "B0015")])
+_tr = [f for f in _fs4 if f.category == "truncation"]
+check("a fragment of PyeaR labelled PyeaR raises a truncation FLAG", _tr,
+      str([(f.category, f.status) for f in _fs4]))
+if _tr:
+    check("  and it counts the bases that are missing",
+          "62" in _tr[0].summary and "162" in _tr[0].summary, _tr[0].summary)
+    check("  and it is a FLAG, so the verdict is not PASS",
+          _tr[0].status == kg_audit.FLAG
+          and kg_audit.verdict_kind(_fs4) == "REVIEW",
+          "%s | %s" % (_tr[0].status, kg_audit.verdict(_fs4)))
+    check("  and it says the LABEL is still right, so nobody re-labels a correct part",
+          "label is right" in (_tr[0].detail or ""), (_tr[0].detail or "")[:160])
+check("and the sub-part NOTE is still there beside it",
+      [f for f in _fs4 if f.category == "identity-subpart"],
+      str([f.category for f in _fs4]))
+
+# The whole part must not collect either finding.
+_bl5, _fs5 = audit_gb(_PY + REFS["B0015"],
+                      [(1, len(_PY), "promoter", "PyeaR"),
+                       (len(_PY) + 1, len(_PY) + len(REFS["B0015"]),
+                        "terminator", "B0015")])
+check("the whole of PyeaR labelled PyeaR raises no truncation",
+      not [f for f in _fs5 if f.category == "truncation"],
+      str([(f.category, f.summary) for f in _fs5]))
+check("and no mislabel", not [f for f in _fs5 if f.category == "identity-mislabel"],
+      str([f.category for f in _fs5]))
 
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

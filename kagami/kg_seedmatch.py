@@ -467,7 +467,19 @@ def _merge_indels(hits, reflen, qseq="", refseq=""):
                     # counted as the mismatches they are.
                     pident=round(_pid, 1),
                     core_pident=round(_core, 1),
-                    cov=min(1.0, (re_ - rs) / float(reflen)),
+                    # Coverage is how much of the reference was actually COMPARED, not
+                    # the interval spanned. The span counted every base deleted inside it
+                    # as covered, and the error always ran in the direction that
+                    # suppresses the truncation FLAG: AmCyan with its last 34 bases
+                    # trimmed AND one deleted has 652 of 687 present -- a true 0.9491,
+                    # below the 0.95 threshold -- and reported 0.9520, so the student was
+                    # not told 35 bases of their reporter were missing.
+                    #
+                    # `aligned` is the exact recount above: reference positions that had
+                    # a query base against them. The remaining judgement -- how many
+                    # bases the student is MISSING -- belongs where the threshold lives,
+                    # in kg_audit, and it is made there from matched_len and indel_net.
+                    cov=min(1.0, aligned / float(reflen)),
                     length=aligned, bit=2.0 * matches,
                     # indel: how many bases were inserted or deleted in total, which is
                     # what the headline says. indel_net: the signed sum, which is what
