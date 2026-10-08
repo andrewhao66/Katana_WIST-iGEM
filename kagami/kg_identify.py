@@ -46,6 +46,8 @@ class Block:
         self.ref_in_query = None      # did the whole reference fit inside this sequence?
         self.wraps_origin = False     # on a plasmid, does this part cross the origin?
         self.indel = 0                # bases inserted or deleted inside the part
+        self.indel_net = 0            # signed net shift: what the reading frame feels
+        self.indel_events = 0         # how many separate shifts
         self.coverage = None          # matched_len / reference_len
         self.ref_len = None
         self.matched_len = None
@@ -323,6 +325,10 @@ def identify(record, workdir, status=None, deep=False):
         # insertion or a deletion inside the part, which is a frameshift risk in a
         # CDS and is not the same thing as the part being short.
         b.indel = h.get("indel") or 0
+        # The net shift decides the frame; the count of events decides how many
+        # places there are to look.
+        b.indel_net = h.get("indel_net") or 0
+        b.indel_events = h.get("indel_events") or 0
         b.ref_in_query = h.get("ref_in_query")
         b.alternatives = h.get("alternatives") or []
         b.ref_len = len(kg_refs.normalise(r["seq"])); b.matched_len = h["length"]

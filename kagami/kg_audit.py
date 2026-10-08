@@ -490,22 +490,34 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         n_indel = getattr(b, "indel", 0) or 0
         if not b.ident_id or not n_indel:
             continue
-        frame = n_indel % 3 != 0
+        # The NET shift decides the frame, not the total bases involved. An insertion of
+        # one base and a deletion of one base are two events and three bases of evidence
+        # to go and look at, but the frame downstream is untouched. Two deletions are also
+        # two events and the frame IS shifted. Using the total said "a multiple of three,
+        # so a reading frame survives it" about a CDS carrying two deleted bases.
+        n_net = abs(getattr(b, "indel_net", 0) or 0) or n_indel
+        n_events = getattr(b, "indel_events", 0) or 1
+        frame = n_net % 3 != 0
         role = (b.ident_role or b.claim_role or "").lower()
         coding = "cds" in role or "orf" in role
         findings.append(Finding(
             "indel", FLAG,
-            f"{b.ident_id} has {n_indel} base(s) inserted or deleted inside it",
+            (f"{b.ident_id} has {n_indel} base(s) inserted or deleted inside it"
+             + (f", at {n_events} separate places" if n_events > 1 else "")),
             loc=f"{b.start}-{b.end}",
-            detail=("The sequence matches this reference on either side of a shift of "
-                    f"{n_indel} base(s): the part is all there, but one stretch does not "
+            detail=("The sequence matches this reference on either side of "
+                    + (f"{n_events} shifts totalling {n_indel} base(s)"
+                       if n_events > 1 else f"a shift of {n_indel} base(s)")
+                    + ": the part is all there, but one stretch does not "
                     "line up with the rest. An insertion or deletion is the commonest "
                     "cloning and synthesis artifact."
-                    + (f" {n_indel} is not a multiple of three, so in a reading frame it "
-                       "SHIFTS every codon after it and the protein downstream is wrong."
+                    + (f" The net shift is {n_net}, which is not a multiple of three, so "
+                       "in a reading frame it SHIFTS every codon after it and the protein "
+                       "downstream is wrong."
                        if frame else
-                       " It is a multiple of three, so a reading frame survives it, but "
-                       "the residues there are not what the reference encodes.")
+                       f" The net shift is {n_net}, a multiple of three, so a reading "
+                       "frame survives it -- but the residues there are not what the "
+                       "reference encodes.")
                     + (" This block is coding, so that applies directly."
                        if coding else "")),
             fix=("Compare this region against the Registry entry base by base. If the "
@@ -749,18 +761,52 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
 
 
 def _longest_shared(seq, genome, cap=60):
-    """Longest exact contiguous match (either strand) up to `cap` bp. Coarse net;
-    the real Stage-4/intake check uses full blastn. Bounded for speed."""
+    """Longest exact contiguous match (either strand) up to `cap` bp.
+
+    This used to binary-search the length while SAMPLING the start positions at
+    `max(1, k // 2)` intervals. That predicate is not monotonic in k -- a longer k
+    samples more coarsely, so a match present at one start could be stepped over -- and a
+    binary search over a non-monotonic predicate returns an arbitrary answer.
+
+    Measured: sfGFP against its own [1:42] slice as the host reported 28, with an exact
+    41-base match sitting there. The host-homology check compares this against its
+    threshold, so a recombination substrate over the actionable length came back as a
+    PASS. A false all-clear on the one off-target check an audit can run without a
+    genome.
+
+    Now it extends from each exact seed instead. Every match of length >= `step` contains
+    a seed at some sampled start, so taking `step` small enough to be a floor rather than
+    an estimate makes the search complete up to `cap`: nothing of length >= SEED can hide
+    between samples, because consecutive samples are SEED apart and a match that long
+    spans one.
+    """
+    SEED = 12                 # every match of 12+ bases starts at some multiple of 12
     best = 0
     for s in (seq, revcomp(seq)):
-        lo, hi = 0, min(len(s), cap)
-        while lo < hi:
-            k = (lo + hi + 1) // 2
-            if any(s[i:i+k] in genome for i in range(0, len(s) - k + 1, max(1, k // 2))):
-                lo = k
-            else:
-                hi = k - 1
-        best = max(best, lo)
+        n = len(s)
+        limit = min(n, cap)
+        if limit <= 0:
+            continue
+        # Short sequences: just ask directly, which is exact and cheap.
+        if n <= SEED * 4:
+            for k in range(limit, best, -1):
+                if any(s[i:i + k] in genome for i in range(0, n - k + 1)):
+                    best = k
+                    break
+            continue
+        for i in range(0, n - SEED + 1, SEED):
+            seed = s[i:i + SEED]
+            if seed not in genome:
+                continue
+            # A seed is present: grow it both ways to find how far the match really runs.
+            lo, hi = i, i + SEED
+            while lo > 0 and s[lo - 1:hi] in genome and (hi - lo) < limit:
+                lo -= 1
+            while hi < n and s[lo:hi + 1] in genome and (hi - lo) < limit:
+                hi += 1
+            best = max(best, min(hi - lo, limit))
+            if best >= limit:
+                return best
     return best
 
 
@@ -788,6 +834,19 @@ def verdict_kind(findings):
         return FAIL
     if any(f.status == FLAG for f in findings):
         return "REVIEW"
+    # NOT every SKIP, but not none of them either. The blanket rule above was written for
+    # host-homology, which skips whenever no host is given -- the default, on most runs --
+    # and escalating that would put REVIEW on nearly every audit, which is the cry-wolf
+    # failure rather than a safeguard.
+    #
+    # An unchecked IDENTITY is a different thing. It means the tool could not establish
+    # what a labelled region actually is, which is the one question this software exists
+    # to answer. Measured before this: an eight-base region labelled "B0015" produced
+    # `identity-unchecked: SKIP` in the findings and a verdict of PASS, so the browser
+    # showed a green pill over a label nobody had verified. Surfacing a row does not stop
+    # a consumer treating the overall verdict as approval -- the verdict has to carry it.
+    if any(f.status == SKIP and f.category.startswith("identity") for f in findings):
+        return "REVIEW"
     return PASS
 
 
@@ -799,6 +858,13 @@ def verdict(findings):
         return FAIL
     if kind == "REVIEW":
         n = count(findings, FLAG)
+        if n == 0:
+            # REVIEW with nothing to resolve means an identity could not be checked.
+            # "REVIEW - 0 to resolve" would read like a bug; say what it is instead.
+            _unchecked = [f for f in findings if f.status == SKIP
+                          and f.category.startswith("identity")]
+            return ("REVIEW — %d label(s) could not be checked" % len(_unchecked)
+                    if _unchecked else "REVIEW")
         return f"REVIEW — {n} to resolve"
     n = count(findings, NOTE)
     if n:

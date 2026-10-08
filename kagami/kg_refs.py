@@ -172,6 +172,7 @@ def load_katana_library(root):
     import kg_parse
 
     root = os.path.abspath(root)
+    _root_missing = ""
     lock = os.path.join(root, "LOCK.tsv")
     if not os.path.isfile(lock):
         return [], ["no LOCK.tsv in %s" % root]
@@ -184,6 +185,36 @@ def load_katana_library(root):
             rows = _lock.read(lock)[1]
         except _lock.LockError as exc:
             return [], [str(exc)]
+        # And the ROOT. Reading the rows is not the same as checking the manifest, and
+        # this read them and stopped: a library whose last row had been lost -- a
+        # truncated sync, a partial copy -- loaded 29 parts with problems=[], while the
+        # forward engine refused the same directory with
+        #   "LOCK is not self-consistent: recomputed root 3bfe48c4... != LOCK.root
+        #    4fb2e30f... (rows added or removed?)"
+        # The audit side was trusting a library the build side rejects, and then using it
+        # to decide what a student's parts are. The root is the independent check; not
+        # consulting it is the third rule skipped.
+        _root_file = os.path.join(root, "LOCK.root")
+        if os.path.isfile(_root_file):
+            _ok, _msg = _lock.verify_root(lock, _root_file)
+            if not _ok:
+                return [], ["this library's own manifest does not verify, so nothing "
+                            "in it can be trusted: %s" % _msg]
+        else:
+            # A MISSING root is a weaker claim than a WRONG one, and the two deserve
+            # different answers. A mismatch means two sources disagree about what this
+            # library is, which is a discrepancy and gets refused above. An absent root
+            # means the library was never sealed as a group -- a hand-written LOCK.tsv,
+            # or one a team maintains by other means -- and refusing that outright would
+            # stop anyone using --library with a library they built themselves.
+            #
+            # So the parts load, every one of them still hash-gated individually below,
+            # and the missing group seal is REPORTED rather than either refused or passed
+            # over. Reporting a discrepancy without resolving it is the rule; this is the
+            # weaker cousin of one, and it gets said out loud too.
+            _root_missing = ("this library has no LOCK.root, so its rows have never been "
+                             "sealed as a group: each part below still matches its own "
+                             "hash, but nothing proves rows were not added or removed")
         seq_hash = _hashing.seq_sha256
     else:
         with open(lock, "r", encoding="utf-8") as fh:
@@ -236,9 +267,9 @@ def load_katana_library(root):
             variant=None, seq=seq,
             provenance="your library %s [seq_sha256 verified vs LOCK] | %s"
                        % (os.path.basename(path), row.get("source", "")[:100])))
+    if _root_missing:
+        problems.append(_root_missing)
     return parts, problems
-
-
 def add_library(root):
     """Merge a Katana library into the reference set. Yours wins on an id collision."""
     parts, problems = load_katana_library(root)

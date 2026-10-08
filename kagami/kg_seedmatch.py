@@ -292,7 +292,19 @@ def _merge_indels(hits, reflen):
                 b = group[j]
                 if used[j]:
                     continue
-                shift = abs(b.get("diag", 0) - merged.get("diag", 0))
+                # Against the PREVIOUS piece's diagonal, kept on the merged dict as
+                # `diag`, and SIGNED. Measuring against the growing merged dict made n
+                # single-base deletions report n(n+1)/2 -- two reported 3 -- and the
+                # audit decides whether a reading frame survives with `indel % 3`, so a
+                # CDS whose frame IS shifted was told "a reading frame survives it". A
+                # false reassurance about a frameshift is worse than the miscount
+                # underneath it.
+                #
+                # The sign matters for the same reason: d = qstart - refstart, so a
+                # deletion lowers it and an insertion raises it. One of each cancels and
+                # the frame really does survive; two deletions do not.
+                delta = b.get("diag", 0) - merged.get("diag", 0)
+                shift = abs(delta)
                 if not 0 < shift <= MAX_INDEL:
                     continue
                 # Reference intervals must be largely disjoint: two pieces of one part,
@@ -311,8 +323,27 @@ def _merge_indels(hits, reflen):
 
                 rs = min(merged["rstart"], b["rstart"])
                 re_ = max(merged["rend"], b["rend"])
-                matches = merged["matches"] + b["matches"]
-                aligned = merged["aligned"] + b["aligned"]
+                # Subtract the overlap. The two pieces' reference intervals are allowed
+                # to overlap by up to half the shorter one, and adding their match counts
+                # straight counted the shared bases TWICE -- so a duplicated base in
+                # B0015 reported 102.3% identity and a deleted one in sfGFP 100.7%. An
+                # identity above 100 is not a number: it means the numerator counted
+                # something more than once.
+                #
+                # Each piece's density of matches is the best estimate available for how
+                # many of its matches fall in the overlap, so the overlap is charged once
+                # at the better of the two densities rather than dropped or double-counted.
+                _dens_a = merged["matches"] / float(max(1, merged["aligned"]))
+                _dens_b = b["matches"] / float(max(1, b["aligned"]))
+                matches = merged["matches"] + b["matches"] - overlap * max(_dens_a,
+                                                                          _dens_b)
+                aligned = merged["aligned"] + b["aligned"] - overlap
+                span = float(max(1, re_ - rs))
+                # And clamp. The arithmetic above is an estimate over two local
+                # alignments, not a global one, so it must not be able to express an
+                # impossible answer even if a future change gets the estimate wrong.
+                _pid = min(100.0, max(0.0, 100.0 * matches / span))
+                _core = min(100.0, max(0.0, 100.0 * matches / float(max(1, aligned))))
                 merged.update(
                     qstart=min(merged["qstart"], b["qstart"]),
                     qend=max(merged["qend"], b["qend"]),
@@ -320,11 +351,22 @@ def _merge_indels(hits, reflen):
                     matches=matches, aligned=aligned,
                     # Identity over the reference accounted for, with the shifted bases
                     # counted as the mismatches they are.
-                    pident=round(100.0 * matches / float(re_ - rs), 1),
-                    core_pident=round(100.0 * matches / aligned, 1),
-                    cov=(re_ - rs) / float(reflen),
+                    pident=round(_pid, 1),
+                    core_pident=round(_core, 1),
+                    cov=min(1.0, (re_ - rs) / float(reflen)),
                     length=aligned, bit=2.0 * matches,
-                    indel=merged.get("indel", 0) + shift)
+                    # indel: how many bases were inserted or deleted in total, which is
+                    # what the headline says. indel_net: the signed sum, which is what
+                    # decides whether a reading frame survives. indel_events: how many
+                    # separate shifts, because "3 bases at one place" and "3 bases at
+                    # three places" are different things to go and look at.
+                    indel=merged.get("indel", 0) + shift,
+                    indel_net=merged.get("indel_net", 0) + delta,
+                    indel_events=merged.get("indel_events", 0) + 1,
+                    # The merged piece's own diagonal becomes the LAST one absorbed, so
+                    # the next comparison is against its neighbour and not against where
+                    # this chain started.
+                    diag=b.get("diag", merged.get("diag", 0)))
                 used[j] = True
             out.append(merged)
     return out

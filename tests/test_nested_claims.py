@@ -191,5 +191,51 @@ if os.path.isfile(demo):
     check("and its verdict is still REVIEW",
           kg_audit.verdict_kind(dfind) == "REVIEW", kg_audit.verdict(dfind))
 
+# ---- an unchecked IDENTITY must reach the verdict, not just the rows ----
+# Found by an independent review. An eight-base region labelled "B0015" produced
+# `identity-unchecked: SKIP` in the findings and a verdict of PASS -- so the browser
+# showed a green pill over a label nobody had verified. Surfacing a row does not stop a
+# consumer treating the overall verdict as approval; the verdict has to carry it.
+#
+# Not every SKIP: host-homology skips whenever no host is given, which is the default on
+# most runs, and escalating that would put REVIEW on nearly every audit. An unchecked
+# identity is the one question this software exists to answer.
+_short = _by_id["B0015"][:8] + _by_id["B0015"]
+_rec3, _bl3, _fs3, _st3 = None, None, None, None
+_d = tempfile.mkdtemp(prefix="unchecked_")
+_p = os.path.join(_d, "t.gb")
+_out = ["LOCUS       t %13d bp    DNA     linear   SYN" % len(_short),
+        "FEATURES             Location/Qualifiers",
+        "     terminator      1..8",
+        '                     /label="B0015"', "ORIGIN"]
+for _i in range(0, len(_short), 60):
+    _out.append("%9d %s" % (_i + 1, " ".join(_short[_i + _j:_i + _j + 10]
+                                             for _j in range(0, 60, 10))))
+_out.append("//")
+with open(_p, "w", encoding="utf-8") as _f:
+    _f.write("\n".join(_out) + "\n")
+_rec3 = kg_parse.parse(_p)
+_st3 = {}
+with tempfile.TemporaryDirectory() as _wd:
+    _bl3 = kg_identify.identify(_rec3, _wd, status=_st3)
+_fs3 = kg_audit.audit(_rec3, _bl3, identify_status=_st3)
+
+check("a label too short to identify produces an identity-unchecked SKIP",
+      any(f.category == "identity-unchecked" for f in _fs3),
+      str([(f.category, f.status) for f in _fs3]))
+check("and the VERDICT is REVIEW, not PASS",
+      kg_audit.verdict_kind(_fs3) == "REVIEW", kg_audit.verdict(_fs3))
+check("and the headline says labels could not be checked rather than '0 to resolve'",
+      "could not be checked" in kg_audit.verdict(_fs3), kg_audit.verdict(_fs3))
+
+# A host-homology SKIP on its own must NOT escalate, or every audit without a host
+# becomes REVIEW and the warning stops meaning anything.
+_only_host = [f for f in _fs3 if f.category == "host-homology"]
+_fs_host = _only_host + [f for f in _fs3 if f.status == kg_audit.PASS]
+check("a host-homology SKIP alone does not force REVIEW",
+      _only_host and kg_audit.verdict_kind(_fs_host) == "PASS",
+      "%s | %s" % ([(f.category, f.status) for f in _fs_host],
+                   kg_audit.verdict_kind(_fs_host)))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

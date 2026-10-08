@@ -208,7 +208,15 @@ with tempfile.TemporaryDirectory() as _lib:
         _f.write(_hdr + "\n" + _row + "\n")
 
     _parts, _probs = kg_refs.load_katana_library(_lib)
-    check("--library loads a hash-verified part", len(_parts) == 1 and not _probs)
+    # The part loads, and the MISSING LOCK.root is reported rather than passed over. The
+    # audit side used to read a manifest's rows and stop there, so a library whose last
+    # row had been lost loaded 29 parts with problems=[] while the forward engine refused
+    # the same directory for a root mismatch. A wrong root is a discrepancy and is now
+    # refused; an absent one is a weaker claim -- a hand-written manifest like this
+    # fixture -- so the parts load and the gap is said out loud.
+    check("--library loads a hash-verified part", len(_parts) == 1)
+    check("--library says so when the library has no LOCK.root",
+          any("LOCK.root" in _p for _p in _probs))
 
     # Flip one base. The recomputed seq_sha256 no longer matches LOCK, so it must be REFUSED
     # rather than loaded - a reference you cannot trust poisons every identification after it.
@@ -216,6 +224,8 @@ with tempfile.TemporaryDirectory() as _lib:
         _f.write(_gb("ATG" + "GCA" + "GCT" * 29 + "TAA",
                      [("CDS", "MyPart", 1, len(_seq))]))
     _parts2, _probs2 = kg_refs.load_katana_library(_lib)
+    # The no-root note is also in `problems` now, so the test looks for the refusal it
+    # actually cares about rather than requiring problems to hold nothing else.
     check("--library refuses a part whose bytes no longer match LOCK",
           not _parts2 and any("seq_sha256" in _x for _x in _probs2))
 
