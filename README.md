@@ -143,6 +143,150 @@ The second half is the point. Anyone can print "verified".
 
 ---
 
+## The other direction: check a sequence you already have
+
+Everything above builds a construct forwards, from part IDs to DNA. The other half reads a
+finished sequence and reports **whether the labels on it are true** — which is the question
+you have when a file arrives from a collaborator, a vendor, a registry download, or an AI
+assistant, and you have no idea where its annotations came from.
+
+```
+./katana check kagami/examples/demo.gb
+```
+
+(`./katana check` on its own takes the file you drag into the terminal, and offers the
+bundled demo if you just press return.)
+
+It takes GenBank or FASTA, identifies every stretch against this library and the public
+reference set, and prints one line per block: what the file *claims* that region is, what
+the bases *actually are*, and whether those two agree.
+
+That is the bundled demo, and its real output — abridged here, not invented — is a
+better advertisement for the five verdicts than anything we could make up:
+
+```
+DECOMPOSITION — 6 block(s) identified against the public seed set:
+       1-35     +  promoter    J23116  [100.0% id, 100% cov]  claim="J23116"
+      36-47     +  rbs         K1325011  [100.0% id, 100% cov]  claim="B0032"
+      48-54     +  -           unidentified region (no reference match)
+      55-708    +  cds         CDS (no reference match)  claim="reporter_cds"
+     715-843    +  terminator  B0015  [100.0% id, 100% cov]  claim="B0015"
+
+AUDIT:
+  [FLAG] identity-mislabel Block labelled "B0032" is actually K1325011 @ 36-47
+         → fix: Re-label to K1325011, or swap in the real B0032 sequence from
+           the Registry via katana-parts-library.
+  [----] identity-unchecked The label "reporter_cds" was not checked @ 55-708
+         · Nothing in the reference set matches these bases well enough to
+           compare the label against, so whether the label is true is not
+           known. Not checked -- which is not the same as checked and fine.
+  [----] host-homology    Host off-target scan not run (no host selected)
+  [PASS] orf              CDS at 55-708 ORF-clean @ 55-708
+  [PASS] junction         RBS→ATG spacing 9 nt (in 5–9, measured from the SD)
+
+VERDICT: REVIEW — 1 to resolve   (0 fail, 1 to resolve, 2 note, 2 NOT CHECKED)
+  Kagami reports; it does not SEAL.
+```
+
+Three things in that output are the whole design. The mislabel is **real** — those 12
+bases are `BBa_K1325011`, not `B0032`, and the file says `B0032`. The two `[----]` lines
+are checks that **did not run**, counted in the verdict line as `2 NOT CHECKED` rather
+than omitted. And the audit **reports; it does not seal** — only the forward engine seals,
+from a Spec, so an audit can never bless a sequence into the library.
+
+Five verdicts, and the fifth is the one that matters:
+
+| | Means |
+|---|---|
+| **FAIL** | A defect in the sequence itself — a premature stop, a frameshift |
+| **FLAG** | The labels and the bases disagree, or a part is not all there |
+| **NOTE** | Worth knowing, changes nothing — a synonym, a sub-part re-deposit |
+| **SKIP** | **A check that did not run.** Never silently absent |
+| **PASS** | Everything checked, nothing found |
+
+`SKIP` exists because the failure this project is about is a check that quietly vanishes.
+A missing genome, an absent optional package, a reference that is not in the set — each one
+is printed as a `SKIP` with its reason, and **a single SKIP holds back PASS**. "We did not
+check" never reads as "checked and fine".
+
+### What it will not do
+
+It will not tell you a label is wrong without checking the label against the facts first.
+That sounds obvious and it is where most of the work went. Three worked examples, all of
+them real:
+
+- **A sub-part re-deposit.** `BBa_K1799015` is exactly `PyeaR[13:113]` — a 100 bp registry
+  deposit of a *piece* of a 162 bp part. Asked to identify a complete PyeaR, the matcher
+  prefers the fragment, because the fragment matches end to end. The audit used to then
+  announce that a correctly labelled PyeaR "is actually K1799015" and tell the student to
+  change a label that was right — on the engine's own sealed output. It now checks whether
+  the block's bases occur inside the part the label names, and reports both readings.
+- **But a correct label is not a complete part.** With only `PyeaR[13:113]` present and
+  labelled `PyeaR`, the label *is* right and 62 bases are *missing*, and both of those are
+  said: a NOTE that the name is correct, and a FLAG counting what is absent.
+- **A strand is not a defect.** A reverse-strand RBS is an ordinary design choice. The
+  spacing check used to search the forward sequence whatever the strand said, so the same
+  construct reverse-complemented reported "No ATG found downstream of RBS" — a false
+  accusation about a junction that is correct. Both strands now report the same number.
+
+And a circular plasmid has no canonical start, so **rotating a file must not change its
+verdict.** It used to: the same molecule written from six different origins gave three
+different verdicts, including one FAIL. All six now agree.
+
+---
+
+## What is checked, and how it is tested
+
+| | |
+|---|---|
+| Assertions | **927** across 33 suites, plus three standalone checks that count differently |
+| Build-engine checks | 5 stages, every one a hard stop |
+| Audit checks | identity, orientation, truncation, indels, ORF frame, RBS junctions, restriction sites, composition, repeats, host homology, decomposition completeness |
+| Hash layers | `seq_sha256`, `file_sha256`, `row_sha256`, `LOCK.root` |
+| Self-tests | `verify.py` corrupts a scratch copy **8 ways** to prove its own checker works |
+| Reproduction | `test_determinism.py` rebuilds all 7 Specs and asserts the hashes of constructs we **ordered from a vendor** |
+
+Run everything:
+
+```
+./katana verify              # the library, plus 8 attempts to break the checker
+python3 test_determinism.py  # the 7 recorded construct hashes
+python3 tests/test_one_core.py
+```
+
+`tests/test_one_core.py` is the test that tests the tests: it reads `.gitlab-ci.yml`, lists
+the suites on disk, and fails if either contains a name the other does not. A suite that
+exists but never runs is the same failure as a check that silently skips.
+
+Every fix in this repository was made the same way, and the order is not negotiable:
+**reproduce the defect first, then fix it, then break the fix on purpose to prove the test
+would have caught it.** Where two mechanisms each suffice to produce correct behaviour,
+only breaking *both* reproduces the original defect — so that is what the test asserts.
+
+Several of those fixes were defects in earlier fixes in the same branch. Three examples,
+because they are the honest record of how this went:
+
+- A coverage assertion written as `> 95%` let `102.3%` through. Identity above 100% is
+  arithmetically impossible and it was a *sort key*, so a wrong number became a wrong
+  tile. The assertion now pins `0 < pident <= 100`, and strictly `< 100` for a part with a
+  base deleted.
+- A fix that let short alignment fragments survive caused a **287× noise regression** —
+  37 raw hits became 10,611 on 40 random 900 bp sequences, with a false positive at 0.800
+  coverage. The measurement that found it is now an assertion.
+- Three assertions I had written could not fail: `check(..., True)` twice and
+  `check(..., cond or True)` once, padding the count while testing nothing — in the file
+  whose whole subject is reports that look complete and are not. A scan of every tracked
+  Python file for that shape now finds none.
+
+Some things are measured and **deliberately not fixed**, with the numbers recorded beside
+them: references between 26 and 42 bp cannot reach full coverage because `MIN_HIT` is 25;
+the stride prefilter misses a 40 bp reference carrying 3 substitutions about 15 times in
+200; an insertion plus a compensating deletion does not merge into one finding. Each is a
+limit on what is *detected*, written down where someone can find it, rather than a limit
+that is simply not mentioned.
+
+---
+
 ## Reproduce the results
 
 **Build a construct.** A Design Spec plus the sealed library produce an annotated GenBank file, an

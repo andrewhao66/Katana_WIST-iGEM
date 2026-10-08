@@ -111,6 +111,35 @@ def _next_atg(seq, from_idx, window=40):
     return -1
 
 
+def _accuses_the_design(b):
+    """Is a FLAG or FAIL about this block a statement about the DESIGN, or about a guess?
+
+    A FLAG accuses. It is earned when somebody LABELLED this region -- then the finding is
+    about what they said -- or when the identification is complete and clean enough that
+    the block really is that part, whatever the file does or does not say about it.
+
+    Otherwise the block is the identifier's own best guess at a stretch nobody named, and a
+    finding about a partial guess is a fact about the guess. Those are still reported, as a
+    NOTE, which never changes a PASS.
+
+    Measured on a circular record, which is where this shows up with no ambiguity: the same
+    molecule rotated to six different origins gave three different verdicts. The parts that
+    were actually present -- sfGFP and B0015 -- were identified completely at every
+    rotation, coverage 1.000, which is correct and rotation-invariant. What moved was which
+    incidental composite the tiler picked up in the filler, each then carrying FLAGs and
+    once an ORF FAIL: at one origin K1758101 was matched at 1049-1899 on a 1049-base record
+    -- a block wrapping the whole molecule, 94% covered with eight indels -- and the ORF
+    check read 851 bases across a junction nobody intended as a reading frame and found a
+    stop in it. A plasmid has no canonical start, so a FAIL that depends on where someone
+    chose to cut the file is noise with a severity attached.
+    """
+    if (b.claim_label or "").strip():
+        return True
+    cov = b.coverage
+    return (cov is not None and cov >= 0.95
+            and not (getattr(b, "indel", 0) or 0))
+
+
 SD_CONSENSUS = "AGGAGG"
 
 
@@ -524,7 +553,7 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         role = (b.ident_role or b.claim_role or "").lower()
         coding = "cds" in role or "orf" in role
         findings.append(Finding(
-            "indel", FLAG,
+            "indel", (FLAG if _accuses_the_design(b) else NOTE),
             (f"{b.ident_id} has {n_indel} base(s) inserted or deleted inside it"
              + (f", at {n_events} separate places" if n_events > 1 else "")),
             loc=f"{b.start}-{b.end}",
@@ -561,9 +590,27 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
             _missing = max(0, b.ref_len - b.matched_len + _del)
         _short_frac = (_missing / float(b.ref_len)) if (_missing is not None
                                                         and b.ref_len) else None
+        # A FLAG accuses the design. With no CLAIM on this block there is nothing to
+        # accuse: nobody said this region was K1758101 -- the identifier offered it as
+        # its best guess, and a guess that is partial is a fact about the guess, not a
+        # truncation of anyone's part.
+        #
+        # Measured on a circular record, which is where it shows: the same molecule
+        # rotated to five different origins gave five different sets of findings. The
+        # parts that were actually there -- sfGFP and B0015 -- were identified completely
+        # at every rotation, coverage 1.000, which is correct and rotation-invariant. What
+        # moved was which incidental composite the tiler picked up in the filler
+        # (K1758101 at one origin, K157005 at another, K112903 at a third), each then
+        # FLAGGED for being incomplete. A circular plasmid has no canonical start, so a
+        # FLAG that depends on where someone chose to cut the file is noise with a
+        # severity attached.
+        #
+        # Unclaimed shortfalls are still reported, as a NOTE, which never changes a PASS.
+        _claimed = _accuses_the_design(b)
         if b.ident_id and ((_short_frac is not None and _short_frac > 0.05)
                            or (_short_frac is None and b.coverage is not None
                                and b.coverage < 0.95)):
+            _sev = FLAG if _claimed else NOTE
             # "Only N/M bp present" was a claim about the construct, and for a part whose
             # END has diverged it is a false one: those bases ARE present, they just
             # differ. Sequence alone cannot tell a substitution from a replacement -- they
@@ -592,7 +639,10 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                           f"are in this sequence at all -- the rest runs past its end.")
                 fix = ("Confirm the full-length part; a truncated "
                        "promoter/terminator/RBS often loses function.")
-            findings.append(Finding("truncation", FLAG, head,
+            if not _claimed:
+                head = head + " (nothing here was labelled, so this is the "
+                head = head + "identifier's own partial match)"
+            findings.append(Finding("truncation", _sev, head,
                                     loc=f"{b.start}-{b.end}",
                                     detail=detail, fix=fix))
 
@@ -618,14 +668,17 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         starts_atg = sub[:3] in ("ATG", "GTG", "TTG")
         if internal_stop:
             findings.append(Finding(
-                "orf", FAIL,
-                f"CDS at {b.start}-{b.end} has an internal stop codon",
+                "orf", (FAIL if _accuses_the_design(b) else NOTE),
+                f"CDS at {b.start}-{b.end} has an internal stop codon"
+                + ("" if _accuses_the_design(b)
+                   else " (nothing here was labelled -- this frame is the identifier's "
+                        "own partial match, not a declared CDS)"),
                 loc=f"{b.start}-{b.end}",
                 detail="Premature stop in the reading frame — the protein is truncated.",
                 fix="Fix the frame/sequence; re-check the upstream junction and any scar."))
         elif len(sub) % 3 != 0:
             findings.append(Finding(
-                "orf", FLAG,
+                "orf", (FLAG if _accuses_the_design(b) else NOTE),
                 f"CDS at {b.start}-{b.end} length is not a multiple of 3",
                 loc=f"{b.start}-{b.end}",
                 detail=f"{len(sub)} bp — frame is ambiguous; a fusion may be out of frame.",

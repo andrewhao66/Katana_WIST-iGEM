@@ -37,7 +37,27 @@ class Record:
         self.features = features            # list[Feature]
 
     def sub(self, start, end):
-        """1-based inclusive slice."""
+        """1-based inclusive slice; wraps the origin when the record is circular.
+
+        A circular molecule has no end, so a block that crosses the origin has
+        `end > len(seq)` and a plain slice silently returns the TRUNCATED front half.
+        Measured: sfGFP identified at 650-1369 on a 1049-base circular record came back
+        400 bases long, so the ORF check reported "length is not a multiple of 3" for a
+        complete, intact 720-base gene -- and the finding appeared or vanished depending
+        on where the file happened to have been cut, which for a plasmid is an arbitrary
+        choice. The same molecule rotated to five origins gave three different verdicts.
+
+        A linear record keeps the old behaviour exactly: there is nothing past its end,
+        and a request for bases beyond it is clamped rather than wrapped.
+        """
+        if self.topology == "circular" and self.seq and end > len(self.seq):
+            n = len(self.seq)
+            s = (start - 1) % n
+            want = end - start + 1
+            if want >= n:                 # a block longer than the molecule: one lap
+                return (self.seq * (want // n + 2))[s:s + want]
+            tail = self.seq[s:]
+            return (tail + self.seq)[:want]
         return self.seq[start - 1:end]
 
 

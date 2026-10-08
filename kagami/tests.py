@@ -621,7 +621,14 @@ except ImportError:
     except ImportError:
         _yaml = None
 if _yaml is None:
-    check("emitted Spec is valid YAML (SKIPPED — no YAML parser, not even vendored)", True)
+    # This used to be `check(..., True)` -- a check that passes BY VANISHING, which is the
+    # exact failure mode this project refuses: "SKIP exists so that 'we did not check'
+    # never reads as 'checked and fine'", and a tautology does not even say which it was.
+    # The repository vendors PyYAML, so reaching here means the vendored copy is missing
+    # or broken, which is a defect in the repository and not a property of the machine.
+    # It fails, and says what to look at.
+    check("a YAML parser is available, vendored if not installed "
+          "(_vendor/ is missing or broken)", False)
 else:
     try:
         _spec = _yaml.safe_load(_spec_text)

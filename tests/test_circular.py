@@ -242,5 +242,89 @@ check("the sealed construct hash is unchanged",
       "796e94a0ea2452edd2ce59ca30b8f28fea232b37ab2a036714239069fd1196f5" in p.stdout,
       p.stdout[-200:])
 
+# ---- a plasmid has no canonical start, so rotating it must not change the verdict ----
+# Found by an independent Codex review. The same circular molecule, written out from six
+# different origins, gave THREE different verdicts: PASS at two of them, REVIEW at two,
+# FAIL at one. Where a file happens to have been cut is an arbitrary choice for a
+# plasmid, and a FAIL that depends on it is noise with a severity attached.
+#
+# Two causes, both measured.
+#
+# record.sub() was a plain linear slice, so a block crossing the origin -- end greater
+# than len(seq) -- silently got the TRUNCATED front half. sfGFP identified at 650-1369 on
+# a 1049-base circular record came back 400 bases long, and the ORF check reported
+# "length is not a multiple of 3" for a complete, intact 720-base gene.
+#
+# And FLAGs were raised on blocks nobody had labelled. At one origin the tiler picked up
+# K1758101 at 1049-1899 -- a block wrapping the whole molecule, 94% covered with eight
+# indels -- and the ORF check read 851 bases across a junction nobody intended as a
+# reading frame, found a stop in it, and FAILED the construct. A FLAG accuses the design;
+# with no claim there is nothing to accuse, so those are NOTEs now.
+#
+# The parts that were really there -- sfGFP and B0015 -- were identified completely at
+# every rotation, coverage 1.000. That was right all along, and it still is.
+import random
+
+_BY = {r["id"]: kg_refs.normalise(r.get("seq") or "")
+       for r in kg_refs.REFERENCE_PARTS if r.get("seq")}
+_G, _T = _BY["sfGFP"], _BY["B0015"]
+random.seed(17)
+_FILL = "".join(random.choice("ACGT") for _ in range(200))
+_BASE = _G + _T + _FILL
+
+_seen = {}
+for _rot in (0, 150, 400, 719, 900, 1000):
+    _rotated = _BASE[_rot:] + _BASE[:_rot]
+    _fs = audit_seq(_rotated, topology="circular")[2]
+    _seen[_rot] = (kg_audit.verdict_kind(_fs),
+                   tuple(sorted(f.category for f in _fs
+                                if f.status in (kg_audit.FLAG, kg_audit.FAIL))))
+check("every rotation of one circular molecule gives the SAME verdict",
+      len(set(_seen.values())) == 1,
+      "; ".join("rot=%d %s %s" % (r, v, list(k)) for r, (v, k) in _seen.items()))
+check("and that verdict is PASS, because the molecule is clean",
+      all(v == "PASS" for v, _ in _seen.values()),
+      str({r: v for r, (v, _) in _seen.items()}))
+
+# sub() must wrap, and must NOT wrap on a linear record.
+_circ = audit_seq(_BASE, topology="circular")[0]
+_n = len(_BASE)
+check("record.sub wraps the origin on a circular record",
+      len(_circ.sub(_n - 99, _n + 100)) == 200,
+      len(_circ.sub(_n - 99, _n + 100)))
+check("and the wrapped bases are the right ones",
+      _circ.sub(_n - 99, _n + 100) == _BASE[-100:] + _BASE[:100])
+_lin = audit_seq(_BASE, topology="linear")[0]
+check("a linear record does NOT wrap -- it clamps",
+      len(_lin.sub(_n - 99, _n + 100)) == 100,
+      len(_lin.sub(_n - 99, _n + 100)))
+check("and an ordinary in-range slice is identical on both",
+      _circ.sub(10, 60) == _lin.sub(10, 60) == _BASE[9:60])
+
+# ---- and the severity rule must not silence a real defect ----
+_mut = list(_G)
+_mut[300:303] = list("TGA")
+_mut = "".join(_mut)
+_fs_claimed = audit_seq(_mut + _T, feats=[(1, len(_G), "CDS", "sfGFP")])[2]
+check("a LABELLED CDS with an internal stop still FAILS",
+      [f for f in _fs_claimed if f.category == "orf" and f.status == kg_audit.FAIL],
+      str([(f.status, f.category, f.summary[:50]) for f in _fs_claimed
+           if f.category == "orf"]))
+_fs_unclaimed = audit_seq(_mut + _T)[2]
+check("and so does an UNLABELLED one that was identified completely",
+      [f for f in _fs_unclaimed if f.category == "orf" and f.status == kg_audit.FAIL],
+      str([(f.status, f.category) for f in _fs_unclaimed if f.category == "orf"]))
+
+_del = list(_G)
+del _del[400]
+_fs_del = audit_seq("".join(_del) + _T,
+                    feats=[(1, len(_G) - 1, "CDS", "sfGFP")])[2]
+check("a labelled 1 bp deletion still raises an indel FLAG",
+      [f for f in _fs_del if f.category == "indel" and f.status == kg_audit.FLAG],
+      str([(f.status, f.category) for f in _fs_del if f.category == "indel"]))
+check("  and the frameshift still FAILS the ORF",
+      [f for f in _fs_del if f.category == "orf" and f.status == kg_audit.FAIL],
+      str([(f.status, f.category) for f in _fs_del if f.category == "orf"]))
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)
