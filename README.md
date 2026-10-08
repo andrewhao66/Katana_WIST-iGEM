@@ -36,6 +36,38 @@ Download, unzip, and from a terminal in that folder:
 It asks what you want to do. **Nothing needs installing beyond Python 3.9 or newer** — no
 `pip`, no NCBI BLAST+, no genome download.
 
+> **If `./katana` says "Permission denied"**, the thing that unzipped it dropped the
+> executable bit. `unzip katana.zip` keeps it; Finder's Archive Utility and some GUI
+> tools do not. Either of these fixes it:
+>
+> ```
+> bash katana            # works whatever the permissions are
+> chmod +x katana        # or fix it once, then ./katana works
+> ```
+
+### Which systems it runs on
+
+Any machine with Python 3.9 or newer. There is nothing compiled in the download — 149
+files, all text or pure Python, with no `.so`, `.dll` or `.dylib` anywhere, so there is no
+architecture to match and no build step.
+
+| | Launcher | Status |
+|---|---|---|
+| macOS (Intel and Apple silicon) | `./katana` | Verified here, on Python 3.9 and 3.13 |
+| Linux | `./katana` | Expected to work; **not run on Linux in this session** |
+| Windows | `katana.bat` | Expected to work; **not run on Windows in this session** |
+
+On Debian or Ubuntu the window (`./katana gui`) also needs `sudo apt install python3-tk`;
+everything else works without it. On macOS run the launcher **from Terminal rather than
+double-clicking it** — macOS blocks downloaded scripts that are not code-signed, and this
+one is not. That block applies to double-clicking only, not to a shell running it.
+
+The two "not run" rows are honest rather than cautious: the code is stdlib-only and its
+platform branches cover all three, but nobody on this team has a Linux or Windows machine,
+so nothing here has been measured on one. If you try it on either, the one command worth
+reporting back is `./katana verify` — it re-hashes the whole library and then tries eight
+ways to break its own checker.
+
 If you already know what you want:
 
 ```

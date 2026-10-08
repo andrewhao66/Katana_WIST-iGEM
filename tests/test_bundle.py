@@ -157,6 +157,66 @@ if os.path.isfile(_lock_src):
     with open(_lock_src, "rb") as f1, open(_lock_out, "rb") as f2:
         check("LOCK.tsv survives the zip byte for byte", f1.read() == f2.read())
 
+# ---- the zip must carry nothing platform-specific ----
+# This is what makes "any machine with Python 3.9" true: there is no architecture to
+# match, because there is nothing compiled in it. The vendored PyYAML had its .so removed
+# for exactly this reason.
+with zipfile.ZipFile(_zip) as z:
+    _compiled = [n for n in z.namelist()
+                 if n.endswith((".so", ".dll", ".dylib", ".pyd", ".exe", ".o", ".a"))]
+    check("the zip contains no compiled artifact (%s)"
+          % (", ".join(_compiled[:3]) or "none"), not _compiled)
+    _magic = {}
+    for _n in z.namelist():
+        if _n.endswith("/"):
+            continue
+        _h = z.open(_n).read(4)
+        if _h[:4] in (b"\xcf\xfa\xed\xfe", b"\xce\xfa\xed\xfe", b"\xca\xfe\xba\xbe"):
+            _magic.setdefault("Mach-O", []).append(_n)
+        elif _h[:4] == b"\x7fELF":
+            _magic.setdefault("ELF", []).append(_n)
+        elif _h[:2] == b"MZ":
+            _magic.setdefault("PE", []).append(_n)
+    check("and no executable binary of any format (%s)"
+          % (", ".join(_magic) or "none"), not _magic)
+
+    # Each launcher keeps the line endings its own interpreter needs. A .bat with bare
+    # LF misbehaves in cmd; a shell script with CRLF fails with "bad interpreter".
+    _sh = z.read("katana/katana")
+    _bat = z.read("katana/katana.bat")
+    check("the POSIX launcher is LF-only",
+          _sh.count(b"\r\n") == 0 and b"\n" in _sh,
+          "CRLF %d" % _sh.count(b"\r\n"))
+    check("and the Windows launcher is CRLF-only",
+          _bat.count(b"\n") == _bat.count(b"\r\n"),
+          "CRLF %d of %d LF" % (_bat.count(b"\r\n"), _bat.count(b"\n")))
+
+# ---- and the instructions must cover the extractor that drops the mode ----
+# Measured: `unzip` keeps mode 0755, Python's zipfile strips it, and Finder's Archive
+# Utility is in the second camp. Then ./katana answers "Permission denied" and nothing
+# says why. `bash katana` works whatever the permissions are -- verified above on a copy
+# with the bit removed -- so the way out has to be written down where somebody will see it.
+_readme = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
+check("the README explains Permission denied", "Permission denied" in _readme)
+check("and gives a way out that needs no chmod", "bash katana" in _readme)
+_mb = open(os.path.join(ROOT, "make_bundle.py"), encoding="utf-8").read()
+check("and `katana bundle` says the same to whoever ships it",
+      "Permission denied" in _mb and "bash katana" in _mb)
+
+# The fallback is a real path, not just a launcher that starts: run it with the bit off.
+_noexec = os.path.join(_tmp, "noexec")
+with zipfile.ZipFile(_zip) as z:
+    z.extractall(_noexec)          # zipfile does NOT preserve the mode -- that is the point
+_app2 = os.path.join(_noexec, "katana")
+check("extracting with Python's zipfile really does drop the executable bit",
+      not os.access(os.path.join(_app2, "katana"), os.X_OK))
+_p = subprocess.run(["bash", "katana", "verify"], cwd=_app2, env=_env,
+                    capture_output=True, text=True, timeout=600)
+check("and `bash katana verify` works anyway", _p.returncode == 0,
+      (_p.stdout + _p.stderr)[-250:])
+check("and reports the library intact", "8/8 checks passed" in _p.stdout,
+      _p.stdout[-200:])
+
 shutil.rmtree(_tmp, ignore_errors=True)
 
 print("\n%d passed, %d failed" % (PASS, FAIL))

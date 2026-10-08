@@ -154,9 +154,17 @@ def main(argv=None):
     print("    cd katana")
     print("    ./katana")
     print()
+    print("Use `unzip`, not a double-click. The zip stores the launcher as executable and")
+    print("`unzip` keeps that, but Finder's Archive Utility and some GUI tools drop it --")
+    print("measured: Python's own zipfile module strips it too. Then `./katana` answers")
+    print("\"Permission denied\" and nothing explains why. If that happens:")
+    print()
+    print("    bash katana            # works whatever the permissions are")
+    print("    chmod +x katana        # or fix it once and use ./katana after")
+    print()
     print("Nothing to install. On a Mac they must run it from Terminal rather than")
-    print("double-clicking, because macOS blocks downloaded scripts that are not")
-    print("code-signed -- the README says so, and so does the launcher itself.")
+    print("double-clicking the launcher, because macOS blocks downloaded scripts that are")
+    print("not code-signed -- the README says so, and so does the launcher itself.")
     return 0
 
 
