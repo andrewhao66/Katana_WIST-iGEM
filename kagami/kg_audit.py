@@ -11,6 +11,9 @@ same thing a katana-validate PASS does:
 """
 from kg_parse import revcomp
 from kg_seedmatch import MAX_LOCI
+
+# Mirrors kg_identify's MIN_REMAINDER: the shortest leftover that gets its own row.
+_MIN_ROW = 6
 import kg_refs
 
 # --- enzyme sites, copied from parts-library/_tools/forbid_sites_check.py ---
@@ -218,6 +221,26 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                                      "Add the relevant parts to the seed set via "
                                      "katana-parts-library intake, then re-run.")))
 
+    # ---- THE DECOMPOSITION DOES NOT ACCOUNT FOR EVERY BASE ----
+    # A leftover under MIN_REMAINDER gets no row of its own, which is right: a 2 bp scar
+    # between two parts is not worth a line. But a decomposition that reads like a
+    # complete accounting of the sequence has to be one, or say how much it is short --
+    # and it used to say neither. On Katana's own build of pSense-Nit the table began at
+    # base 14 and 13 bases appeared nowhere at all, not even as a number. A finding rather
+    # than a header line, so the web page and --json carry it too.
+    _short = (identify_status or {}).get("unaccounted_bp") or 0
+    if _short:
+        _acc = (identify_status or {}).get("accounted_bp") or 0
+        findings.append(Finding(
+            "decomposition", NOTE,
+            f"{_short} base(s) are not in any block",
+            detail=(f"The blocks above account for {_acc} of {len(record.seq)} bases. "
+                    f"The remaining {_short} sit in fragments shorter than "
+                    f"{_MIN_ROW} bp, between or beside the parts -- usually assembly "
+                    f"scars or spare bases from a primer. They were looked at; they are "
+                    f"too short to identify and too short to list as their own row."),
+            fix=None))
+
     # ---- NOT EVERY OCCURRENCE WAS EXAMINED ----
     # The identifier extends at most MAX_LOCI diagonals per reference per strand. Beyond
     # that it used to drop the rest in silence: five tandem copies of a part got four
@@ -337,6 +360,64 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
             # Named correctly, pointed the wrong way. The orientation FLAG above already
             # says what is wrong; naming it a mislabel on top of that would be a second,
             # false accusation about the identity, which is the thing that IS right.
+            continue
+
+        # SUB-PART RE-DEPOSITS. The Registry holds fragments of parts as parts in their
+        # own right, so the bases of one part are often also, exactly, some shorter
+        # part's whole sequence. K1799015 is PyeaR[13:113]: 100 of PyeaR's 162 bases,
+        # deposited separately.
+        #
+        # Both are hits, and _tile prefers completeness -- for a documented reason, so a
+        # composite cannot swallow the real parts inside it -- so the 100%-complete
+        # FRAGMENT won over the 96.9%-complete real part. The identifier then named the
+        # fragment, and this check compared the claim against that name and accused it:
+        #
+        #   [FLAG] Block labelled "PyeaR" is actually K1799015
+        #          fix: Re-label to K1799015, or swap in the real PyeaR sequence
+        #
+        # on a construct Katana had just built from its own sealed PyeaR. A false
+        # accusation on the one check this software exists to perform, against the
+        # engine's own output, telling a student to change a label that was right.
+        #
+        # So the claim is checked against the FACTS, not against the identifier's choice
+        # of name: do these bases actually occur in the sequence the claim names? If they
+        # do, the label is true whichever re-deposit got reported.
+        #
+        # Measured before settling on this: reporting every longer reference that
+        # contains an identified one was tried and abandoned. The Registry is a dense web
+        # of nested re-deposits and it fired dozens of times per construct -- the
+        # cry-wolf failure this is meant to remove.
+        # by_id() keys keep the Registry's own casing, and claim_norm is upper-cased, so
+        # a direct lookup silently misses every part whose id is not already upper --
+        # which is most of them, PyeaR included. Match case-insensitively, once.
+        claim_ref_seq = ""
+        if claim_norm:
+            _byid = kg_refs.by_id()
+            _cr = _byid.get(claim_norm)
+            if _cr is None:
+                for _k, _v in _byid.items():
+                    if _k.replace("BBa_", "").upper() == claim_norm:
+                        _cr = _v
+                        break
+            claim_ref_seq = kg_refs.normalise((_cr or {}).get("seq") or "")
+        block_bases = kg_refs.normalise(record.seq[b.start - 1:b.end]) if b.start else ""
+        if b.strand == -1 and block_bases:
+            block_bases = revcomp(block_bases)
+        if (claim_ref_seq and block_bases and claim_norm != ident
+                and len(block_bases) >= 12 and block_bases in claim_ref_seq):
+            at = claim_ref_seq.find(block_bases)
+            findings.append(Finding(
+                "identity-subpart", NOTE,
+                f'Block labelled "{claim}" is correct — {b.ident_id} is a shorter '
+                f're-deposit of part of it',
+                loc=f"{b.start}-{b.end}",
+                detail=(f"These {len(block_bases)} bases are {claim}'s own, at its "
+                        f"position {at + 1}-{at + len(block_bases)} of "
+                        f"{len(claim_ref_seq)}. The Registry also holds them as "
+                        f"{b.ident_id}, a separate shorter entry, and the identifier "
+                        f"named that one because it matches end to end while {claim} "
+                        f"here does not. Both readings are of the same bases."),
+                fix=None))
             continue
 
         if claim_norm and claim_norm != ident and ident not in claim_norm:

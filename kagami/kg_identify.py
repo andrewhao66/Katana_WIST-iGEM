@@ -382,20 +382,33 @@ def identify(record, workdir, status=None, deep=False):
 
     blocks.sort(key=lambda b: b.start)
 
-    # Fill large unidentified gaps; label CDS-like ones via ORF scan.
+    # The smallest leftover worth showing as its own block. Below this it is a scar or a couple
+    # of spare bases; at this size it is a real element (an RBS is ~18 bp) and the reader wants it.
+    MIN_REMAINDER = 6
+
+    # Fill unidentified gaps; label CDS-like ones via ORF scan.
+    #
+    # The threshold here was 30, four lines below the constant above whose comment argues
+    # for 6 -- two thresholds disagreeing, and the one in force was longer than an RBS. So
+    # any gap under 30 bases vanished from the decomposition entirely: not an identified
+    # block, not an unidentified row, not a number. Measured on Katana's own build of
+    # pSense-Nit, 1000 of 1013 bases were accounted for and the table simply began at 14.
+    # The missing 13 were the start of the construct's own promoter, not a scar. On the
+    # demo, 13 bases went the same way across two gaps of 7 and 6.
+    #
+    # MIN_REMAINDER is the threshold now, since it is the one whose reasoning is written
+    # down. Anything smaller than that still does not vanish: identify() records the
+    # shortfall in `status` and the report states it, because "we did not account for
+    # these" must not read as nothing at all.
     covered = [(b.start, b.end) for b in blocks]
     gaps = []
     cursor = 1
     for s, e in sorted(covered):
-        if s - cursor >= 30:
+        if s - cursor >= MIN_REMAINDER:
             gaps.append((cursor, s - 1))
         cursor = max(cursor, e + 1)
-    if len(seq) - cursor + 1 >= 30:
+    if len(seq) - cursor + 1 >= MIN_REMAINDER:
         gaps.append((cursor, len(seq)))
-
-    # The smallest leftover worth showing as its own block. Below this it is a scar or a couple
-    # of spare bases; at this size it is a real element (an RBS is ~18 bp) and the reader wants it.
-    MIN_REMAINDER = 6
 
     def _unidentified(a, b_):
         blk = Block(a, b_, 1)
@@ -424,4 +437,25 @@ def identify(record, workdir, status=None, deep=False):
             blocks.append(_unidentified(gs, ge))
 
     blocks.sort(key=lambda b: b.start)
+
+    # What the decomposition does NOT account for. A leftover smaller than
+
+    # MIN_REMAINDER gets no row of its own -- a 2 bp scar between two parts is not
+
+    # worth a line -- but it must not vanish either, so the count goes out through
+
+    # status and the report states it. A table that looks like a complete
+
+    # accounting of the sequence has to be one, or say how much it is short.
+
+    if status is not None:
+
+        _acc = sum(b.end - b.start + 1 for b in blocks)
+
+        if _acc < len(seq):
+
+            status["unaccounted_bp"] = len(seq) - _acc
+
+            status["accounted_bp"] = _acc
+
     return blocks
