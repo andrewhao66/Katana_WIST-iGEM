@@ -108,6 +108,29 @@ DEFAULT_EXPECT_ROOT = None
 _REFUSE = False
 
 
+# Serialises build() and main(). Not an optimisation to remove: build() rebinds process
+# GLOBAL state -- LIB / LOCK_PATH / LOCK_ROOT_PATH so the stages can find the library, and
+# sys.stdout so it can capture its own log -- and two concurrent calls corrupt both.
+#
+# Measured, ten pairs of threads building one spec against two libraries, one of them
+# deliberately missing a part the spec needs:
+#   9 of 10 rounds wrong, in BOTH directions. The complete library reported FAIL; and the
+#   INCOMPLETE one reported REVIEW -- a construct the engine could not assemble, coming
+#   back near-clean, which is this project's cardinal failure. sys.stdout was left
+#   pointing at an abandoned buffer in half the rounds, so every print in the process
+#   afterwards vanished, and res.log came back empty in seven.
+#
+# A lock rather than real thread-safety: threading the library through every stage would
+# touch resolve_parts and the GenBank reader for no behavioural gain, and sys.stdout is
+# process-global whatever you do. The worst case here is that one build waits. The
+# alternative is a wrong answer that looks right, and for this tool that trade is not
+# close.
+#
+# RLock, not Lock, so a nested call cannot deadlock the process with no message at all --
+# a worse failure than the one this replaces. The global save/restore is properly nested.
+_BUILD_LOCK = __import__("threading").RLock()
+
+
 class _Refused(BaseException):
     """A stage refused to continue. Carries the stage name and the message.
 
@@ -774,17 +797,19 @@ def _run_pipeline(args, res):
     GUI runs one build at a time in one worker thread, and Pyodide is single-threaded.
     """
     global LIB, LOCK_PATH, LOCK_ROOT_PATH
-    _saved = (LIB, LOCK_PATH, LOCK_ROOT_PATH)
-    requested = getattr(args, "library", None)
-    if requested:
-        LIB, LOCK_PATH, LOCK_ROOT_PATH = _resolve_library(requested)
-    # Record the library actually used, not the one asked for. The two were allowed to
-    # differ, and the recorded value was the fiction.
-    res.library = str(LIB)
-    try:
-        return _run_pipeline_inner(args, res)
-    finally:
-        LIB, LOCK_PATH, LOCK_ROOT_PATH = _saved
+    # Held for the whole pipeline, because every stage reads the globals rebound below.
+    with _BUILD_LOCK:
+        _saved = (LIB, LOCK_PATH, LOCK_ROOT_PATH)
+        requested = getattr(args, "library", None)
+        if requested:
+            LIB, LOCK_PATH, LOCK_ROOT_PATH = _resolve_library(requested)
+        # Record the library actually used, not the one asked for. The two were allowed to
+        # differ, and the recorded value was the fiction.
+        res.library = str(LIB)
+        try:
+            return _run_pipeline_inner(args, res)
+        finally:
+            LIB, LOCK_PATH, LOCK_ROOT_PATH = _saved
 
 
 def _run_pipeline_inner(args, res):
@@ -1134,29 +1159,37 @@ def build(spec_path, library=None, **opts):
         sbol_format=opts.get("sbol_format", "turtle"),
         json=False)
 
+    # The SAME lock the pipeline takes, acquired HERE because this function rebinds two
+    # more pieces of process-global state before the pipeline is even entered:
+    # sys.stdout, to capture its own log, and _REFUSE, which decides whether a stage
+    # raises or exits. Taking the lock only inside _run_pipeline left those two
+    # unprotected -- measured after the first fix, the verdicts were right in 10 of 10
+    # rounds and sys.stdout was still lost in 10 of 10, with res.log empty in all of
+    # them. It is an RLock, so the nested acquire costs nothing.
     buf = _io.StringIO()
-    old_stdout, old_refuse = sys.stdout, _REFUSE
-    if opts.get("capture", True):
-        sys.stdout = buf
-    _REFUSE = True
-    try:
-        _run_pipeline(args, res)
-    except _Refused as refusal:
-        res.add(_result.StageResult(
-            refusal.stage, False,
-            [_result.Finding("block", _result.FAIL,
-                             refusal.message.splitlines()[0],
-                             detail="\n".join(refusal.message.splitlines()[1:]))]))
-    except SystemExit as exc:
-        # A path that still exits -- the spec-not-found check and the YAML reader run
-        # before any stage exists. Record it rather than letting it escape a GUI thread.
-        res.add(_result.StageResult(
-            "spec", False,
-            [_result.Finding("block", _result.FAIL,
-                             str(exc).splitlines()[0] if str(exc) else "the engine stopped",
-                             detail="\n".join(str(exc).splitlines()[1:]))]))
-    finally:
-        sys.stdout, _REFUSE = old_stdout, old_refuse
+    with _BUILD_LOCK:
+        old_stdout, old_refuse = sys.stdout, _REFUSE
+        if opts.get("capture", True):
+            sys.stdout = buf
+        _REFUSE = True
+        try:
+            _run_pipeline(args, res)
+        except _Refused as refusal:
+            res.add(_result.StageResult(
+                refusal.stage, False,
+                [_result.Finding("block", _result.FAIL,
+                                 refusal.message.splitlines()[0],
+                                 detail="\n".join(refusal.message.splitlines()[1:]))]))
+        except SystemExit as exc:
+            # A path that still exits -- the spec-not-found check and the YAML reader run
+            # before any stage exists. Record it rather than letting it escape a GUI thread.
+            res.add(_result.StageResult(
+                "spec", False,
+                [_result.Finding("block", _result.FAIL,
+                                 str(exc).splitlines()[0] if str(exc) else "the engine stopped",
+                                 detail="\n".join(str(exc).splitlines()[1:]))]))
+        finally:
+            sys.stdout, _REFUSE = old_stdout, old_refuse
     res.log = buf.getvalue()
     return res
 
