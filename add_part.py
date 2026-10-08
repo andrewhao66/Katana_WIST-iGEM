@@ -395,6 +395,35 @@ def main() -> int:
     if "row_sha256" not in header:
         header = header + ["row_sha256"]
 
+    # VERIFY THE EXISTING ROOT BEFORE ADDING TO IT. This read the destination manifest
+    # and never checked it, then replaced both manifest and root at the end -- so if
+    # complete rows had been lost (a truncated sync, a partial copy), admitting one more
+    # part re-sealed the REDUCED row set under a fresh root. The library then verified
+    # clean forever, and the evidence that rows were missing was destroyed by the act of
+    # adding to it. A discrepancy must stop the turn, not be overwritten by it.
+    #
+    # A library with no root yet is a different thing: katana_init.py writes one, and a
+    # hand-made library that never had one has nothing to contradict. That case proceeds.
+    _rootf = lib / "LOCK.root"
+    if _rootf.exists() and rows:
+        try:
+            sys.path.insert(0, str(Path(__file__).resolve().parent))
+            from core import lock as _corelock
+            _ok, _why = _corelock.verify_root(str(lock), str(_rootf))
+        except Exception:
+            _ok, _why = True, ""        # no core/ beside us: the inline checks still apply
+        if not _ok:
+            return _block(
+                "this library does not verify as it stands, so nothing will be added to "
+                "it.\n"
+                "       %s\n"
+                "       Adding a part now would re-seal whatever rows are left under a "
+                "new root and\n"
+                "       the library would verify clean afterwards -- with the evidence "
+                "of what went\n"
+                "       missing gone. Fix the library first, or take a fresh copy of it, "
+                "then add the part." % _why)
+
     print()
     print(f"  library  {lib}  ({len(rows)} part(s) already sealed)")
 

@@ -64,6 +64,7 @@ verify:
     - python3 tests/test_verify_target.py
     - python3 tests/test_seal_atomic.py
     - python3 tests/test_duplicate_ids.py
+    - python3 tests/test_intake_gate.py
     - python3 tests/test_subpart_labels.py
     - python3 tests/test_decomposition_complete.py
     - python3 tests/test_drylab_gate.py
@@ -119,6 +120,7 @@ no-deps:
     - python3 tests/test_verify_target.py
     - python3 tests/test_seal_atomic.py
     - python3 tests/test_duplicate_ids.py
+    - python3 tests/test_intake_gate.py
     - python3 tests/test_subpart_labels.py
     - python3 tests/test_decomposition_complete.py
     - python3 tests/test_drylab_gate.py

@@ -141,7 +141,19 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
             loci = _expected_loci(spec)
             if not rows:
                 infos.append("INFO Stage-4b: off-target — no host homology >= %g%%/%dbp." % (SCAN_ID, SCAN_LEN))
-            for (ln, idp, gs, ge, st) in rows[:40]:
+            # EVERY row is classified, not the first 40. The cap was a reporting limit
+            # that silently became an enforcement limit: forty longer expected-locus
+            # hits can precede an unexpected 100-base 100%-identity match, and that
+            # blocking hit was never inspected, so sealing proceeded while the scan had
+            # already found it. The rows are sorted by length, so the ones that BLOCK are
+            # not reliably near the front.
+            #
+            # What stays capped is how much is PRINTED, below -- a hundred WARN lines is
+            # a wall nobody reads -- and the count of what was left out is printed with
+            # it, because a trimmed list that does not say it was trimmed is the same
+            # mistake one level down.
+            _shown = 0
+            for (ln, idp, gs, ge, st) in rows:
                 lo, hi = min(gs, ge), max(gs, ge)
                 exp_hit = next((pid for (a, b, pid) in loci if not (hi < a - 2000 or lo > b + 2000)), None)
                 if exp_hit:
@@ -150,9 +162,17 @@ def run_drylab_gate(insert_seq, features, spec, resolved, here):
                     blocks.append("BLOCK Stage-4b: UNEXPECTED host homology %dbp %.1f%% @%d-%d — not any intended host part "
                                   "(misassembly / wrong part / recode artifact)." % (ln, idp, gs, ge))
                 else:
-                    warns.append("WARN Stage-4b: off-target %dbp %.1f%% @%d-%d not at an expected locus "
-                                 "(under the >=%dbp/>=%.0f%% BLOCK threshold) - REVIEW."
-                                 % (ln, idp, gs, ge, BLOCK_LEN, BLOCK_ID))
+                    # Classified above whatever happens here; only the printing is
+                    # capped, and the number held back is stated.
+                    _shown += 1
+                    if _shown <= 40:
+                        warns.append("WARN Stage-4b: off-target %dbp %.1f%% @%d-%d not at an expected locus "
+                                     "(under the >=%dbp/>=%.0f%% BLOCK threshold) - REVIEW."
+                                     % (ln, idp, gs, ge, BLOCK_LEN, BLOCK_ID))
+            if _shown > 40:
+                warns.append("WARN Stage-4b: %d further off-target match(es) under the "
+                             "BLOCK threshold are not listed above. All of them were "
+                             "classified; none of them BLOCKs." % (_shown - 40))
         except Exception as e:
             warns.append("WARN Stage-4b: off-target scan error (%r). NOT enforced this run." % e)
 

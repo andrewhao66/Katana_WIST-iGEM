@@ -143,9 +143,16 @@ for _n in (6, 13):
 _r, _b = blocks_of(fasta(_B15 + "TT" + _B15))
 _g = unaccounted(_r, _b)
 _acc = sum(x.end - x.start + 1 for x in _b)
-check("a 2 bp gap may have no row of its own", True)
-check("but the report says how many bases are accounted for when it is not all of them",
-      _acc == len(_r.seq) or True)   # behaviour pinned by the CLI check below
+# These two were `check(..., True)` and `check(..., cond or True)` -- assertions that
+# cannot fail, padding the count while testing nothing. An independent review found them,
+# in a file whose whole subject is reports that look complete and are not.
+#
+# What is actually true of a gap below MIN_REMAINDER: it gets no row of its own, so the
+# blocks do NOT account for the whole sequence, and the shortfall is small.
+check("a 2 bp gap gets no row of its own, so the blocks fall short (%d of %d)"
+      % (_acc, len(_r.seq)), _acc < len(_r.seq), "%d of %d" % (_acc, len(_r.seq)))
+check("and it falls short by exactly that gap", len(_r.seq) - _acc == 2,
+      "%d bases unaccounted" % (len(_r.seq) - _acc))
 
 # The text a person reads is where this has to be true.
 _p = subprocess.run([sys.executable, "kagami.py", "audit", fasta(_B15 + "TT" + _B15)],
@@ -162,7 +169,11 @@ if _acc != len(_r.seq):
           "[note] decomposition" in _out_txt,
           [l for l in _out_txt.splitlines() if "decomposition" in l])
 else:
-    check("the 2 bp gap got a row, so there is no shortfall to state", True)
+    # If a future MIN_REMAINDER gives even a 2 bp gap its own row, then the blocks DO
+    # account for everything and there is nothing to state -- which is a real assertion,
+    # not `True`.
+    check("the 2 bp gap got a row, so the blocks account for the whole sequence",
+          _acc == len(_r.seq), "%d of %d" % (_acc, len(_r.seq)))
 
 # And when everything IS accounted for, nothing cries wolf about it.
 _p2 = subprocess.run([sys.executable, "kagami.py", "audit", _demo],

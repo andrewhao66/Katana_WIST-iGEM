@@ -76,7 +76,12 @@ def _run(cmd, cwd=None):
     # ✓ / → / … and their output would otherwise crash the subprocess reader on a non-cp1252 byte.
     p = subprocess.run([sys.executable] + cmd, cwd=cwd, capture_output=True,
                        encoding="utf-8", errors="replace")
-    return p.returncode == 0, (p.stdout or "") + (p.stderr or "")
+    # 0 is PASS and 5 is REVIEW: both are completed builds with sealed outputs, and 5
+    # means "glance at these findings before ordering". Accepting only 0 made rebuild
+    # report `build-failed` for a build that had succeeded and written its order files --
+    # the engine's exit contract changed when REVIEW was given its own code, and this
+    # consumer was not updated with it. 1 is a genuine refusal and still fails.
+    return p.returncode in (0, 5), (p.stdout or "") + (p.stderr or "")
 
 
 class UnreadableLibrary(Exception):
