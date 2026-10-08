@@ -104,8 +104,20 @@ if (report) {
   assert("it reports the demo at 843 bp", report.length === 843, report.length);
   assert("identification RAN with no blastn, in a browser",
          report.identification_ran === true, report.identification_ran);
-  assert("it finds the demo's four blocks", report.blocks.length === 4,
-         report.blocks.length);
+  // Not a block COUNT. It was 4, and became 6 when the gap threshold was lowered from
+  // 30 bases to 6 -- the two new rows are the 7 bp and 6 bp leftovers the decomposition
+  // used to drop in silence. Counting rows pinned the incomplete behaviour; the real
+  // guarantee is that the decomposition accounts for every base of the sequence.
+  const covered = report.blocks.reduce((n, b) => n + (b.end - b.start + 1), 0);
+  assert("its decomposition accounts for every base of the demo ("
+         + covered + " of " + report.length + ")",
+         covered === report.length, covered + " of " + report.length);
+  assert("and the blocks tile without overlapping",
+         report.blocks.slice(1).every((b, i) => b.start === report.blocks[i].end + 1),
+         report.blocks.map((b) => b.start + "-" + b.end).join(", "));
+  assert("and it finds the construct's real parts, not just gap rows",
+         report.blocks.filter((b) => b.identity).length >= 3,
+         report.blocks.map((b) => b.identity || "-").join(", "));
   assert("it catches the planted mislabel",
          report.findings.some((f) => f.category === "identity-mislabel"),
          report.findings.map((f) => f.category).join(","));

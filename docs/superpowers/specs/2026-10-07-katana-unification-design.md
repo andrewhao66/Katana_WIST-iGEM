@@ -672,12 +672,59 @@ still seals and writes all three order files — REVIEW means glance before orde
 refused. Seven assertions across five suites had to be updated, and every one of them had
 been pinning the behaviour of a dead gate as expected.
 
+### 13.3c Verifying a real audit the user had run
+
+The user pasted the output of an audit they had run on their own file and asked whether it
+was true. Its sequence hash turned out to be the ORACLE value for `pSense-Nit`, so the
+file was byte-identical to what Katana builds from the spec — which made the spec and the
+sealed library available as independent authorities. Everything below was checked against
+those, not against the report.
+
+**Reproducible, and mostly right.** Re-running produced the pasted text verbatim. 1013 bp,
+and the RBS, CDS and terminator coordinates matched Katana's own build record exactly. GC,
+the SapI count and the tally arithmetic all checked out independently.
+
+**One of my own checks was the thing that was wrong.** I flagged an internal stop codon at
+CDS offset 714, then found that sfGFP ends `TGA TGA` — tandem stops, deliberate against
+readthrough, and the exact false positive `kagami/tests.py` records being fixed on
+2026-09-15. The audit's `ORF-clean` was right.
+
+**Two defects, both fixed.**
+
+1. **Katana accused its own output of a mislabel.** On the GenBank Katana itself wrote,
+   carrying Katana's own `/label="PyeaR"`, the audit said *"Block labelled PyeaR is
+   actually K1799015 — fix: re-label to K1799015"*. `K1799015` is exactly `PyeaR[13:113]`,
+   a Registry re-deposit of a *piece* of PyeaR; both are hits, and `_tile`'s completeness
+   preference made the fragment win. A student was told to change a label that was right,
+   on the one check this software exists to perform.
+
+   The claim is now checked against the facts — do the block's bases actually occur in the
+   sequence the claim names? — rather than against whichever re-deposit the identifier
+   happened to name.
+
+   An approach tried and abandoned first, because it was measured: reporting every longer
+   reference that *contains* an identified one. Containment fires everywhere — `sfGFP`
+   sits inside references of 6455, 2847 and 2132 bp, and `K1799015` inside thirteen — and
+   even with a 0.95 coverage bar it produced dozens of groups per construct. The Registry
+   is a dense web of nested re-deposits, so that would have been the cry-wolf failure.
+
+2. **The decomposition did not account for every base.** The table began at base 14 and
+   bases 1–13 appeared nowhere: not a block, not an unidentified row, not a number — and
+   they are the start of the construct's own promoter. The block list held 1000 of 1013,
+   so this was the data and not the printing. A 30 bp minimum on gap rows was sitting four
+   lines above a `MIN_REMAINDER = 6` whose own comment argued for the smaller value.
+
 ### 13.4 Deliberately not fixed
 
 - **The dedup key** buckets coordinates by ten and ignores strand. The strand-agnostic
   half is deliberate: one reference seeds on both strands at the same place for a
   palindrome or a self-complementary terminator. Two occurrences within ten bases overlap
   almost entirely and are far more likely one site found on two diagonals.
+- **An unannotated file still shows the fragment's name.** With no `/label` to compare
+  against, a plain FASTA of the construct above reports `K1799015` and does not mention
+  PyeaR. There is no claim to check against the facts, and picking one of several valid
+  names would be guessing. Feeding the `.gb` the build writes, rather than the `.fasta`,
+  is what lets the report recognise the part.
 - **`MAX_LOCI` is still 4.** Any cap drops the next one, so the cap is reported instead of
   raised.
 - **The 26–42 bp reference band.** `MIN_HIT = 25` means the minimum detectable coverage
