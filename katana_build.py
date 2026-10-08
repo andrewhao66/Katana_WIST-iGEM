@@ -349,6 +349,38 @@ def resolve_parts(spec: dict, lock: dict, notes=None) -> dict:
                      f"       part. Check the length in the Spec's seal block against:\n"
                      f"           python3 find_part.py {pid}")
 
+        # ONE ID, ONE SEQUENCE. `resolved` is keyed by id, so a Spec naming the same part
+        # twice with different pins used to overwrite silently: the LAST entry won the
+        # bases while assemble_insert took the role and metadata from the FIRST. Measured
+        # on pAP-Logic with a second HrpS.Ec-opt entry pinned to v1 beside the real v3
+        # entry: both reported "Stage-1/2 PASS", fifteen entries were counted as
+        # "All 14 distinct parts", and the sealed hash came out byte-identical to a
+        # control pinned to v1 ALONE -- so the artifact carried v1's bases under v3's
+        # record, sealed and hash-consistent.
+        #
+        # That is the one thing this Spec format exists to make unrepresentable: "if the
+        # only way to name a part is by ID, then the ID and the bases cannot disagree,
+        # because there is only one of them in the document." Two entries put two of them
+        # in the document. Two sources disagreeing about which sequence is meant is a
+        # discrepancy, and rule four says report it rather than pick one.
+        #
+        # The same id twice with the SAME pin is a harmless duplication, not a
+        # contradiction, and still builds.
+        _prev = resolved.get(pid)
+        if _prev is not None and _prev["seq_sha256"] != computed:
+            _block("source",
+                   f"BLOCK Stage-1: the Spec names '{pid}' twice, with two different "
+                   f"sequences.\n"
+                   f"       One entry resolves to {_prev['seq_sha256'][:12]} "
+                   f"({_prev['length']} bp, {_prev['lib_path']})\n"
+                   f"       the other to      {computed[:12]} "
+                   f"({len(raw_seq)} bp, {gb_path.relative_to(LIB)})\n"
+                   f"       Both are sealed and both verify, so this is not a broken "
+                   f"library -- the Spec\n"
+                   f"       is asking for one part to be two things. Nothing was built. "
+                   f"Delete the entry you\n"
+                   f"       did not mean, or give the second one its own id.")
+
         resolved[pid] = {
             "seq": raw_seq,
             "length": len(raw_seq),

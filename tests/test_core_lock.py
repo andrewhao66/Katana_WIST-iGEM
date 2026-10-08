@@ -196,5 +196,76 @@ _notes3 = []
 lock.resolve(_rows, "B0015", notes=_notes3)
 check("and no seal filename at all reports nothing", not _notes3, str(_notes3))
 
+# ---- a refusal must say the true reason, and show the difference it claims ----
+# Found by an independent reliability review. Cutting the last 40 bytes off LOCK.tsv left
+# one row's row_sha256 at 26 of 64 characters, and the refusal said:
+#
+#   row_sha256 does not match the row's own fields (recomputed 16d2b05b9c5e...,
+#   column says 16d2b05b9c5e...). A trust field -- source, version, class or outfile --
+#   was edited.
+#
+# Two things wrong in one sentence. Both hashes were printed at [:12] and the difference
+# fell past character 12, so the reader was told two things disagree and then shown that
+# they are the same. And the explanation was FALSE: no trust field had been edited, the
+# hash column itself was cut short, so it sent them to audit four fields that were fine.
+import shutil as _sh
+
+_D2 = tempfile.mkdtemp(prefix="locktrunc_")
+_TRUNC = os.path.join(_D2, "trunc")
+_sh.copytree(os.path.join(ROOT, "parts-library"), _TRUNC)
+_lp = os.path.join(_TRUNC, "ref_parts", "LOCK.tsv")
+with open(_lp, "rb") as _f:
+    _b = _f.read()
+with open(_lp, "wb") as _f:
+    _f.write(_b[:-40])
+
+_ok, _msg = lock.verify_root(_lp, os.path.join(_TRUNC, "ref_parts", "LOCK.root"))
+check("a truncated manifest is refused", not _ok, _msg)
+check("and the reason given is the truncation, not an edited field",
+      "characters, not 64" in _msg or "truncated" in _msg, _msg)
+check("and it does NOT blame source/version/class/outfile",
+      "trust field" not in _msg, _msg)
+check("and it says what to do", "fresh copy" in _msg, _msg)
+
+# An actually-edited trust field must still say so, and show hashes that visibly differ.
+_ED = os.path.join(_D2, "edited")
+_sh.copytree(os.path.join(ROOT, "parts-library"), _ED)
+_lp2 = os.path.join(_ED, "ref_parts", "LOCK.tsv")
+_rows_txt = open(_lp2, encoding="utf-8").read().splitlines()
+_hdr = _rows_txt[0].split("\t")
+_cells = _rows_txt[1].split("\t")
+_cells[_hdr.index("source")] = "edited by hand"
+_rows_txt[1] = "\t".join(_cells)
+with open(_lp2, "w", encoding="utf-8") as _f:
+    _f.write("\n".join(_rows_txt) + "\n")
+
+_ok2, _msg2 = lock.verify_root(_lp2, os.path.join(_ED, "ref_parts", "LOCK.root"))
+check("an edited trust field is still refused", not _ok2, _msg2)
+check("and that one DOES name the trust fields", "trust field" in _msg2, _msg2)
+import re as _re
+
+_pair = _re.findall(r"recomputed ([0-9a-f]+)\.\.\., column says ([0-9a-f]+)", _msg2)
+check("and the two hashes it prints are visibly different",
+      _pair and _pair[0][0] != _pair[0][1], str(_pair))
+
+# An empty hash column is its own case: nothing to check against, said plainly.
+_EM = os.path.join(_D2, "empty")
+_sh.copytree(os.path.join(ROOT, "parts-library"), _EM)
+_lp3 = os.path.join(_EM, "ref_parts", "LOCK.tsv")
+_rt = open(_lp3, encoding="utf-8").read().splitlines()
+_h3 = _rt[0].split("\t")
+if "row_sha256" in _h3:
+    _c3 = _rt[1].split("\t")
+    _c3[_h3.index("row_sha256")] = ""
+    _rt[1] = "\t".join(_c3)
+    with open(_lp3, "w", encoding="utf-8") as _f:
+        _f.write("\n".join(_rt) + "\n")
+    _ok3, _msg3 = lock.verify_root(_lp3, os.path.join(_EM, "ref_parts", "LOCK.root"))
+    check("an empty row_sha256 is refused as its own case", not _ok3, _msg3)
+    check("and says there is nothing to check against",
+          "nothing to check" in _msg3, _msg3)
+
+_sh.rmtree(_D2, ignore_errors=True)
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

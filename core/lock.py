@@ -77,12 +77,34 @@ def verify_root(lock_path, root_path, pinned=None):
         recomputed = hashing.row_sha256(row)
         written = row.get("row_sha256", "")
         if recomputed != written:
+            _who = "%s v%s" % (row.get("id", "?"), row.get("version", "?"))
+            # A TRUNCATED hash column is not an edited trust field, and saying so sent
+            # the reader to audit source/version/class/outfile -- all of which were fine.
+            # Measured: cutting the last 40 bytes off LOCK.tsv left this row's
+            # row_sha256 at 26 of 64 characters, and the message said a trust field had
+            # been edited.
+            if written and len(written) != 64:
+                return False, (
+                    "%s: row_sha256 is %d characters, not 64 -- the manifest is "
+                    "truncated or was written incompletely, so this row cannot be "
+                    "checked at all.\n       Take a fresh copy of the library. Nothing "
+                    "here can be trusted while a row is cut short."
+                    % (_who, len(written)))
+            if not written:
+                return False, (
+                    "%s: the row_sha256 column is empty, so there is nothing to check "
+                    "this row against." % _who)
+            # And show ENOUGH of each hash to see that they differ. Both were printed at
+            # [:12], and when the difference fell past character 12 the message told the
+            # reader two things disagreed and then showed them as identical.
+            _n = 12
+            while _n < 64 and recomputed[:_n] == written[:_n]:
+                _n += 4
             return False, (
-                "%s v%s: row_sha256 does not match the row's own fields "
+                "%s: row_sha256 does not match the row's own fields "
                 "(recomputed %s..., column says %s...). A trust field -- source, "
                 "version, class or outfile -- was edited."
-                % (row.get("id", "?"), row.get("version", "?"),
-                   recomputed[:12], (written or "empty")[:12]))
+                % (_who, recomputed[:_n], written[:_n]))
 
     # 2. The root, from the recomputed hashes.
     computed = hashing.lock_root(rows)
