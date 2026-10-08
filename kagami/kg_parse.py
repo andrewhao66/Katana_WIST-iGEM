@@ -278,8 +278,8 @@ def _parse_location(loc):
 def _parse_genbank(path, text) -> Record:
     lines = text.splitlines()
 
-    # name + topology from LOCUS
-    name, topology = "sequence", "linear"
+    # name + topology + DECLARED LENGTH from LOCUS
+    name, topology, declared = "sequence", "linear", None
     for ln in lines:
         if ln.startswith("LOCUS"):
             parts = ln.split()
@@ -287,6 +287,19 @@ def _parse_genbank(path, text) -> Record:
                 name = parts[1]
             if "circular" in ln.lower():
                 topology = "circular"
+            # The LOCUS line declares the length, and it was read for the name and the
+            # topology and not for that. A file whose ORIGIN block had been cut off --
+            # LOCUS saying 129 bp with 60 bases present -- parsed as a 60-base sequence
+            # and was audited as though it were whole. Every per-base finding below is
+            # then a finding about a fragment, reported as a finding about the construct,
+            # with nothing saying which one it is.
+            for _i, _tok in enumerate(parts):
+                if _tok == "bp" and _i >= 1:
+                    try:
+                        declared = int(parts[_i - 1].replace(",", ""))
+                    except ValueError:
+                        declared = None
+                    break
             break
 
     # sequence from ORIGIN..//
@@ -344,5 +357,21 @@ def _parse_genbank(path, text) -> Record:
         elif cur_kind and cur_loc and ln.strip() and not cur_quals:
             # location continuation (join spanning lines)
             cur_loc += ln.strip()
+
+    # A declared length that does not match the bases present means the file is not the
+    # record it says it is. Refusing is the only honest answer: the audit cannot report
+    # on a construct from a fragment of it, and reporting on the fragment under the
+    # construct's name is exactly the drift this project exists to prevent. Which two
+    # things disagree, and what each says, per rule four.
+    if declared is not None and seq and declared != len(seq):
+        raise NotASequenceFile(
+            "%s: the LOCUS line declares %d bp but the ORIGIN block holds %d base(s).\n"
+            "  Two readings of the same file disagree about how long the sequence is, so "
+            "neither can be\n"
+            "  trusted. This is what a truncated download, an interrupted write or a "
+            "partial copy looks\n"
+            "  like. Nothing was audited. Fetch the file again and compare it against "
+            "its source."
+            % (os.path.basename(str(path)), declared, len(seq)))
 
     return Record(name, seq, topology, features)

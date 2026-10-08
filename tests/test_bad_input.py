@@ -162,5 +162,74 @@ check("and it exits non-zero so a script can tell", p.returncode != 0,
 import shutil
 shutil.rmtree(D, ignore_errors=True)
 
+# ---- a file that disagrees with itself about its own length ----
+# Found by an independent Codex review. The LOCUS line declares the length, and it was
+# read for the name and the topology and not for that. A file whose ORIGIN block had been
+# cut off -- LOCUS saying 129 bp with 60 bases present -- parsed as a 60-base sequence and
+# was audited as though it were whole. Every per-base finding is then a finding about a
+# FRAGMENT, reported as a finding about the construct, with nothing saying which it is.
+#
+# This is what a truncated download, an interrupted write or a partial copy looks like,
+# and the honest answer is to refuse: the audit cannot report on a construct from a piece
+# of it. Rule four -- say which two things disagree and what each says.
+_D9 = tempfile.mkdtemp(prefix="locuslen_")
+_trunc = os.path.join(_D9, "cut.gb")
+with open(_trunc, "w", encoding="utf-8") as _f:
+    _f.write("LOCUS       cut      129 bp    DNA     linear   SYN\n"
+             "FEATURES             Location/Qualifiers\n"
+             "     misc_feature    1..129\n"
+             '                     /label="whatever"\n'
+             "ORIGIN\n"
+             "        1 atgcatgcat gcatgcatgc atgcatgcat gcatgcatgc atgcatgcat "
+             "gcatgcatgc\n"
+             "//\n")
+_raised = None
+try:
+    kg_parse.parse(_trunc)
+except kg_parse.NotASequenceFile as _e:
+    _raised = str(_e)
+except Exception as _e:               # anything else is the wrong failure
+    _raised = "WRONG EXCEPTION: %r" % _e
+check("a file whose LOCUS length disagrees with its bases is REFUSED",
+      _raised and not _raised.startswith("WRONG"), _raised or "parsed happily")
+if _raised and not _raised.startswith("WRONG"):
+    check("  and both numbers are quoted", "129" in _raised and "60" in _raised,
+          _raised[:200])
+    check("  and it says nothing was audited", "Nothing was audited" in _raised,
+          _raised[:200])
+    check("  and it names what this looks like",
+          "truncated" in _raised or "partial copy" in _raised, _raised[:240])
+
+# Every intact file must still parse -- the whole sealed library and the demo.
+import glob as _glob
+
+_bad = []
+for _f2 in ([os.path.join(ROOT, "kagami", "examples", "demo.gb")]
+            + sorted(_glob.glob(os.path.join(ROOT, "parts-library", "ref_parts",
+                                             "*", "*", "*.gb")))):
+    try:
+        kg_parse.parse(_f2)
+    except Exception as _e:
+        _bad.append("%s: %r" % (os.path.basename(_f2), _e))
+check("every sealed part file and the demo still parse (%d checked)"
+      % (1 + len(_glob.glob(os.path.join(ROOT, "parts-library", "ref_parts",
+                                         "*", "*", "*.gb")))),
+      not _bad, "; ".join(_bad[:3]))
+
+# A file with NO declared length is not an error -- plenty of real GenBank lacks it.
+_nolen = os.path.join(_D9, "nolen.gb")
+with open(_nolen, "w", encoding="utf-8") as _f:
+    _f.write("LOCUS       nolen\nORIGIN\n        1 atgcatgcatgcatgcatgcatgca\n//\n")
+try:
+    _r9 = kg_parse.parse(_nolen)
+    check("a LOCUS line with no declared length still parses", len(_r9.seq) == 25,
+          len(_r9.seq))
+except Exception as _e:
+    check("a LOCUS line with no declared length still parses", False, repr(_e))
+
+import shutil as _sh9
+
+_sh9.rmtree(_D9, ignore_errors=True)
+
 print("\n%d passed, %d failed" % (PASS, FAIL))
 sys.exit(1 if FAIL else 0)

@@ -86,16 +86,20 @@ try:
     import kg_parse
     import kg_refs
 
-    _gb = (
-        "LOCUS       t 60 bp DNA linear SYN\n"
-        "FEATURES             Location/Qualifiers\n"
-        "     misc_feature    1..35\n"
-        '                     /label="B0032"\n'
-        "ORIGIN\n"
-    )
+    # The LOCUS length is COMPUTED, not written down. It used to say 60 -- copied from
+    # the 60-bases-per-line format, not from the sequence, which is 63 -- and the parser
+    # read the LOCUS line for the name and the topology only, so nothing noticed. When
+    # the parser started comparing the two, this fixture was the first thing it caught.
     _seq = (kg_refs.normalise(kg_refs.by_id()["J23116"]["seq"])
             + kg_refs.normalise(kg_refs.by_id()["B0034"]["seq"])
             + "CACAACACTTGCAACG")
+    _gb = (
+        "LOCUS       t %d bp DNA linear SYN\n" % len(_seq)
+        + "FEATURES             Location/Qualifiers\n"
+        + "     misc_feature    1..35\n"
+        + '                     /label="B0032"\n'
+        + "ORIGIN\n"
+    )
     for _i in range(0, len(_seq), 60):
         _gb += "%9d %s\n" % (_i + 1, _seq[_i:_i + 60].lower())
     _gb += "//\n"

@@ -341,6 +341,41 @@ def resolve_parts(spec: dict, lock: dict, notes=None) -> dict:
                      f"       If you edited it on purpose, undo that. If not, take a fresh\n"
                      f"       copy of the library and run:  python3 verify.py")
 
+        # Stage 2b: the BYTE seal, not only the sequence seal. The three layers exist
+        # because they catch different things: seq_sha256 notices the bases changing,
+        # file_sha256 notices the FILE changing. Only the first was checked here, so a
+        # part file whose annotations had been edited -- a label, a feature, a COMMENT
+        # line -- passed Stage 2 unremarked, and the build reads role and metadata from
+        # those annotations. Measured: injecting one COMMENT line into
+        # HrpS.Ec-opt__v3 left the build completing with no mention of it.
+        #
+        # verify.py has always checked this layer; the build did not, so the layer was
+        # only as good as remembering to run verify.py first. Rule three says to
+        # recompute at the point of use.
+        #
+        # Safe to enforce because .gitattributes marks every hashed extension `-text`:
+        # Git never translates a .gb, so the bytes on disk are the bytes that were
+        # sealed, on every OS. That line in .gitattributes is what makes this check
+        # possible rather than a Windows-only false alarm -- it was added after a clean
+        # Windows clone failed 30 of 30 parts on exactly this layer.
+        _lock_file_hash = lock_row.get("file_sha256") if lock_row else None
+        if _lock_file_hash:
+            _file_hash = _hashing.file_sha256(gb_path)
+            if _file_hash != _lock_file_hash:
+                _block("source",
+                       f"BLOCK Stage-2: part '{pid}' file bytes {_file_hash[:12]} "
+                       f"!= LOCK {_lock_file_hash[:12]}\n"
+                       f"       The part's SEQUENCE is intact -- the bases hash correctly "
+                       f"-- but the file\n"
+                       f"       around them has changed since it was sealed: an "
+                       f"annotation, a label, a\n"
+                       f"       feature, a comment line. The build reads role and "
+                       f"metadata from those\n"
+                       f"       annotations, so a changed one reaches the artifact.\n"
+                       f"       Take a fresh copy of the library, or re-seal the part "
+                       f"deliberately through\n"
+                       f"           python3 add_part.py")
+
         # Length check
         if expected_len and len(raw_seq) != int(expected_len):
             _block("source", f"BLOCK Stage-2: part '{pid}' length {len(raw_seq)} ≠ expected {expected_len}\n"

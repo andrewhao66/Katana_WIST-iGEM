@@ -645,9 +645,30 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
         role = b.ident_role or b.claim_role
         if role != "rbs":
             continue
-        # look at the sequence just downstream of the RBS block for the start codon
-        atg_rel = _next_atg(seq, b.end, window=40)
-        if atg_rel < 0:
+        # Look downstream of the RBS IN THE STRAND'S OWN DIRECTION. The search ran
+        # along the forward sequence whatever the strand was, so for a reverse-strand
+        # RBS it looked away from the CDS, which sits upstream in forward coordinates.
+        # The same construct, reverse-complemented, changed its own verdict: forward
+        # gave a spacing, reverse gave "No ATG found downstream of RBS" -- a false
+        # finding about a junction that is correct, on a strand that is perfectly
+        # ordinary in a real plasmid. The SD search a few lines below already
+        # reverse-complements the block, so the two halves of the same check disagreed
+        # about which way the gene runs.
+        #
+        # Spacing is a distance, so it is measured in the strand's own frame and the
+        # result is the same number either way round.
+        if b.strand == -1:
+            # Walk the reverse complement of everything upstream of the block, which is
+            # that strand's downstream. Offsets stay inside the reversed window; the
+            # spacing arithmetic below uses them symmetrically.
+            _up = revcomp(record.sub(max(1, b.start - 40), b.start - 1)) \
+                if b.start > 1 else ""
+            _rel = _next_atg(_up, 0, window=40)
+            atg_rel = None if _rel < 0 else _rel
+        else:
+            _rel = _next_atg(seq, b.end, window=40)
+            atg_rel = None if _rel < 0 else _rel
+        if atg_rel is None:
             findings.append(Finding(
                 "junction", FLAG, f"No ATG found downstream of RBS at {b.start}-{b.end}",
                 loc=f"{b.start}-{b.end}",
@@ -667,8 +688,18 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
                 detail="Spacing is measured from the SD, so it cannot be checked without one.",
                 fix="Confirm this block really is a ribosome binding site."))
             continue
-        sd_abs_end = b.start + sd[1] - 1          # 1-based, inclusive, of the SD's last base
-        spacing = (atg_rel + 1) - sd_abs_end - 1  # nt between the SD and the A of ATG
+        # Both axes in the strand's own frame. On the forward strand the SD's last base
+        # is at b.start + sd[1] - 1 and the ATG is at an absolute index; on the reverse
+        # strand `block_seq` was already reverse-complemented for the SD search, so
+        # sd[1] counts from the block's 3'-in-strand edge and atg_rel counts from the
+        # block's upstream edge. The gap is the bases between them either way.
+        if b.strand == -1:
+            # distance from the SD's end to the block's strand-downstream edge, plus
+            # however far into the upstream window the ATG sits
+            spacing = (len(block_seq) - sd[1]) + atg_rel
+        else:
+            sd_abs_end = b.start + sd[1] - 1      # 1-based, inclusive, SD's last base
+            spacing = (atg_rel + 1) - sd_abs_end - 1  # nt between the SD and the A of ATG
         if 5 <= spacing <= 9:
             findings.append(Finding("junction", PASS,
                                     f"RBS→ATG spacing {spacing} nt (in 5–9, measured from the SD)",
