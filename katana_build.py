@@ -26,7 +26,7 @@ Usage:
 # construct and this file must not use it -- the README promises 3.9, and macOS ships
 # 3.9 with the Xcode command line tools. One such annotation made the engine crash on
 # import on a freshly unzipped bundle, which tests/test_py39.py now catches.
-import argparse, hashlib, json, re, sys, textwrap, csv, io
+import argparse, hashlib, json, os, re, shutil, sys, textwrap, csv, io
 from pathlib import Path
 from datetime import datetime
 
@@ -1015,19 +1015,61 @@ def _run_pipeline_inner(args, res):
     # ── Stage 5: seal (write output) ────────────────────────────────────────
     print("── Stage 5: Seal ──")
     outdir = args.outdir or (HERE / "outputs")
-    outdir.mkdir(parents=True, exist_ok=True)
+    try:
+        outdir.mkdir(parents=True, exist_ok=True)
+    except OSError as _e:
+        _block("seal", f"BLOCK Stage-5: cannot create the output folder {outdir}\n"
+                       f"       {_e.strerror or _e}\n"
+                       f"       Nothing was written. Pick a folder you can write to with "
+                       f"--outdir <dir>.")
+    # Check it BEFORE doing any work. Without this, a read-only folder surfaced as a raw
+    # PermissionError traceback from inside write_genbank -- "[Errno 13]" over a stack
+    # trace is where somebody who is not a programmer stops reading.
+    if not os.access(str(outdir), os.W_OK):
+        _block("seal", f"BLOCK Stage-5: the output folder is not writable: {outdir}\n"
+                       f"       Nothing was written. Pick a folder you can write to with "
+                       f"--outdir <dir>, or fix that folder's permissions.")
 
     date_tag = datetime.now().strftime("%Y-%m-%d")
     gb_name = f"{sid}_insert_v{version}_{date_tag}.gb"
     fasta_name = f"{sid}_insert_v{version}_TWIST.fasta"
 
-    gb_path = outdir / gb_name
-    fasta_path = outdir / fasta_name
+    # ALL OR NOTHING. The three order files used to be written straight into outdir one
+    # after another, so a failure on the LAST of them left the first two behind --
+    # measured: an obstruction where the CSV belongs left a 1083-byte
+    # pSense-Nit_insert_v2_TWIST.fasta and a 2596-byte .gb in the folder, from a build
+    # that had exited 1. That FASTA is the file you paste into a vendor's order form.
+    # A student who re-runs is fine; one who glances at the folder, sees a .fasta with
+    # today's date on it and orders from it is not. Disk full and a wrong permission are
+    # the ordinary ways this happens and neither announces itself.
+    #
+    # "Seal" here means the artifact and its hash agree and were recorded together. Two
+    # of three files is not a seal -- it is a set of files with no complete record that
+    # looks exactly like a successful build from outside.
+    #
+    # So everything is written into a staging directory beside the outputs and moved in
+    # only once all of it exists. os.replace is atomic per file on one filesystem; the
+    # group is not, but the window is microseconds and the harm being prevented is a
+    # FAILED build leaving order-ready files, which this removes entirely.
+    _stage = outdir / (".katana-writing-%d" % os.getpid())
+    shutil.rmtree(_stage, ignore_errors=True)
+    _stage.mkdir(parents=True, exist_ok=True)
+    _pending = []                      # (staged path, final path)
+    # Registered so a refusal anywhere below removes the staging directory on the way
+    # out. _block raises, so a plain cleanup line after the writes is never reached --
+    # measured: a failed build left .katana-writing-16906 sitting in the output folder.
+    res.cleanup_dirs = getattr(res, "cleanup_dirs", [])
+    res.cleanup_dirs.append(str(_stage))
+
+    gb_path = _stage / gb_name
+    fasta_path = _stage / fasta_name
+    _pending += [(gb_path, outdir / gb_name), (fasta_path, outdir / fasta_name)]
 
     write_genbank(insert_seq, features, spec, insert_hash, gb_path)
     write_fasta(insert_seq, spec, insert_hash, fasta_path)
-    print(f"  .gb:    {gb_path}")
-    print(f"  .fasta: {fasta_path}")
+    # The FINAL paths, not the staging ones: a caller has to be able to find the files.
+    print(f"  .gb:    {outdir / gb_name}")
+    print(f"  .fasta: {outdir / fasta_name}")
 
     # Verify the written .gb reproduces the hash
     written_seq = extract_gb_sequence(gb_path.read_text(encoding="utf-8"))
@@ -1036,8 +1078,8 @@ def _run_pipeline_inner(args, res):
         _block("seal", f"BLOCK Stage-5: written .gb hash {written_hash[:12]} ≠ assembled {insert_hash[:12]}")
     print(f"  .gb round-trip hash verified ✓")
     print(f"  SEALED: {insert_hash}")
-    res.outputs["gb"] = str(gb_path)
-    res.outputs["fasta"] = str(fasta_path)
+    res.outputs["gb"] = str(outdir / gb_name)
+    res.outputs["fasta"] = str(outdir / fasta_name)
     res.add(_result.StageResult("seal", True, data={"sha256": insert_hash}))
 
     # ── SBOL 3 export (optional, standards interchange) ─────────────────────
@@ -1045,7 +1087,9 @@ def _run_pipeline_inner(args, res):
     if sbol_target is None:
         try:
             import sbol3  # noqa: F401
-            sbol_target = outdir / f"{sid}_insert_v{version}.ttl"
+            _sbol_name = f"{sid}_insert_v{version}.ttl"
+            sbol_target = _stage / _sbol_name
+            _pending.append((sbol_target, outdir / _sbol_name))
         except ImportError:
             print("  INFO: sbol3 not installed, so no .ttl written (pip install sbol3).")
     if sbol_target:
@@ -1057,7 +1101,7 @@ def _run_pipeline_inner(args, res):
             for _m in _msgs:
                 print(f"  {_m}")
             if _ok:
-                res.outputs["sbol"] = str(sbol_target)
+                res.outputs["sbol"] = str(outdir / sbol_target.name)
             if not _ok:
                 _block("seal", "BLOCK Stage-5: SBOL export requested but not produced (see above)")
         except (SystemExit, _Refused):
@@ -1079,7 +1123,11 @@ def _run_pipeline_inner(args, res):
         print(f"\n── Gibson fragment split (insert {len(insert_seq)} > {frag_cap} cap) ──")
         frags = gibson_split(insert_seq, features, spec, args.gibson_overlap)
         for fname, fseq, fstart, fend in frags:
-            fpath = outdir / f"{fname}_TWIST.fasta"
+            # Through the staging directory like every other output, or a Gibson split
+            # that fails partway leaves order-ready fragment FASTAs behind.
+            _fname_out = f"{fname}_TWIST.fasta"
+            fpath = _stage / _fname_out
+            _pending.append((fpath, outdir / _fname_out))
             header = f">{fname} {len(fseq)}bp pos {fstart}-{fend} overlap={args.gibson_overlap}"
             wrapped = "\n".join(fseq[i:i+80] for i in range(0, len(fseq), 80))
             # Path.write_text() gained `newline` in Python 3.10. The README promises 3.9,
@@ -1104,13 +1152,56 @@ def _run_pipeline_inner(args, res):
     try:
         sys.path.insert(0, str(HERE))
         from katana_order_table import write_order_csv
-        csv_path = outdir / f"{sid}_insert_v{version}_ORDER.csv"
+        _csv_name = f"{sid}_insert_v{version}_ORDER.csv"
+        csv_path = _stage / _csv_name
+        _pending.append((csv_path, outdir / _csv_name))
         for _m in write_order_csv(order_records, spec, csv_path):
             print(f"  {_m}")
-        print(f"  .csv:   {csv_path}  ({len(order_records)} row(s))")
-        res.outputs["csv"] = str(csv_path)
+        print(f"  .csv:   {outdir / _csv_name}  ({len(order_records)} row(s))")
+        res.outputs["csv"] = str(outdir / _csv_name)
     except Exception as _e:
         _block("seal", f"BLOCK Stage-5: order table not written ({_e!r})")
+
+    # Everything exists. Move it in. Until this line the output folder is untouched, so
+    # every refusal above leaves it exactly as it was.
+    # PRE-FLIGHT, then move. The loop alone was not all-or-nothing: with an obstruction
+    # where only the CSV belongs, the .gb and the .fasta moved in and the third move
+    # failed -- leaving exactly the order-ready files this staging exists to prevent.
+    # So every destination is checked before anything is moved.
+    _blocked = []
+    for _src, _dst in _pending:
+        if not _src.exists():
+            continue
+        if _dst.is_dir():
+            _blocked.append("%s (a directory is in the way)" % _dst)
+        elif _dst.exists() and not os.access(str(_dst), os.W_OK):
+            _blocked.append("%s (exists and is not writable)" % _dst)
+    if _blocked:
+        _block("seal", "BLOCK Stage-5: the output files were written but cannot be put "
+                       "in place:\n       " + "\n       ".join(_blocked) +
+                       f"\n       Nothing was moved, so {outdir} is unchanged. Clear "
+                       f"whatever is in the way, or use --outdir <dir>.")
+
+    # And roll back if a move still fails -- a disk filling between the check and the
+    # move is unlikely, and leaving half a set of order files is not an acceptable way
+    # to find out.
+    _moved = []
+    try:
+        for _src, _dst in _pending:
+            if _src.exists():
+                os.replace(str(_src), str(_dst))
+                _moved.append((_dst, _src))
+    except OSError as _e:
+        for _dst, _src in reversed(_moved):
+            try:
+                os.replace(str(_dst), str(_src))
+            except OSError:
+                pass
+        _block("seal", f"BLOCK Stage-5: the files were written but could not be moved "
+                       f"into {outdir}\n       {_e.strerror or _e}\n"
+                       f"       Anything already moved was put back, so {outdir} is as "
+                       f"you left it.")
+    shutil.rmtree(_stage, ignore_errors=True)
 
     print()
 
@@ -1129,6 +1220,18 @@ def _run_pipeline_inner(args, res):
     print(f"  Hash:      {insert_hash}")
     print(f"  Verdict:   SEALED")
     print(f"  Output:    {gb_path}")
+
+
+def _clean_staging(res):
+    """Remove any staging directory Stage 5 made, however the pipeline ended.
+
+    _block raises, so a cleanup line after the writes is never reached on a refusal --
+    measured, a failed build left `.katana-writing-16906` sitting in the output folder
+    next to nothing else. Removing it here means a refusal leaves the output folder
+    exactly as it was found, which is the whole point of staging in the first place.
+    """
+    for d in list(getattr(res, "cleanup_dirs", None) or []):
+        shutil.rmtree(d, ignore_errors=True)
 
 
 def build(spec_path, library=None, **opts):
@@ -1190,6 +1293,7 @@ def build(spec_path, library=None, **opts):
                                  detail="\n".join(str(exc).splitlines()[1:]))]))
         finally:
             sys.stdout, _REFUSE = old_stdout, old_refuse
+            _clean_staging(res)
     res.log = buf.getvalue()
     return res
 
@@ -1219,11 +1323,15 @@ def main(argv=None):
                                  str(exc).splitlines()[0] if str(exc) else "stopped")]))
         finally:
             sys.stdout, _REFUSE = old, False
+            _clean_staging(res)
         res.log = buf.getvalue()
         json.dump(res.to_dict(), sys.stdout, indent=2)
         sys.stdout.write("\n")
         return res.exit_code
-    _run_pipeline(args, res)
+    try:
+        _run_pipeline(args, res)
+    finally:
+        _clean_staging(res)
     return res.exit_code
 
 
