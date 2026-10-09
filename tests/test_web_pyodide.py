@@ -57,9 +57,16 @@ if not out:
 data = json.loads(out)
 
 if isinstance(data, dict) and "unavailable" in data:
+    # The variable this names has to be the one that is read. It used to say NODE_PATH
+    # or KATANA_NODE_PATH, neither of which this file looks at -- ESM does not honour
+    # NODE_PATH, which is why the harness takes an explicit path instead. Following the
+    # instruction left the suite still measuring nothing, with the same green zero.
     print("  ---- pyodide is not installed for node: THIS CHECK MEASURED NOTHING.")
     print("       Install it with:  npm install pyodide@0.26.4")
-    print("       and point NODE_PATH or KATANA_NODE_PATH at its node_modules.")
+    print("       then either run it from a directory where tests/node_modules/pyodide")
+    print("       exists, or point KATANA_PYODIDE at the installed pyodide.mjs:")
+    print("         KATANA_PYODIDE=/path/to/node_modules/pyodide/pyodide.mjs \\")
+    print("           python3 tests/test_web_pyodide.py")
     print("\n0 passed, 0 failed")
     sys.exit(0)
 
