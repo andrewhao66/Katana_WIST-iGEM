@@ -537,9 +537,11 @@ def main():
     a.add_argument("--host")
     a.add_argument("--host-reca", dest="host_reca", choices=["pos", "neg"],
                    help="recA status of the host given by --host: pos (recA+, the default "
-                        "assumption if omitted) or neg (recA-, a cloning strain). A >40 bp host "
-                        "match is an actionable finding only in a recA+ background; in a recA- "
-                        "strain it drops to a note.")
+                        "assumption if omitted) or neg (recA-, a cloning strain). A host match "
+                        "between 41 and 499 bp is an actionable finding only in a recA+ "
+                        "background; in a recA- strain it drops to a note. At 500 bp or more it "
+                        "is flagged whatever the strain -- recA decides whether a homology "
+                        "recombines, not whether the right part is in the construct.")
     a.add_argument("--assembly", choices=["BsaI", "BsmBI", "SapI", "BioBrick"],
                    help="the assembly method context. A Type IIS or BioBrick-forbidden site is only "
                         "an actionable finding when the chosen method's enzyme would cut it; "

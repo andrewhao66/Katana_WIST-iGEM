@@ -121,7 +121,10 @@ class App:
         self.host_cb.bind("<<ComboboxSelected>>", self._on_host_pick)
         ttk.Label(opt, foreground="#555",
                   text="Runs the off-target check against that host. recA− (a cloning strain) makes "
-                       "a host match a note, not a problem.").pack(anchor="w", pady=(2, 8))
+                       "a short host match a note rather than a problem — but a match of 500 bp or "
+                       "more is flagged whatever the strain, because that is a question about "
+                       "which part is here, not about recombination.").pack(anchor="w",
+                                                                           pady=(2, 8))
 
         # Assembly method: decides whether a Type IIS / BioBrick site is an actionable finding or a
         # note. Synthesis (the default) means neither is a problem.

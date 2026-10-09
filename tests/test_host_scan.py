@@ -280,8 +280,45 @@ check("and one matching only the first is found too",
       kg_audit._longest_shared(_r1[:300], _read) == 300,
       kg_audit._longest_shared(_r1[:300], _read))
 
-# The desktop already had this; the two front ends must not disagree about the presets.
+# ---- every place that explains recA- must state the exception ----
+# Adding the gene-scale tier made three pieces of user-facing text false: they said a
+# recA- strain turns a host match into a note, full stop. Text that was true before a
+# change and is not true after it is the same defect as a wrong number, and it is the
+# kind that no assertion catches unless one is written for it.
 _gui = open(os.path.join(ROOT, "kagami", "kagami_gui.py"), encoding="utf-8").read()
+_cli = open(os.path.join(ROOT, "kagami", "kagami.py"), encoding="utf-8").read()
+_rdm = open(os.path.join(ROOT, "README.md"), encoding="utf-8").read()
+
+
+def _region(src, start, end):
+    """The text between two markers, so an assertion reads the sentence and not the
+    whole file. Checking the file is how the CLI's help passed this while still saying
+    the wrong thing: '500' appears elsewhere in kagami.py."""
+    if start not in src:
+        return ""
+    tail = src.split(start, 1)[1]
+    return tail.split(end, 1)[0] if end in tail else tail
+
+
+_texts = [
+    ("the GUI's host hint",
+     _region(_gui, 'text="Runs the off-target check', '.pack(')),
+    ("the CLI's --host-reca help",
+     _region(_cli, '"--host-reca"', 'a.add_argument("--assembly"')),
+    ("the README's host section",
+     _region(_rdm, "### The host off-target check", "\n---")),
+]
+for _what, _txt in _texts:
+    check("%s exists to be checked" % _what, bool(_txt.strip()), _txt[:80])
+    _l = _txt.lower()
+    _says_note = "note" in _l and "reca" in _l
+    check("%s does not promise recA- downgrades every host match" % _what,
+          (not _says_note) or str(kg_audit.HOST_GENE_SCALE) in _txt
+          or "gene scale" in _l or "whatever the strain" in _l,
+          "says recA- makes it a note, never mentions the %d bp exception: %s"
+          % (kg_audit.HOST_GENE_SCALE, " ".join(_txt.split())[:160]))
+
+# The desktop already had this; the two front ends must not disagree about the presets.
 check("desktop and browser offer the same number of preset hosts",
       _html.count("mg1655-") == len(kg_refs.HOSTS),
       "%d in the page vs %d in kg_refs" % (_html.count("mg1655-"), len(kg_refs.HOSTS)))
