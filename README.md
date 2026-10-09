@@ -268,7 +268,7 @@ and never sent anywhere.
 
 | | |
 |---|---|
-| Assertions | **927** across 33 suites, plus three standalone checks that count differently |
+| Assertions | **984** across 34 suites, plus three standalone checks that count differently |
 | Build-engine checks | 5 stages, every one a hard stop |
 | Audit checks | identity, orientation, truncation, indels, ORF frame, RBS junctions, restriction sites, composition, repeats, host homology, decomposition completeness |
 | Hash layers | `seq_sha256`, `file_sha256`, `row_sha256`, `LOCK.root` |
