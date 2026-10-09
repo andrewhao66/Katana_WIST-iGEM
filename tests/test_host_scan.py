@@ -30,6 +30,20 @@ reached the text says "at least". And above gene scale the recA- downgrade stops
 applying: recA governs whether a short homology is a recombination substrate, and that
 is the wrong question to ask about a kilobase of verbatim chromosome.
 
+The cap was load bearing for performance, so raising it looked like it had to cost
+something. It did not, because the old extension re-searched the whole 4.6 Mb genome
+after every base it added, and extending at the genome POSITION the seed was found at
+does not. Measured against the bundled chromosome, same machine:
+
+    pSense-Nit, the real construct     old  60 bp 0.97s   new   147 bp 0.92s
+    5 kb all verbatim host             old  60 bp 0.11s   new  1000 bp 0.00s
+    1 kb with no host match            old  15 bp 1.19s   new    15 bp 0.86s
+
+The correct answer is the same speed or faster in every case. (Removing the cap
+altogether, rather than raising it, does cost: 3.9 s on the 5 kb case, because nothing
+stops the scan early. Hence a cap that is high enough to be past every threshold that
+changes a verdict, and honest about being a floor when it is reached.)
+
 Also here: the browser can reach a genome other than the bundled one. The build side
 offers 23 hosts (get_genome.py, including E. coli Nissle 1917), the desktop audit can
 browse to any file, and the browser could only ever check against MG1655 -- with nothing
