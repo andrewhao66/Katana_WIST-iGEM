@@ -233,6 +233,35 @@ And a circular plasmid has no canonical start, so **rotating a file must not cha
 verdict.** It used to: the same molecule written from six different origins gave three
 different verdicts, including one FAIL. All six now agree.
 
+### The host off-target check
+
+Optional, and skipped unless you name a host — which is most runs, so its `SKIP` is the
+one you will see most often. It looks for an **exact match to the host chromosome**,
+because a long exact stretch is a recombination substrate, and reads three ways:
+
+| Longest exact match | What it means |
+|---|---|
+| ≤ 40 bp | Not a substrate. `PASS` |
+| 41–499 bp | A substrate, and whether that matters depends on the strain. `FLAG` in a recA+ host, `NOTE` in a recA− cloning strain |
+| ≥ 500 bp | Gene scale. `FLAG` whatever the strain — recA decides whether a homology recombines, not whether the right part is in the construct |
+
+The number used to stop at 60. It was a measurement cap printed as though it were the
+length, so 3000 bases of verbatim chromosome read as `60 bp exact match` with *"recode the
+stretch"* as the advice, and this project's own `pSense-Nit` reported 60 for a match that
+is **147**. The cap is now 1000 and past it the finding says *"at least"*, because a number
+that is a floor has to be written as one.
+
+```
+./katana check someones-plasmid.gb --host kagami/genomes/MG1655_ecoli_NC_000913.3.fna
+./katana check someones-plasmid.gb --host your-genome.fna --host-reca neg
+```
+
+`--host-reca` defaults to `pos`, the worse of the two readings, because recA status is a
+property of the strain and not of the file. **Only MG1655 ships with Katana** — one genome
+is 4.6 MB. `python3 get_genome.py` fetches 23 others, including *E. coli* Nissle 1917;
+`./katana gui` and the browser version both take a genome file from disk, read locally
+and never sent anywhere.
+
 ---
 
 ## What is checked, and how it is tested

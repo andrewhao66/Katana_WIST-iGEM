@@ -25,6 +25,29 @@ BIOBRICK_FORBIDDEN = ("EcoRI", "XbaI", "SpeI", "PstI")
 
 STOPS = {"TAA", "TAG", "TGA"}
 
+# Host off-target thresholds. All three are lengths of an EXACT match to the host
+# chromosome, and each one marks a point where the question being asked changes.
+#
+#   <= 40            not a recombination substrate. PASS.
+#   41 .. 499        a substrate, and whether that matters depends on recA. The recA-
+#                    cloning strain downgrades it to a NOTE.
+#   >= 500           gene scale. recA is no longer the question: a construct carrying
+#                    half a kilobase of verbatim chromosome is either carrying an
+#                    intended host-derived part or the wrong part, and an audit with no
+#                    Design Spec in front of it cannot tell which. Both readings get
+#                    reported, and the recA- downgrade stops applying -- a cloning
+#                    strain makes a 60 bp homology inert, not a kilobase of chromosome
+#                    correct.
+#
+# HOST_MATCH_CAP bounds the measurement, because the search is a seed-and-extend over
+# a 4.6 Mb string and the advice does not change past gene scale. It is a reported
+# FLOOR, not a measurement: past it the finding says "at least". The previous cap was
+# 60 and was printed as though it were the length -- 3000 bp of verbatim chromosome
+# read as "60 bp exact match", with "recode the stretch" as the advice.
+HOST_SUBSTRATE_MIN = 40
+HOST_GENE_SCALE = 500
+HOST_MATCH_CAP = 1000
+
 # Five tiers, and the distinction is the whole point of the 2026-09-15 rework:
 #   FAIL  — a defect in the DNA itself (internal stop, empty). Blocks.
 #   FLAG  — a real property of the DNA that is actionable in essentially any context
@@ -839,11 +862,36 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
     # ---- HOST OFF-TARGET (optional; >~40 bp exact = recombination substrate) ----
     if host_seq:
         longest = _longest_shared(seq, host_seq)
-        if longest > 40:
+        # Past the cap the number is a floor, so it has to be said as one. "60 bp exact
+        # match" for 3000 bases of verbatim chromosome was true of the measurement and
+        # false about the construct.
+        _howmuch = (f"at least {longest} bp" if longest >= HOST_MATCH_CAP
+                    else f"{longest} bp")
+        if longest >= HOST_GENE_SCALE:
+            # recA governs whether a homology is a recombination substrate. At this
+            # length that is no longer the interesting question, so the recA− strain
+            # does not downgrade it: a cloning strain makes a short homology inert, not
+            # a kilobase of verbatim chromosome correct.
+            findings.append(Finding(
+                "host-homology", FLAG,
+                f"{_howmuch} of this sequence is verbatim host chromosome",
+                detail="That is gene scale, not a chance homology, so the question is which "
+                       "part is here rather than how it recombines. Either a host-derived "
+                       "part is intended — in which case this is expected and worth "
+                       "confirming — or the construct carries a stretch of the host genome "
+                       "nobody asked for. This audit has no Design Spec to tell the two "
+                       "apart, so it reports both readings rather than choosing one."
+                       + ("" if host_reca is not False else
+                          " The recA− strain you selected does not settle it: recA decides "
+                          "whether a homology recombines, not whether the right part is here."),
+                fix="Check this stretch against the Design Spec: confirm it is the "
+                    "host-derived part you intended, at the coordinates you intended."))
+        elif longest > HOST_SUBSTRATE_MIN:
             if host_reca is False:
                 findings.append(Finding(
                     "host-homology", NOTE,
-                    f"{longest} bp exact match to the host chromosome (>40 bp)",
+                    f"{_howmuch} exact match to the host chromosome "
+                    f"(>{HOST_SUBSTRATE_MIN} bp)",
                     detail="A recombination substrate only in a recA+ background; inert in the "
                            "recA− cloning strain you selected.",
                     fix="Fine as-is in a recA− strain; recode the stretch before moving it into "
@@ -851,14 +899,20 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
             else:
                 findings.append(Finding(
                     "host-homology", FLAG,
-                    f"{longest} bp exact match to the host chromosome (>40 bp)",
+                    f"{_howmuch} exact match to the host chromosome "
+                    f"(>{HOST_SUBSTRATE_MIN} bp)",
                     detail="A recombination substrate in the recA+ host selected — the plasmid can "
                            "recombine into the chromosome across this stretch.",
                     fix="Recode/replace the host-identical stretch, or clone/propagate in a "
                         "recA− strain."))
         else:
-            findings.append(Finding("host-homology", PASS,
-                                    f"Longest host match {longest} bp (≤40)"))
+            # Deliberately not "longest host match N bp". The search samples 12-base
+            # seeds, so below 12 it cannot state the longest match and reports 0 — and
+            # "longest host match 0 bp" was a precision the method does not have. What
+            # the check establishes is the threshold, so that is what it says.
+            findings.append(Finding(
+                "host-homology", PASS,
+                f"No exact match over {HOST_SUBSTRATE_MIN} bp to the host chromosome"))
     else:
         findings.append(Finding("host-homology", SKIP,
                                 "Host off-target scan not run (no host selected)",
@@ -881,8 +935,8 @@ def audit(record, blocks, vendor=None, fragment_bp_max=None, host_seq=None,
     return findings
 
 
-def _longest_shared(seq, genome, cap=60):
-    """Longest exact contiguous match (either strand) up to `cap` bp.
+def _longest_shared(seq, genome, cap=HOST_MATCH_CAP):
+    """Longest exact contiguous match (either strand), measured up to `cap` bp.
 
     This used to binary-search the length while SAMPLING the start positions at
     `max(1, k // 2)` intervals. That predicate is not monotonic in k -- a longer k
@@ -895,14 +949,23 @@ def _longest_shared(seq, genome, cap=60):
     PASS. A false all-clear on the one off-target check an audit can run without a
     genome.
 
-    Now it extends from each exact seed instead. Every match of length >= `step` contains
-    a seed at some sampled start, so taking `step` small enough to be a floor rather than
-    an estimate makes the search complete up to `cap`: nothing of length >= SEED can hide
-    between samples, because consecutive samples are SEED apart and a match that long
-    spans one.
+    Seed-and-extend fixed that, but `cap` was 60 and the caller printed the returned
+    number as the length. So the fix stopped at the point where the answer stopped being
+    informative: measured against the bundled MG1655 chromosome, 3000 bp of verbatim host
+    DNA reported 60, and pSense-Nit -- this branch's own ORACLE construct -- reported 60
+    for a match that is 147. Nothing was missed; the number was simply wrong, and the
+    advice attached to it ("recode the stretch") was advice for a 60 bp stretch.
+
+    Two changes. `cap` is HOST_MATCH_CAP, far above every threshold that changes a
+    verdict, and the caller says "at least" when it is reached. And the extension now
+    walks the genome POSITION rather than asking `s[lo:hi] in genome` after each step:
+    the old form re-searched 4.6 Mb per base added, which is why a low cap was load
+    bearing. Extending at the locus the seed was found at is both exact and cheap, and
+    every occurrence of every seed is tried, so nothing of length >= SEED can hide.
     """
     SEED = 12                 # every match of 12+ bases starts at some multiple of 12
     best = 0
+    glen = len(genome)
     for s in (seq, revcomp(seq)):
         n = len(s)
         limit = min(n, cap)
@@ -917,17 +980,22 @@ def _longest_shared(seq, genome, cap=60):
             continue
         for i in range(0, n - SEED + 1, SEED):
             seed = s[i:i + SEED]
-            if seed not in genome:
-                continue
-            # A seed is present: grow it both ways to find how far the match really runs.
-            lo, hi = i, i + SEED
-            while lo > 0 and s[lo - 1:hi] in genome and (hi - lo) < limit:
-                lo -= 1
-            while hi < n and s[lo:hi + 1] in genome and (hi - lo) < limit:
-                hi += 1
-            best = max(best, min(hi - lo, limit))
-            if best >= limit:
-                return best
+            at = genome.find(seed)
+            # Every occurrence, not just the first: the first one may sit in a short
+            # island while a later one runs for a kilobase.
+            while at != -1:
+                lo, hi, glo, ghi = i, i + SEED, at, at + SEED
+                while lo > 0 and glo > 0 and s[lo - 1] == genome[glo - 1]:
+                    lo -= 1
+                    glo -= 1
+                while hi < n and ghi < glen and s[hi] == genome[ghi]:
+                    hi += 1
+                    ghi += 1
+                if hi - lo > best:
+                    best = min(hi - lo, limit)
+                    if best >= limit:
+                        return best
+                at = genome.find(seed, at + 1)
     return best
 
 

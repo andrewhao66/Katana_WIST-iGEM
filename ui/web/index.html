@@ -106,6 +106,7 @@ a{color:var(--accent-ink)}
           <option value="">none — skip the off-target check</option>
           <option value="mg1655-pos">E. coli K-12 MG1655 (recA+, the chassis)</option>
           <option value="mg1655-neg">E. coli cloning strain — DH5α / Top10 (recA−)</option>
+          <option value="local">another host — a genome file on this computer…</option>
         </select>
       </label>
       <label class="opt">Assembly
@@ -125,6 +126,20 @@ a{color:var(--accent-ink)}
           <option value="GenScript">GenScript — 10000 bp</option>
         </select>
       </label>
+    </div>
+
+    <!-- Only the bundled MG1655 ships with the page. Any other chassis is a file the
+         person already has: `python3 get_genome.py` in the bundle fetches 23 of them,
+         including E. coli Nissle 1917. The file is read into the in-browser filesystem
+         and never sent anywhere, which is the same promise the sequence gets. -->
+    <div class="row hide" id="genomerow">
+      <label class="opt">Genome file
+        <input type="file" id="genomefile" accept=".fna,.fa,.fasta,.gb,.gbk,.genbank,.seq,.txt">
+      </label>
+      <div class="sub" id="genomenote">FASTA or GenBank. Fetch one for your chassis with
+        <code>python3 get_genome.py</code> in the Katana bundle — 23 hosts, including
+        E. coli Nissle 1917. recA status is unknown for a file, so the check assumes
+        recA+, the worse case.</div>
     </div>
 
     <div id="status">Loading the engine…</div>

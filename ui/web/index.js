@@ -39,6 +39,24 @@ const HOSTS = {
   "mg1655-neg": { file: GENOME, reca: false },
 };
 
+// Any chassis other than the bundled one. The page ships one genome because the file is
+// 4.6 MB and shipping 23 of them would be most of the download; `get_genome.py` in the
+// bundle fetches the rest. Without this the browser could only ever answer the
+// off-target question about MG1655 -- and a team whose chassis is Nissle 1917 would have
+// been reading an answer about a different organism, with nothing on the page saying so.
+// The genome keeps the person's own filename inside the engine's filesystem. Two files
+// go into an audit -- the sequence and the genome -- and an error only ever names one of
+// them, so a fixed internal path meant a genome the reader could not parse produced
+// "_local_genome: the LOCUS line declares 100 bp", which does not tell a student which
+// of their two files is the problem.
+const LOCAL_GENOME_DIR = "/genome";
+let localGenomePath = "";
+// recA is a property of the strain, not of the file, so a genome supplied this way has
+// no recA status attached. null is what kg_audit reads as "assume recA+", the worse of
+// the two, matching what the desktop GUI does for a browsed file.
+const UPLOAD_RECA = null;
+let localGenomeLoaded = false;
+
 const VENDOR_CAP = { Twist: 5000, IDT: 3000, GenScript: 10000 };
 
 const el = (id) => document.getElementById(id);
@@ -111,6 +129,21 @@ async function ensureGenome() {
   const buf = await fetchInto(GENOME);
   pyodide.FS.writeFile("/katana/" + GENOME, new Uint8Array(buf));
   genomeLoaded = true;
+}
+
+// Reads the chosen genome into the in-browser filesystem. Nothing is sent anywhere —
+// Pyodide's FS is a block of memory in this tab, and it is gone when the tab closes.
+async function ensureLocalGenome() {
+  const f = el("genomefile").files[0];
+  if (!f) return false;
+  if (localGenomeLoaded === f.name + ":" + f.size) return true;
+  say("Reading " + f.name + " (" + Math.round(f.size / 1e6) + " MB)…");
+  const bytes = new Uint8Array(await f.arrayBuffer());
+  pyodide.FS.mkdirTree(LOCAL_GENOME_DIR);
+  localGenomePath = LOCAL_GENOME_DIR + "/" + f.name.replace(/[^\w.\-]/g, "_");
+  pyodide.FS.writeFile(localGenomePath, bytes);
+  localGenomeLoaded = f.name + ":" + f.size;
+  return true;
 }
 
 // The engine's kind -> the pill's class. PASS is the only thing that may look like a
@@ -193,7 +226,16 @@ async function audit(file) {
   el("result").classList.add("hide");
 
   const hostKey = el("host").value;
-  if (hostKey) await ensureGenome();
+  if (hostKey === "local") {
+    // A not-run check must never read as a clean one, so refusing to start is the only
+    // honest response to "another host" with no file behind it.
+    if (!(await ensureLocalGenome())) {
+      say("Choose a genome file for the host, or set Host back to one of the presets.");
+      return;
+    }
+  } else if (hostKey) {
+    await ensureGenome();
+  }
 
   say("Reading " + file.name + "…");
   progress(0.2);
@@ -208,8 +250,13 @@ async function audit(file) {
 
   const host = HOSTS[hostKey];
   pyodide.globals.set("_in_path", inPath);
-  pyodide.globals.set("_host_file", host ? "/katana/" + host.file : "");
-  pyodide.globals.set("_host_reca", host ? host.reca : null);
+  if (hostKey === "local") {
+    pyodide.globals.set("_host_file", localGenomePath);
+    pyodide.globals.set("_host_reca", UPLOAD_RECA);
+  } else {
+    pyodide.globals.set("_host_file", host ? "/katana/" + host.file : "");
+    pyodide.globals.set("_host_reca", host ? host.reca : null);
+  }
   pyodide.globals.set("_assembly", el("assembly").value || null);
   pyodide.globals.set("_vendor", el("vendor").value || null);
   pyodide.globals.set("_cap", VENDOR_CAP[el("vendor").value] || null);
@@ -224,7 +271,18 @@ record = kg_parse.parse(_in_path)
 
 host_seq = None
 if _host_file:
-    host_seq = kg_parse.parse(_host_file).seq
+    # Two files reach an audit and an error only names one. Saying which is the host
+    # genome costs a line here and saves a student reading a LOCUS complaint about a
+    # chromosome as though it were about their plasmid. Not caught and turned into a
+    # SKIP on purpose: they asked for this check against this file, and quietly not
+    # running it is the failure this project is about.
+    try:
+        host_seq = kg_parse.parse(_host_file).seq
+    except Exception as _e:
+        raise RuntimeError(
+            "The host genome file could not be read, so nothing was audited. "
+            "The sequence you dropped was not the problem -- this is the genome: %s"
+            % _e)
 
 status = {}
 with tempfile.TemporaryDirectory() as wd:
@@ -296,6 +354,12 @@ input.addEventListener("change", () => {
 drop.addEventListener("drop", (e) => {
   const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
   if (f) audit(f);
+});
+
+// The genome row is only shown for "another host", so the presets stay a one-click
+// choice and the file picker does not sit there implying the bundled genome needs one.
+el("host").addEventListener("change", () => {
+  el("genomerow").classList.toggle("hide", el("host").value !== "local");
 });
 
 boot();
